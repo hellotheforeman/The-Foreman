@@ -9,7 +9,6 @@ const db = require('./db');
 
 const app = express();
 
-// Twilio sends form-encoded bodies
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 
@@ -18,11 +17,17 @@ app.get('/', (req, res) => {
   res.send('🔨 The Foreman is running.');
 });
 
-// Twilio webhook — receives all inbound WhatsApp messages
+/**
+ * Twilio webhook — receives inbound WhatsApp messages from the tradesperson.
+ *
+ * Option 2 design: only the tradesperson texts this number.
+ * The bot never messages customers — it drafts messages for the
+ * tradesperson to copy and send from their own WhatsApp.
+ */
 app.post('/webhook', async (req, res) => {
   try {
     const from = (req.body.From || '').replace('whatsapp:', '');
-    const body = req.body.Body || '';
+    const body = (req.body.Body || '').trim();
     const messageSid = req.body.MessageSid || null;
 
     if (!from || !body) {
@@ -31,26 +36,17 @@ app.post('/webhook', async (req, res) => {
 
     const isForeman = normalisePhone(from) === normalisePhone(config.foremanPhone);
 
-    if (isForeman) {
-      // Tradesperson command
-      logMessage('IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
-      const intent = parse(body);
-      console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
-      await dispatch(intent, res);
-    } else {
-      // Customer message — log it and notify tradesperson
-      logMessage('IN', 'CUSTOMER', body, { whatsappMessageId: messageSid });
-      console.log(`📥 Customer (${from}): "${body}"`);
-
-      // Notify the tradesperson
-      const { sendToForeman } = require('./messenger');
-      await sendToForeman(
-        `📩 Message from ${from}:\n\n"${body}"\n\nReply directly from your phone or use *find* to look them up.`
-      );
-
-      // Auto-acknowledge to customer
-      twimlReply(res, `Thanks for your message! We'll get back to you shortly. 👍`);
+    if (!isForeman) {
+      // Unknown sender — ignore silently (no customer-facing messages)
+      console.log(`📥 Unknown sender (${from}) — ignoring`);
+      return res.sendStatus(200);
     }
+
+    logMessage('IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
+    const intent = parse(body);
+    console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
+    await dispatch(intent, res);
+
   } catch (err) {
     console.error('Webhook error:', err);
     if (!res.headersSent) {
@@ -59,7 +55,7 @@ app.post('/webhook', async (req, res) => {
   }
 });
 
-// Twilio status callback (optional)
+// Twilio status callback
 app.post('/status', (req, res) => {
   const { MessageSid, MessageStatus } = req.body;
   console.log(`📊 Status: ${MessageSid} → ${MessageStatus}`);
@@ -73,11 +69,10 @@ function normalisePhone(phone) {
   return p;
 }
 
-// Start — init DB first, then listen
 async function start() {
   await db.init();
   app.listen(config.port, () => {
-    console.log(`🔨 The Foreman is running on port ${config.port}`);
+    console.log(`🔨 The Foreman running on port ${config.port}`);
     scheduler.start();
   });
 }

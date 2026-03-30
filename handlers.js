@@ -1,27 +1,14 @@
 const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
-const config = require('./config');
 
 /**
- * Pending actions awaiting tradesperson confirmation.
- * Keyed by "confirm" — only one pending action at a time.
+ * Option 2 design: The Foreman never messages customers directly.
+ * Instead it drafts messages and returns them to the tradesperson,
+ * ready to copy-paste into their own WhatsApp conversation.
  */
-let pendingAction = null;
 
-function setPending(action) {
-  pendingAction = action;
-}
-
-function clearPending() {
-  pendingAction = null;
-}
-
-function getPending() {
-  return pendingAction;
-}
-
-// --- Handler map ---
+// --- Dispatch ---
 
 const handlers = {
   new_job: handleNewJob,
@@ -36,8 +23,6 @@ const handlers = {
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
   find: handleFind,
-  confirm: handleConfirm,
-  cancel: handleCancel,
   help: handleHelp,
   unknown: handleUnknown,
 };
@@ -56,39 +41,31 @@ async function handleNewJob(intent, res) {
   const postcode = intent.postcode ? `, ${intent.postcode}` : '';
   messenger.twimlReply(
     res,
-    `✅ Created job ${db.formatJobId(job.id)}\n` +
-    `👤 ${customer.name} (${customer.phone})\n` +
-    `🔧 ${job.description}${postcode}\n\n` +
-    `Next: send a quote with\n` +
-    `*quote ${job.id} [amount] [description]*`
+    `✅ Job ${db.formatJobId(job.id)} created\n` +
+    `👤 ${customer.name} — ${customer.phone}${postcode}\n` +
+    `🔧 ${job.description}\n\n` +
+    `Next: *quote ${job.id} [amount] [description]*`
   );
 }
 
 async function handleQuote(intent, res) {
   const job = db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
-  if (!job.customer) return messenger.twimlReply(res, `❌ Customer not found for job ${db.formatJobId(job.id)}.`);
 
   db.setQuote(job.id, intent.amount, intent.items);
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
 
-  const preview = templates.quoteMessage(job, job.customer);
-
-  setPending({
-    type: 'send_quote',
-    jobId: job.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
+  const msg = templates.quoteMessage(job, job.customer);
 
   messenger.twimlReply(
     res,
-    `📋 Quote for ${db.formatJobId(job.id)} — £${intent.amount.toFixed(2)}\n\n` +
-    `Preview of message to ${job.customer.name}:\n\n` +
-    `${preview}\n\n` +
-    `Reply *yes* to send, or *no* to cancel.`
+    `📋 Quote ready for ${job.customer.name} (${job.customer.phone})\n\n` +
+    `Copy and send this to them on WhatsApp:\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────\n\n` +
+    `When they accept, use *schedule ${job.id} [day] [time]* to book it in.`
   );
 }
 
@@ -101,23 +78,16 @@ async function handleSchedule(intent, res) {
   job.scheduled_date = intent.date;
   job.scheduled_time = intent.time;
 
-  const preview = templates.scheduleConfirmation(job, job.customer);
-
-  setPending({
-    type: 'send_schedule',
-    jobId: job.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
-
   const timeStr = intent.time || 'TBC';
+  const msg = templates.scheduleConfirmation(job, job.customer);
+
   messenger.twimlReply(
     res,
-    `📅 Job ${db.formatJobId(job.id)} scheduled: ${templates.formatDate(intent.date)} at ${timeStr}\n\n` +
-    `Send confirmation to ${job.customer.name}?\n\n` +
-    `Preview:\n${preview}\n\n` +
-    `Reply *yes* to send, or *no* to skip.`
+    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}\n\n` +
+    `Send this confirmation to ${job.customer.name} (${job.customer.phone}):\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────`
   );
 }
 
@@ -129,46 +99,35 @@ async function handleDone(intent, res) {
 
   const amount = intent.amount || job.quoted_amount;
   if (!amount) {
-    messenger.twimlReply(
+    return messenger.twimlReply(
       res,
       `✅ Job ${db.formatJobId(job.id)} marked complete.\n\n` +
-      `No amount specified. Send an invoice with:\n` +
-      `*invoice ${job.id}* (if quote was set)\n` +
-      `or *done ${job.id} total [amount]* to set the amount.`
+      `No amount set — use *invoice ${job.id} [amount]* to generate the invoice.`
     );
-    return;
   }
 
-  // Create invoice
   const lineItems = intent.notes || job.quote_items || job.description;
   const invoice = db.createInvoice(job.id, amount, lineItems);
-
-  const preview = templates.invoiceMessage(job, invoice, job.customer);
-
-  setPending({
-    type: 'send_invoice',
-    jobId: job.id,
-    invoiceId: invoice.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
+  const msg = templates.invoiceMessage(job, invoice, job.customer);
 
   messenger.twimlReply(
     res,
-    `✅ Job ${db.formatJobId(job.id)} complete. Invoice: £${amount.toFixed(2)}\n\n` +
-    `Send invoice to ${job.customer.name}?\n\n` +
-    `Preview:\n${preview}\n\n` +
-    `Reply *yes* to send, or *no* to skip.`
+    `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\n` +
+    `Send this invoice to ${job.customer.name} (${job.customer.phone}):\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────\n\n` +
+    `Once paid, reply *paid ${job.id}*`
   );
 }
 
 async function handlePaid(intent, res) {
   const invoice = db.getInvoiceByJob(intent.jobId);
   if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job #${intent.jobId}.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ Already marked as paid.`);
 
   db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `✅ Invoice for job ${db.formatJobId(intent.jobId)} marked as paid. 💰`);
+  messenger.twimlReply(res, `💰 Job ${db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
 }
 
 async function handleSendInvoice(intent, res) {
@@ -177,29 +136,21 @@ async function handleSendInvoice(intent, res) {
 
   let invoice = db.getInvoiceByJob(job.id);
   if (!invoice) {
-    const amount = job.quoted_amount;
-    if (!amount) {
-      return messenger.twimlReply(res, `❌ No invoice or quote amount for job ${db.formatJobId(job.id)}. Use *done ${job.id} total [amount]* first.`);
+    if (!job.quoted_amount) {
+      return messenger.twimlReply(res, `❌ No amount set for job ${db.formatJobId(job.id)}. Use *done ${job.id} total [amount]* first.`);
     }
-    invoice = db.createInvoice(job.id, amount, job.quote_items || job.description);
+    invoice = db.createInvoice(job.id, job.quoted_amount, job.quote_items || job.description);
   }
 
-  const preview = templates.invoiceMessage(job, invoice, job.customer);
-
-  setPending({
-    type: 'send_invoice',
-    jobId: job.id,
-    invoiceId: invoice.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
+  const msg = templates.invoiceMessage(job, invoice, job.customer);
 
   messenger.twimlReply(
     res,
-    `Send invoice to ${job.customer.name}?\n\n` +
-    `Preview:\n${preview}\n\n` +
-    `Reply *yes* to send, or *no* to cancel.`
+    `🧾 Invoice for ${job.customer.name} (${job.customer.phone}):\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────\n\n` +
+    `Copy and send this on WhatsApp. Reply *paid ${job.id}* when settled.`
   );
 }
 
@@ -209,23 +160,17 @@ async function handleChase(intent, res) {
 
   const invoice = db.getInvoiceByJob(job.id);
   if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(job.id)}.`);
-  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ Invoice for ${db.formatJobId(job.id)} is already paid.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
-  const preview = templates.paymentReminder(job, invoice, job.customer);
-
-  setPending({
-    type: 'send_chase',
-    jobId: job.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
+  const msg = templates.paymentReminder(job, invoice, job.customer);
 
   messenger.twimlReply(
     res,
-    `Send payment reminder to ${job.customer.name}?\n\n` +
-    `Preview:\n${preview}\n\n` +
-    `Reply *yes* to send, or *no* to cancel.`
+    `💷 Payment reminder for ${job.customer.name} (${job.customer.phone}):\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────\n\n` +
+    `Copy and send this on WhatsApp.`
   );
 }
 
@@ -233,74 +178,38 @@ async function handleFollowUp(intent, res) {
   const job = db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  const preview = templates.followUpMessage(job, job.customer);
-
-  setPending({
-    type: 'send_followup',
-    jobId: job.id,
-    customerId: job.customer.id,
-    customerPhone: job.customer.phone,
-    message: preview,
-  });
+  const msg = templates.followUpMessage(job, job.customer);
 
   messenger.twimlReply(
     res,
-    `Send follow-up to ${job.customer.name}?\n\n` +
-    `Preview:\n${preview}\n\n` +
-    `Reply *yes* to send, or *no* to cancel.`
+    `⭐ Follow-up for ${job.customer.name} (${job.customer.phone}):\n` +
+    `─────────────────\n` +
+    `${msg}\n` +
+    `─────────────────\n\n` +
+    `Copy and send this on WhatsApp.`
   );
-}
-
-async function handleConfirm(intent, res) {
-  const action = getPending();
-  if (!action) {
-    return messenger.twimlReply(res, `Nothing pending to confirm. 🤷`);
-  }
-
-  clearPending();
-
-  try {
-    await messenger.sendToCustomer(action.customerPhone, action.message, {
-      customerId: action.customerId,
-      jobId: action.jobId,
-    });
-    messenger.twimlReply(res, `✅ Sent to customer.`);
-  } catch (err) {
-    messenger.twimlReply(res, `❌ Failed to send: ${err.message}`);
-  }
-}
-
-async function handleCancel(intent, res) {
-  if (getPending()) {
-    clearPending();
-    return messenger.twimlReply(res, `Cancelled. 👍`);
-  }
-  messenger.twimlReply(res, `Nothing to cancel.`);
 }
 
 async function handleViewSchedule(intent, res) {
   const now = new Date();
-  let dateStr, endStr, label;
 
   if (intent.period === 'tomorrow') {
     const d = new Date(now);
     d.setDate(d.getDate() + 1);
-    dateStr = d.toISOString().split('T')[0];
+    const dateStr = d.toISOString().split('T')[0];
     const jobs = db.getScheduleForDate(dateStr);
     return messenger.twimlReply(res, `*Tomorrow:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
   }
 
   if (intent.period === 'week') {
-    const start = new Date(now);
+    const start = now.toISOString().split('T')[0];
     const end = new Date(now);
     end.setDate(end.getDate() + 7);
-    dateStr = start.toISOString().split('T')[0];
-    endStr = end.toISOString().split('T')[0];
-    const jobs = db.getScheduleRange(dateStr, endStr);
+    const endStr = end.toISOString().split('T')[0];
+    const jobs = db.getScheduleRange(start, endStr);
 
     if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled this week. 📭`);
 
-    // Group by date
     const byDate = {};
     for (const j of jobs) {
       if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
@@ -313,8 +222,7 @@ async function handleViewSchedule(intent, res) {
     return messenger.twimlReply(res, `*This week:*\n\n${lines}`);
   }
 
-  // Default: today
-  dateStr = now.toISOString().split('T')[0];
+  const dateStr = now.toISOString().split('T')[0];
   const jobs = db.getScheduleForDate(dateStr);
   messenger.twimlReply(res, `*Today:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
 }
@@ -326,12 +234,12 @@ async function handleUnpaid(intent, res) {
   const total = invoices.reduce((sum, i) => sum + i.amount, 0);
   const lines = invoices.map((i) => {
     const days = Math.floor((Date.now() - new Date(i.sent_at).getTime()) / 86400000);
-    return `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${i.amount.toFixed(2)} (${days}d ago)`;
+    return `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${i.amount.toFixed(2)} (${days}d)\n  → chase ${i.job_id}`;
   });
 
   messenger.twimlReply(
     res,
-    `💷 *Unpaid invoices: ${invoices.length} (£${total.toFixed(2)})*\n\n${lines.join('\n')}\n\nUse *chase [job#]* to send a reminder.`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)} outstanding*\n\n${lines.join('\n\n')}`
   );
 }
 
@@ -339,12 +247,8 @@ async function handleOpenJobs(intent, res) {
   const jobs = db.getOpenJobs();
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
-  const lines = jobs.map((j) => {
-    const status = j.status.toLowerCase();
-    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${status}]`;
-  });
-
-  messenger.twimlReply(res, `📋 *Open jobs: ${jobs.length}*\n\n${lines.join('\n')}`);
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${j.status.toLowerCase()}]`);
+  messenger.twimlReply(res, `📋 *${jobs.length} open jobs*\n\n${lines.join('\n')}`);
 }
 
 async function handleFind(intent, res) {
@@ -353,17 +257,11 @@ async function handleFind(intent, res) {
 
   const results = [];
   for (const c of customers.slice(0, 5)) {
-    const jobs = db.getAll(
-      'SELECT * FROM jobs WHERE customer_id = ? ORDER BY created_at DESC LIMIT 5',
-      [c.id]
-    );
-
+    const jobs = db.getAll('SELECT * FROM jobs WHERE customer_id = ? ORDER BY created_at DESC LIMIT 5', [c.id]);
     const jobLines = jobs.map((j) => {
-      const status = j.status.toLowerCase();
-      const amount = j.quoted_amount ? ` £${j.quoted_amount.toFixed(2)}` : '';
-      return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
+      const amount = j.quoted_amount ? ` £${Number(j.quoted_amount).toFixed(2)}` : '';
+      return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${j.status.toLowerCase()}]`;
     });
-
     results.push(
       `👤 *${c.name}* — ${c.phone}${c.postcode ? ', ' + c.postcode : ''}\n` +
       (jobLines.length ? jobLines.join('\n') : '  No jobs yet')
@@ -381,23 +279,21 @@ async function handleHelp(intent, res) {
     `*quote* [job#] [amount] [description]\n` +
     `*schedule* [job#] [day] [time]\n` +
     `*done* [job#] [notes] total [amount]\n` +
-    `*invoice* [job#] — send invoice\n` +
-    `*paid* [job#] — mark as paid\n` +
-    `*chase* [job#] — send payment reminder\n` +
-    `*follow up* [job#] — send thank-you\n\n` +
+    `*invoice* [job#]\n` +
+    `*paid* [job#]\n` +
+    `*chase* [job#]\n` +
+    `*follow up* [job#]\n\n` +
     `*today* / *tomorrow* / *this week*\n` +
     `*unpaid* — outstanding invoices\n` +
-    `*jobs* — open/active jobs\n` +
+    `*jobs* — open jobs\n` +
     `*find* [name] — customer lookup\n` +
-    `*help* — this message`
+    `*help* — this message\n\n` +
+    `Messages are drafted for you to copy and send from your own WhatsApp. 📋`
   );
 }
 
 async function handleUnknown(intent, res) {
-  messenger.twimlReply(
-    res,
-    `🤔 Didn't catch that. Reply *help* to see available commands.`
-  );
+  messenger.twimlReply(res, `🤔 Didn't catch that. Reply *help* for commands.`);
 }
 
-module.exports = { dispatch, getPending };
+module.exports = { dispatch };

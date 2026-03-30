@@ -16,7 +16,12 @@ done 1 service plus replaced valve total 140
 paid 1
 ```
 
-The Foreman handles the paperwork — generating professional quotes, confirmations, invoices, and reminders that get sent to customers via WhatsApp (always with tradesperson approval first).
+The Foreman drafts professional quotes, invoices, confirmations, and follow-ups — and sends them back to the tradesperson, **ready to copy and paste** into their own WhatsApp conversation with the customer.
+
+This means:
+- **No WhatsApp Business API number per customer** — one Twilio number serves the whole platform
+- **No messages sent to customers without the tradesperson seeing them first**
+- **Works from the tradesperson's existing personal WhatsApp** — no new number for customers to deal with
 
 ## Commands
 
