@@ -38,7 +38,7 @@ app.post('/webhook', async (req, res) => {
     }
 
     const phone = normalisePhone(from);
-    const business = db.findBusinessByPhone(phone);
+    const business = await db.findBusinessByPhone(phone);
 
     if (!business) {
       console.log(`📥 Unknown sender (${phone}) — not registered`);
@@ -53,8 +53,8 @@ app.post('/webhook', async (req, res) => {
       return twimlReply(res, `Your account has been suspended. Please contact support.`);
     }
 
-    db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
-    const intent = parse(body);
+    await db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
+    const intent = await parse(body);
     console.log(`📥 [${business.business_name}] "${body}" → ${intent.intent}`);
     await dispatch(intent, res, business);
 

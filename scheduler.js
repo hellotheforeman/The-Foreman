@@ -6,13 +6,13 @@ const templates = require('./templates');
 function start() {
   // Evening reminder: 7pm every day — remind about tomorrow's jobs
   cron.schedule('0 19 * * *', async () => {
-    const businesses = db.getAllActiveBusinesses();
+    const businesses = await db.getAllActiveBusinesses();
     for (const business of businesses) {
       try {
         const tomorrow = new Date();
         tomorrow.setDate(tomorrow.getDate() + 1);
         const dateStr = tomorrow.toISOString().split('T')[0];
-        const jobs = db.getScheduleForDate(business.id, dateStr);
+        const jobs = await db.getScheduleForDate(business.id, dateStr);
 
         if (jobs.length) {
           const summary = templates.formatScheduleDay(jobs, dateStr);
@@ -29,7 +29,7 @@ function start() {
 
   // Monday morning summary: 8am every Monday
   cron.schedule('0 8 * * 1', async () => {
-    const businesses = db.getAllActiveBusinesses();
+    const businesses = await db.getAllActiveBusinesses();
     for (const business of businesses) {
       try {
         const now = new Date();
@@ -38,9 +38,9 @@ function start() {
         const startStr = now.toISOString().split('T')[0];
         const endStr = end.toISOString().split('T')[0];
 
-        const jobs = db.getScheduleRange(business.id, startStr, endStr);
-        const unpaid = db.getUnpaidInvoices(business.id);
-        const open = db.getOpenJobs(business.id);
+        const jobs = await db.getScheduleRange(business.id, startStr, endStr);
+        const unpaid = await db.getUnpaidInvoices(business.id);
+        const open = await db.getOpenJobs(business.id);
 
         const parts = [`🔨 *Weekly Summary*\n`];
 
@@ -78,10 +78,10 @@ function start() {
 
   // Check for overdue invoices: 10am daily
   cron.schedule('0 10 * * *', async () => {
-    const businesses = db.getAllActiveBusinesses();
+    const businesses = await db.getAllActiveBusinesses();
     for (const business of businesses) {
       try {
-        const unpaid = db.getUnpaidInvoices(business.id);
+        const unpaid = await db.getUnpaidInvoices(business.id);
         const overdue = unpaid.filter((i) => {
           const days = Math.floor((Date.now() - new Date(i.sent_at).getTime()) / 86400000);
           return days >= 7;

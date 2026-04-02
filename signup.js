@@ -22,7 +22,7 @@ router.get('/signup/thanks', (req, res) => {
 });
 
 // POST /signup
-router.post('/signup', (req, res) => {
+router.post('/signup', async (req, res) => {
   const { business_name, contact_name, phone, email } = req.body;
 
   if (!business_name || !contact_name || !phone) {
@@ -32,7 +32,7 @@ router.post('/signup', (req, res) => {
   const normalisedPhone = normalisePhone(phone);
 
   try {
-    db.createBusiness({
+    await db.createBusiness({
       business_name: business_name.trim(),
       contact_name: contact_name.trim(),
       phone: normalisedPhone,
@@ -41,7 +41,7 @@ router.post('/signup', (req, res) => {
     console.log(`📋 New signup: ${business_name} (${normalisedPhone})`);
     return res.redirect('/signup/thanks');
   } catch (err) {
-    if (err.message && err.message.includes('UNIQUE')) {
+    if (err.message && err.message.includes('unique')) {
       return res.status(409).send('That phone number is already registered.');
     }
     console.error('Signup error:', err);

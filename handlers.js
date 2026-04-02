@@ -36,8 +36,8 @@ async function dispatch(intent, res, business) {
 // --- Handlers ---
 
 async function handleNewJob(intent, res, business) {
-  const customer = db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode);
-  const job = db.createJob(business.id, customer.id, intent.description, intent.postcode);
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode);
+  const job = await db.createJob(business.id, customer.id, intent.description, intent.postcode);
   const postcode = intent.postcode ? `, ${intent.postcode}` : '';
   messenger.twimlReply(
     res,
@@ -49,10 +49,10 @@ async function handleNewJob(intent, res, business) {
 }
 
 async function handleQuote(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  db.setQuote(business.id, job.id, intent.amount, intent.items);
+  await db.setQuote(job.id, intent.amount, intent.items);
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
 
@@ -70,11 +70,11 @@ async function handleQuote(intent, res, business) {
 }
 
 async function handleSchedule(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date from "${intent.raw}". Try: *schedule ${intent.jobId} thursday 9am*`);
 
-  db.scheduleJob(business.id, job.id, intent.date, intent.time);
+  await db.scheduleJob(job.id, intent.date, intent.time);
   job.scheduled_date = intent.date;
   job.scheduled_time = intent.time;
 
@@ -92,10 +92,10 @@ async function handleSchedule(intent, res, business) {
 }
 
 async function handleDone(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  db.completeJob(business.id, job.id, intent.notes);
+  await db.completeJob(job.id, intent.notes);
 
   const amount = intent.amount || job.quoted_amount;
   if (!amount) {
@@ -107,7 +107,7 @@ async function handleDone(intent, res, business) {
   }
 
   const lineItems = intent.notes || job.quote_items || job.description;
-  const invoice = db.createInvoice(business.id, job.id, amount, lineItems);
+  const invoice = await db.createInvoice(business.id, job.id, amount, lineItems);
   const msg = templates.invoiceMessage(job, invoice, job.customer, business);
 
   messenger.twimlReply(
@@ -122,24 +122,24 @@ async function handleDone(intent, res, business) {
 }
 
 async function handlePaid(intent, res, business) {
-  const invoice = db.getInvoiceByJob(business.id, intent.jobId);
+  const invoice = await db.getInvoiceByJob(intent.jobId);
   if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job #${intent.jobId}.`);
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ Already marked as paid.`);
 
-  db.markInvoicePaid(business.id, invoice.id);
+  await db.markInvoicePaid(invoice.id);
   messenger.twimlReply(res, `💰 Job ${db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
 }
 
 async function handleSendInvoice(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  let invoice = db.getInvoiceByJob(business.id, job.id);
+  let invoice = await db.getInvoiceByJob(job.id);
   if (!invoice) {
     if (!job.quoted_amount) {
       return messenger.twimlReply(res, `❌ No amount set for job ${db.formatJobId(job.id)}. Use *done ${job.id} total [amount]* first.`);
     }
-    invoice = db.createInvoice(business.id, job.id, job.quoted_amount, job.quote_items || job.description);
+    invoice = await db.createInvoice(business.id, job.id, job.quoted_amount, job.quote_items || job.description);
   }
 
   const msg = templates.invoiceMessage(job, invoice, job.customer, business);
@@ -155,10 +155,10 @@ async function handleSendInvoice(intent, res, business) {
 }
 
 async function handleChase(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  const invoice = db.getInvoiceByJob(business.id, job.id);
+  const invoice = await db.getInvoiceByJob(job.id);
   if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(job.id)}.`);
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
@@ -175,7 +175,7 @@ async function handleChase(intent, res, business) {
 }
 
 async function handleFollowUp(intent, res, business) {
-  const job = db.getJobWithCustomer(business.id, intent.jobId);
+  const job = await db.getJobWithCustomer(intent.jobId);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
   const msg = templates.followUpMessage(job, job.customer, business);
@@ -197,7 +197,7 @@ async function handleViewSchedule(intent, res, business) {
     const d = new Date(now);
     d.setDate(d.getDate() + 1);
     const dateStr = d.toISOString().split('T')[0];
-    const jobs = db.getScheduleForDate(business.id, dateStr);
+    const jobs = await db.getScheduleForDate(business.id, dateStr);
     return messenger.twimlReply(res, `*Tomorrow:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
   }
 
@@ -206,7 +206,7 @@ async function handleViewSchedule(intent, res, business) {
     const end = new Date(now);
     end.setDate(end.getDate() + 7);
     const endStr = end.toISOString().split('T')[0];
-    const jobs = db.getScheduleRange(business.id, start, endStr);
+    const jobs = await db.getScheduleRange(business.id, start, endStr);
 
     if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled this week. 📭`);
 
@@ -223,12 +223,12 @@ async function handleViewSchedule(intent, res, business) {
   }
 
   const dateStr = now.toISOString().split('T')[0];
-  const jobs = db.getScheduleForDate(business.id, dateStr);
+  const jobs = await db.getScheduleForDate(business.id, dateStr);
   messenger.twimlReply(res, `*Today:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
 }
 
 async function handleUnpaid(intent, res, business) {
-  const invoices = db.getUnpaidInvoices(business.id);
+  const invoices = await db.getUnpaidInvoices(business.id);
   if (!invoices.length) return messenger.twimlReply(res, `No unpaid invoices. 🎉`);
 
   const total = invoices.reduce((sum, i) => sum + i.amount, 0);
@@ -244,7 +244,7 @@ async function handleUnpaid(intent, res, business) {
 }
 
 async function handleOpenJobs(intent, res, business) {
-  const jobs = db.getOpenJobs(business.id);
+  const jobs = await db.getOpenJobs(business.id);
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
   const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${j.status.toLowerCase()}]`);
@@ -252,13 +252,13 @@ async function handleOpenJobs(intent, res, business) {
 }
 
 async function handleFind(intent, res, business) {
-  const customers = db.findCustomerByName(business.id, intent.query);
+  const customers = await db.findCustomerByName(business.id, intent.query);
   if (!customers.length) return messenger.twimlReply(res, `No customers found matching "${intent.query}".`);
 
   const results = [];
   for (const c of customers.slice(0, 5)) {
-    const jobs = db.getAll(
-      'SELECT * FROM jobs WHERE customer_id = ? AND business_id = ? ORDER BY created_at DESC LIMIT 5',
+    const jobs = await db.getAll(
+      'SELECT * FROM jobs WHERE customer_id = $1 AND business_id = $2 ORDER BY created_at DESC LIMIT 5',
       [c.id, business.id]
     );
     const jobLines = jobs.map((j) => {
