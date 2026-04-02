@@ -1,12 +1,21 @@
 const config = require('./config');
 const { formatJobId } = require('./db');
 
-function quoteMessage(job, customer) {
+function businessName(business) {
+  return business?.business_name || config.businessName;
+}
+
+function paymentDetails(business) {
+  return business?.payment_details || config.paymentDetails;
+}
+
+function quoteMessage(job, customer, business) {
   const items = job.quote_items || job.description;
+  const name = businessName(business);
   return [
     `Hi ${customer.name.split(' ')[0]}! 👋`,
     '',
-    `Thanks for your enquiry. Here's your quote from ${config.businessName}:`,
+    `Thanks for your enquiry. Here's your quote from ${name}:`,
     '',
     `📋 *Quote ${formatJobId(job.id)}*`,
     items,
@@ -17,14 +26,15 @@ function quoteMessage(job, customer) {
     '',
     'Reply *YES* to accept, or let us know if you have any questions.',
     '',
-    `— ${config.businessName}`,
+    `— ${name}`,
   ].join('\n');
 }
 
-function scheduleConfirmation(job, customer) {
+function scheduleConfirmation(job, customer, business) {
   const date = formatDate(job.scheduled_date);
   const time = job.scheduled_time || 'TBC';
   const postcode = job.postcode ? ` (${job.postcode})` : '';
+  const name = businessName(business);
   return [
     `Hi ${customer.name.split(' ')[0]}! ✅`,
     '',
@@ -35,16 +45,18 @@ function scheduleConfirmation(job, customer) {
     '',
     `We'll see you then! If you need to reschedule, just reply to this message.`,
     '',
-    `— ${config.businessName}`,
+    `— ${name}`,
   ].join('\n');
 }
 
-function invoiceMessage(job, invoice, customer) {
+function invoiceMessage(job, invoice, customer, business) {
   const items = invoice.line_items || job.description;
+  const name = businessName(business);
+  const payment = paymentDetails(business);
   return [
     `Hi ${customer.name.split(' ')[0]},`,
     '',
-    `Here's your invoice from ${config.businessName}:`,
+    `Here's your invoice from ${name}:`,
     '',
     `🧾 *Invoice ${formatJobId(job.id)}*`,
     items,
@@ -52,31 +64,34 @@ function invoiceMessage(job, invoice, customer) {
     `💰 *Total: £${Number(invoice.amount).toFixed(2)}*`,
     '',
     `💳 *Payment details:*`,
-    config.paymentDetails,
+    payment,
     '',
-    `Please pay within 14 days. Thanks for choosing ${config.businessName}!`,
+    `Please pay within 14 days. Thanks for choosing ${name}!`,
     '',
-    `— ${config.businessName}`,
+    `— ${name}`,
   ].join('\n');
 }
 
-function paymentReminder(job, invoice, customer) {
+function paymentReminder(job, invoice, customer, business) {
   const daysSent = Math.floor((Date.now() - new Date(invoice.sent_at).getTime()) / 86400000);
+  const name = businessName(business);
+  const payment = paymentDetails(business);
   return [
     `Hi ${customer.name.split(' ')[0]},`,
     '',
     `Friendly reminder — invoice ${formatJobId(job.id)} for £${Number(invoice.amount).toFixed(2)} was sent ${daysSent} days ago and is still outstanding.`,
     '',
     `💳 *Payment details:*`,
-    config.paymentDetails,
+    payment,
     '',
     `If you've already paid, please ignore this. Any questions, just reply!`,
     '',
-    `— ${config.businessName}`,
+    `— ${name}`,
   ].join('\n');
 }
 
-function followUpMessage(job, customer) {
+function followUpMessage(job, customer, business) {
+  const name = businessName(business);
   return [
     `Hi ${customer.name.split(' ')[0]}! 👋`,
     '',
@@ -84,9 +99,9 @@ function followUpMessage(job, customer) {
     '',
     `If you were happy with the work, a quick Google review would really help us out. 🙏`,
     '',
-    `Thanks again for choosing ${config.businessName}!`,
+    `Thanks again for choosing ${name}!`,
     '',
-    `— ${config.businessName}`,
+    `— ${name}`,
   ].join('\n');
 }
 

@@ -6,17 +6,18 @@ const client = twilio(config.twilio.accountSid, config.twilio.authToken);
 const from = `whatsapp:${config.twilio.whatsappNumber}`;
 
 /**
- * Send a WhatsApp message to the tradesperson.
+ * Send a WhatsApp message to a tradesperson.
  * Used for proactive messages (reminders, alerts) from the scheduler.
  */
-async function sendToForeman(body, { jobId } = {}) {
-  const to = `whatsapp:${config.foremanPhone}`;
+async function sendToForeman(body, { jobId, businessId, businessPhone } = {}) {
+  const phone = businessPhone || config.foremanPhone;
+  const to = `whatsapp:${phone}`;
   try {
     const msg = await client.messages.create({ from, to, body });
-    logMessage('OUT', 'TRADESPERSON', body, { jobId, whatsappMessageId: msg.sid });
+    logMessage(businessId || null, 'OUT', 'TRADESPERSON', body, { jobId, whatsappMessageId: msg.sid });
     return msg.sid;
   } catch (err) {
-    console.error(`Failed to send message to foreman:`, err.message);
+    console.error(`Failed to send message to foreman (${phone}):`, err.message);
     throw err;
   }
 }

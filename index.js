@@ -1,8 +1,8 @@
 const express = require('express');
+const path = require('path');
 const config = require('./config');
 const { parse } = require('./parser');
 const { dispatch } = require('./handlers');
-const { logMessage } = require('./db');
 const { twimlReply } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
@@ -11,6 +11,9 @@ const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+app.use(require('./signup'));
+app.use(require('./admin'));
 
 // Health check
 app.get('/', (req, res) => {
@@ -18,9 +21,9 @@ app.get('/', (req, res) => {
 });
 
 /**
- * Twilio webhook — receives inbound WhatsApp messages from the tradesperson.
+ * Twilio webhook — receives inbound WhatsApp messages from registered tradespeople.
  *
- * Option 2 design: only the tradesperson texts this number.
+ * Option 2 design: only registered tradespeople text this number.
  * The bot never messages customers — it drafts messages for the
  * tradesperson to copy and send from their own WhatsApp.
  */
@@ -34,18 +37,26 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).send('Missing From or Body');
     }
 
-    const isForeman = normalisePhone(from) === normalisePhone(config.foremanPhone);
+    const phone = normalisePhone(from);
+    const business = db.findBusinessByPhone(phone);
 
-    if (!isForeman) {
-      // Unknown sender — ignore silently (no customer-facing messages)
-      console.log(`📥 Unknown sender (${from}) — ignoring`);
-      return res.sendStatus(200);
+    if (!business) {
+      console.log(`📥 Unknown sender (${phone}) — not registered`);
+      const signupMsg = config.signupUrl
+        ? `You're not set up on The Foreman yet. Sign up at ${config.signupUrl}`
+        : `You're not set up on The Foreman yet. Please contact us to get started.`;
+      return twimlReply(res, signupMsg);
     }
 
-    logMessage('IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
+    if (business.status === 'suspended') {
+      console.log(`📥 Suspended business (${phone}) — rejecting`);
+      return twimlReply(res, `Your account has been suspended. Please contact support.`);
+    }
+
+    db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
     const intent = parse(body);
-    console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
-    await dispatch(intent, res);
+    console.log(`📥 [${business.business_name}] "${body}" → ${intent.intent}`);
+    await dispatch(intent, res, business);
 
   } catch (err) {
     console.error('Webhook error:', err);
