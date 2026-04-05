@@ -79,7 +79,15 @@ function computeMissing(intent, payload) {
 }
 
 function formatJobChoices(jobs) {
-  return jobs.map((job) => `• ${db.formatJobId(job.id)} — ${job.customer_name}, ${job.description}${job.address ? `, ${job.address}` : ''}`).join('\n');
+  return jobs.map((job, index) => `${index + 1}) ${job.customer_name} — ${job.description}${job.address ? `, ${job.address}` : ''}`).join('\n');
+}
+
+function readChoice(intent) {
+  const raw = (intent.raw || '').trim();
+  if (/^[1-9]\d*$/.test(raw)) {
+    return parseInt(raw, 10);
+  }
+  return null;
 }
 
 function buildPrompt(intent, missingFields) {
@@ -156,15 +164,31 @@ function looksLikeNewJobBare(intent) {
 }
 
 async function resolveMissingJobReference(state, intent, business) {
+  const choice = readChoice(intent);
+  if (choice && Array.isArray(state.payload.options) && state.payload.options[choice - 1]) {
+    const selected = state.payload.options[choice - 1];
+    const merged = mergeIntent({ intent: state.intent, ...state.payload }, { jobId: selected.id });
+    delete merged.options;
+    const missing = computeMissing(state.intent, merged);
+    if (!missing.length) {
+      await clearState(business.id);
+      return { mode: 'resolved', intent: { ...merged, intent: state.intent } };
+    }
+    await setState(business.id, state.intent, merged, missing);
+    return { mode: 'prompt', message: buildPrompt(state.intent, missing) };
+  }
+
   const query = extractLookupQuery(intent).trim();
   if (!query || query.toLowerCase() === "i don't know" || query.toLowerCase() === 'idk') {
     const openJobs = await db.getOpenJobs(business.id);
     if (!openJobs.length) {
       return { mode: 'prompt', message: `I couldn't find any open jobs to use right now.` };
     }
+    const options = openJobs.slice(0, 5);
+    await setState(business.id, state.intent, { ...state.payload, options }, state.missing_fields);
     return {
       mode: 'prompt',
-      message: `No problem — here are the open jobs I’ve got:\n${formatJobChoices(openJobs.slice(0, 5))}\n\nWhich one do you mean?`,
+      message: `No problem — here are the open jobs I’ve got:\n${formatJobChoices(options)}\n\nReply with 1, 2 or 3.`,
     };
   }
 
@@ -181,9 +205,10 @@ async function resolveMissingJobReference(state, intent, business) {
   }
 
   if (likely.length > 1) {
+    await setState(business.id, state.intent, { ...state.payload, options: likely }, state.missing_fields);
     return {
       mode: 'prompt',
-      message: `I found a few matches:\n${formatJobChoices(likely)}\n\nWhich one do you mean?`,
+      message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
     };
   }
 
