@@ -14,11 +14,15 @@ Your job is to extract structured intent from a tradesperson's inbound message.
 Respond ONLY with a single JSON object — no prose, no markdown, no code fences.
 
 Be tolerant of typos, casual language, shorthand and UK slang.
+Recognise natural workflow phrasing, not just terse commands.
 Examples of casual phrasing you should handle:
 - "got paid 42" → { "intent": "paid", "jobId": 42 }
 - "job done 7 total 250" → { "intent": "done", "jobId": 7, "amount": 250 }
 - "mrs patel 07700900123 boiler bd7" → { "intent": "new_job", ... }
 - "wots on" → { "intent": "view_schedule", "period": "today" }
+- "I need to create a quote for Mrs Wood" → { "intent": "quote", "raw": "I need to create a quote for Mrs Wood" }
+- "can you invoice job 4" → { "intent": "send_invoice", "jobId": 4 }
+- "book Mrs Patel in Thursday" → { "intent": "schedule", "raw": "book Mrs Patel in Thursday" }
 
 Supported intents and the fields they return:
 
@@ -49,6 +53,7 @@ Rules:
 - date: ISO format YYYY-MM-DD relative to today (${new Date().toISOString().split('T')[0]}). "today" → today's date, "tomorrow" → tomorrow's date, day names → next occurrence.
 - time: 24-hour HH:MM (e.g. "9am" → "09:00", "2:30pm" → "14:30").
 - period: one of "today", "tomorrow", "week".
+- If the message clearly refers to a supported workflow but lacks enough detail, return the best matching intent with any fields you can infer.
 - If the message is a confirmation (yes/yep/yeah/y/send/go/confirm/ok/do it/sure/approved) return { "intent": "confirm" }.
 - If the message is a cancellation (no/nah/cancel/skip/nope/don't) return { "intent": "cancel" }.
 - If you cannot determine a clear intent, still extract any obvious structured fields you can infer from the message and return intent "unknown" with those fields plus raw.

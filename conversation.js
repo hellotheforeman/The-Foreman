@@ -123,7 +123,11 @@ function mergeIntent(base, update) {
 }
 
 function looksLikeQuoteText(intent) {
-  return Boolean(intent.amount || intent.items || (intent.raw && /(£|labou?r|material|door|boiler|quote)/i.test(intent.raw)));
+  return Boolean(intent.amount || intent.items || (intent.raw && /(£|labou?r|material|door|boiler|quote|price|cost)/i.test(intent.raw)));
+}
+
+function extractLookupQuery(intent) {
+  return intent.query || intent.name || intent.raw || '';
 }
 
 function looksLikeNewJobBare(intent) {
@@ -152,6 +156,33 @@ async function resolveIntent(intent, business) {
     };
   }
 
+  if (!state && intent.intent === 'quote' && !intent.jobId) {
+    const query = extractLookupQuery(intent);
+    const likely = await db.findLikelyOpenJobs(business.id, query);
+    if (likely.length === 1) {
+      const merged = {
+        intent: 'quote',
+        jobId: likely[0].id,
+        amount: intent.amount,
+        items: intent.items || likely[0].description,
+      };
+      const missing = computeMissing('quote', merged);
+      await setState(business.id, 'quote', merged, missing);
+      if (!missing.length) {
+        await clearState(business.id);
+        return {
+          mode: 'resolved',
+          intent: merged,
+        };
+      }
+
+      return {
+        mode: 'prompt',
+        message: `I found ${db.formatJobId(likely[0].id)} for ${likely[0].customer_name} (${likely[0].description}). What price should I use?`,
+      };
+    }
+  }
+
   if (!state && looksLikeNewJobBare(intent)) {
     const query = [intent.name, intent.phone, intent.raw].filter(Boolean).join(' ');
     const likely = await db.findLikelyOpenJobs(business.id, query);
@@ -168,7 +199,7 @@ async function resolveIntent(intent, business) {
     }
   }
 
-  if (!state && intent.intent === 'unknown' && looksLikeQuoteText(intent)) {
+  if (!state && (intent.intent === 'unknown' || intent.intent === 'quote') && looksLikeQuoteText(intent)) {
     const openJobs = await db.getOpenJobs(business.id);
     if (openJobs.length === 1) {
       return {
