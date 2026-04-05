@@ -91,6 +91,15 @@ function readChoice(intent) {
   return null;
 }
 
+function readChoices(intent) {
+  const raw = (intent.raw || '').trim().toLowerCase();
+  if (!raw) return [];
+  if (raw === 'all') return ['all'];
+  const matches = raw.match(/\d+/g);
+  if (!matches) return [];
+  return [...new Set(matches.map((n) => parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0))];
+}
+
 function buildPrompt(intent, missingFields) {
   if (!missingFields.length) return null;
   const [first] = missingFields;
@@ -171,6 +180,24 @@ function looksLikeNewJobBare(intent) {
 }
 
 async function resolveMissingJobReference(state, intent, business) {
+  const choices = readChoices(intent);
+  if (state.intent === 'archive_job' && Array.isArray(state.payload.options) && choices.length) {
+    const selectedJobs = choices[0] === 'all'
+      ? state.payload.options
+      : choices.map((choice) => state.payload.options[choice - 1]).filter(Boolean);
+
+    if (selectedJobs.length) {
+      await clearState(business.id);
+      return {
+        mode: 'resolved',
+        intent: {
+          intent: 'archive_job',
+          jobIds: selectedJobs.map((job) => job.id),
+        },
+      };
+    }
+  }
+
   const choice = readChoice(intent);
   if (choice && Array.isArray(state.payload.options) && state.payload.options[choice - 1]) {
     const selected = state.payload.options[choice - 1];

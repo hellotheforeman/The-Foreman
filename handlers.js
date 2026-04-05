@@ -200,13 +200,24 @@ async function handleFollowUp(intent, res, business) {
 }
 
 async function handleArchiveJob(intent, res, business) {
-  const job = await db.getJobWithCustomer(intent.jobId);
-  if (!job) return messenger.twimlReply(res, `❌ I couldn't find that job.`);
+  const jobIds = intent.jobIds || (intent.jobId ? [intent.jobId] : []);
+  if (!jobIds.length) return messenger.twimlReply(res, `❌ I couldn't find that job.`);
 
-  await db.archiveJob(job.id);
+  const archived = [];
+  for (const jobId of jobIds) {
+    const job = await db.getJobWithCustomer(jobId);
+    if (!job) continue;
+    await db.archiveJob(job.id);
+    archived.push(`${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}`);
+  }
+
+  if (!archived.length) {
+    return messenger.twimlReply(res, `❌ I couldn't find those jobs.`);
+  }
+
   messenger.twimlReply(
     res,
-    `🗂️ Archived ${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}. I’ll keep it out of normal active flows now.`
+    `🗂️ Archived ${archived.length} job${archived.length === 1 ? '' : 's'}:\n${archived.map((line) => `• ${line}`).join('\n')}\n\nI’ll keep ${archived.length === 1 ? 'it' : 'them'} out of normal active flows now.`
   );
 }
 
