@@ -140,7 +140,15 @@ function looksLikeQuoteText(intent) {
 }
 
 function extractLookupQuery(intent) {
-  return intent.query || intent.name || intent.raw || '';
+  if (intent.query) return intent.query;
+  if (intent.name) return intent.name;
+  if (intent.raw) {
+    const forMatch = intent.raw.match(/for\s+([a-z][a-z\s'.-]+)$/i);
+    if (forMatch) return forMatch[1].trim();
+    const quotedPerson = intent.raw.match(/(?:quote|invoice|chase|follow up|schedule)\s+(?:for\s+)?([a-z][a-z\s'.-]+)/i);
+    if (quotedPerson) return quotedPerson[1].trim();
+  }
+  return intent.raw || '';
 }
 
 function looksLikeNewJobBare(intent) {
