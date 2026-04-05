@@ -245,6 +245,25 @@ async function getOpenJobs(businessId) {
   );
 }
 
+async function findLikelyOpenJobs(businessId, query) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS')
+       AND (
+         c.name ILIKE $2 OR
+         c.phone = $3 OR
+         j.description ILIKE $2 OR
+         COALESCE(j.address, '') ILIKE $2
+       )
+     ORDER BY j.created_at DESC
+     LIMIT 5`,
+    [businessId, `%${query}%`, query]
+  );
+}
+
 // --- Invoice queries ---
 
 async function createInvoice(businessId, jobId, amount, lineItems) {
@@ -306,6 +325,7 @@ module.exports = {
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
+  findLikelyOpenJobs,
   createInvoice,
   getInvoiceByJob,
   markInvoicePaid,

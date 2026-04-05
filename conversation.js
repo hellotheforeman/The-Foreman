@@ -122,6 +122,14 @@ function mergeIntent(base, update) {
   return merged;
 }
 
+function looksLikeQuoteText(intent) {
+  return Boolean(intent.amount || intent.items || (intent.raw && /(£|labou?r|material|door|boiler|quote)/i.test(intent.raw)));
+}
+
+function looksLikeNewJobBare(intent) {
+  return intent.intent === 'new_job' && !intent.address && !intent.description;
+}
+
 async function resolveIntent(intent, business) {
   const state = await getState(business.id);
 
@@ -142,6 +150,37 @@ async function resolveIntent(intent, business) {
       mode: 'resolved',
       intent: { ...merged, intent: state.intent },
     };
+  }
+
+  if (!state && looksLikeNewJobBare(intent)) {
+    const query = [intent.name, intent.phone, intent.raw].filter(Boolean).join(' ');
+    const likely = await db.findLikelyOpenJobs(business.id, query);
+    if (likely.length === 1) {
+      await setState(business.id, 'quote', {
+        intent: 'quote',
+        jobId: likely[0].id,
+        items: likely[0].description,
+      }, ['amount']);
+      return {
+        mode: 'prompt',
+        message: `I’ve already got ${db.formatJobId(likely[0].id)} open for ${likely[0].customer_name} (${likely[0].description}). What price should I use on the quote?`,
+      };
+    }
+  }
+
+  if (!state && intent.intent === 'unknown' && looksLikeQuoteText(intent)) {
+    const openJobs = await db.getOpenJobs(business.id);
+    if (openJobs.length === 1) {
+      return {
+        mode: 'resolved',
+        intent: {
+          intent: 'quote',
+          jobId: openJobs[0].id,
+          amount: intent.amount,
+          items: intent.items || intent.raw,
+        },
+      };
+    }
   }
 
   const missing = computeMissing(intent.intent, intent);
