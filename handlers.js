@@ -37,7 +37,8 @@ async function dispatch(intent, res, business) {
 
 async function handleNewJob(intent, res, business) {
   const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode);
-  const job = await db.createJob(business.id, customer.id, intent.description, intent.postcode);
+  const description = intent.description || 'New job';
+  const job = await db.createJob(business.id, customer.id, description, intent.postcode);
   const postcode = intent.postcode ? `, ${intent.postcode}` : '';
   messenger.twimlReply(
     res,
