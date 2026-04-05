@@ -11,6 +11,7 @@ const REQUIRED_FIELDS = {
   follow_up: ['jobId'],
   find: ['query'],
   view_schedule: ['period'],
+  archive_job: ['jobId'],
 };
 
 const FIELD_PROMPTS = {
@@ -108,6 +109,10 @@ function buildPrompt(intent, missingFields) {
 
   if (intent === 'quote' && first === 'amount') {
     return `What price should I use on the quote?`;
+  }
+
+  if (intent === 'archive_job' && first === 'jobId') {
+    return `Which customer or job should I archive? You can reply with the customer name.`;
   }
 
   if (intent === 'schedule' && first === 'date') {
@@ -244,6 +249,25 @@ async function resolveIntent(intent, business) {
       mode: 'resolved',
       intent: { ...merged, intent: state.intent },
     };
+  }
+
+  if (!state && intent.intent === 'archive_job' && !intent.jobId) {
+    const query = extractLookupQuery(intent);
+    const likely = await db.findLikelyOpenJobs(business.id, query);
+    if (likely.length === 1) {
+      await clearState(business.id);
+      return {
+        mode: 'resolved',
+        intent: { intent: 'archive_job', jobId: likely[0].id },
+      };
+    }
+    if (likely.length > 1) {
+      await setState(business.id, 'archive_job', { intent: 'archive_job', options: likely }, ['jobId']);
+      return {
+        mode: 'prompt',
+        message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
+      };
+    }
   }
 
   if (!state && intent.intent === 'quote' && !intent.jobId) {

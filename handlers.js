@@ -20,6 +20,7 @@ const handlers = {
   send_invoice: handleSendInvoice,
   chase: handleChase,
   follow_up: handleFollowUp,
+  archive_job: handleArchiveJob,
   view_schedule: handleViewSchedule,
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
@@ -195,6 +196,17 @@ async function handleFollowUp(intent, res, business) {
     `${msg}\n` +
     `─────────────────\n\n` +
     `Copy and send this on WhatsApp.`
+  );
+}
+
+async function handleArchiveJob(intent, res, business) {
+  const job = await db.getJobWithCustomer(intent.jobId);
+  if (!job) return messenger.twimlReply(res, `❌ I couldn't find that job.`);
+
+  await db.archiveJob(job.id);
+  messenger.twimlReply(
+    res,
+    `🗂️ Archived ${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}. I’ll keep it out of normal active flows now.`
   );
 }
 

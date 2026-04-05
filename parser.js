@@ -23,6 +23,7 @@ Examples of casual phrasing you should handle:
 - "I need to create a quote for Mrs Wood" → { "intent": "quote", "raw": "I need to create a quote for Mrs Wood" }
 - "can you invoice job 4" → { "intent": "send_invoice", "jobId": 4 }
 - "book Mrs Patel in Thursday" → { "intent": "schedule", "raw": "book Mrs Patel in Thursday" }
+- "delete Mrs Wood's duplicate job" → { "intent": "archive_job", "raw": "delete Mrs Wood's duplicate job" }
 
 Supported intents and the fields they return:
 
@@ -43,6 +44,7 @@ Supported intents and the fields they return:
 | confirm       |                            |                                              |
 | cancel        |                            |                                              |
 | help          |                            |                                              |
+| archive_job   | jobId                      | query                                         |
 | unknown       | raw                        |                                              |
 
 Rules:
@@ -58,6 +60,7 @@ Rules:
 - If the message is a cancellation (no/nah/cancel/skip/nope/don't) return { "intent": "cancel" }.
 - If you cannot determine a clear intent, still extract any obvious structured fields you can infer from the message and return intent "unknown" with those fields plus raw.
 - Never include fields that are not relevant to the intent.
+- Treat delete/remove/cancel/archive duplicate job requests as archive_job, not permanent deletion.
 - If the user reply looks like it could be an answer to a missing field (for example just a phone number, just a postcode, just an address, just a short job description, just a time, just a day/date), include that field even if the intent is unknown.
 - For new_job, if the message contains a likely street or property address, return it in the address field.`;
 

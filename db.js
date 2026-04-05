@@ -45,6 +45,7 @@ async function migrate() {
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'NEW',
+      archived_at TIMESTAMPTZ,
       address TEXT,
       postcode TEXT,
       quoted_amount NUMERIC,
@@ -73,6 +74,7 @@ async function migrate() {
 
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS address TEXT');
+  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS message_log (
@@ -190,7 +192,7 @@ async function createJob(businessId, customerId, description, address, postcode)
 }
 
 async function getJob(id) {
-  return getOne('SELECT * FROM jobs WHERE id = $1', [id]);
+  return getOne('SELECT * FROM jobs WHERE id = $1 AND archived_at IS NULL', [id]);
 }
 
 async function getJobWithCustomer(id) {
@@ -226,21 +228,21 @@ async function completeJob(jobId, notes) {
 
 async function getScheduleForDate(businessId, dateStr) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date = $2 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_time",
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.scheduled_date = $2 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_time",
     [businessId, dateStr]
   );
 }
 
 async function getScheduleRange(businessId, startDate, endDate) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date BETWEEN $2 AND $3 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_date, j.scheduled_time",
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.scheduled_date BETWEEN $2 AND $3 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_date, j.scheduled_time",
     [businessId, startDate, endDate]
   );
 }
 
 async function getOpenJobs(businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
+    "SELECT j.*, c.name AS customer_name FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
     [businessId]
   );
 }
@@ -251,6 +253,7 @@ async function findLikelyOpenJobs(businessId, query) {
      FROM jobs j
      JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1
+       AND j.archived_at IS NULL
        AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS')
        AND (
          c.name ILIKE $2 OR
@@ -288,9 +291,14 @@ async function markInvoicePaid(invoiceId) {
 
 async function getUnpaidInvoices(businessId) {
   return getAll(
-    "SELECT i.*, j.description AS job_description, c.name AS customer_name, c.phone AS customer_phone FROM invoices i JOIN jobs j ON i.job_id = j.id JOIN customers c ON j.customer_id = c.id WHERE i.business_id = $1 AND i.status IN ('SENT', 'OVERDUE') ORDER BY i.sent_at",
+    "SELECT i.*, j.description AS job_description, c.name AS customer_name, c.phone AS customer_phone FROM invoices i JOIN jobs j ON i.job_id = j.id JOIN customers c ON j.customer_id = c.id WHERE i.business_id = $1 AND j.archived_at IS NULL AND i.status IN ('SENT', 'OVERDUE') ORDER BY i.sent_at",
     [businessId]
   );
+}
+
+async function archiveJob(jobId) {
+  await pool.query('UPDATE jobs SET archived_at = NOW(), status = $1 WHERE id = $2', ['ARCHIVED', jobId]);
+  return getOne('SELECT * FROM jobs WHERE id = $1', [jobId]);
 }
 
 // --- Message log ---
@@ -330,6 +338,7 @@ module.exports = {
   getInvoiceByJob,
   markInvoicePaid,
   getUnpaidInvoices,
+  archiveJob,
   logMessage,
   getAll,
 };
