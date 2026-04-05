@@ -85,6 +85,10 @@ function buildPrompt(intent, missingFields) {
     return `Nice — and what is the job for?`;
   }
 
+  if (intent === 'quote' && first === 'amount') {
+    return `What price should I use on the quote?`;
+  }
+
   if (intent === 'schedule' && first === 'date') {
     return `No problem — ${FIELD_PROMPTS.date}`;
   }
@@ -107,13 +111,21 @@ function mergeIntent(base, update) {
     }
   }
 
+  if (base.intent === 'quote') {
+    if (update.items) merged.items = update.items;
+    if (update.amount) merged.amount = update.amount;
+    if (update.raw && !update.items && !base.items) {
+      merged.items = update.raw;
+    }
+  }
+
   return merged;
 }
 
 async function resolveIntent(intent, business) {
   const state = await getState(business.id);
 
-  if (state && (intent.intent === 'unknown' || intent.intent === 'confirm')) {
+  if (state && (intent.intent === 'unknown' || intent.intent === 'confirm' || intent.intent === 'quote')) {
     const merged = mergeIntent({ intent: state.intent, ...state.payload }, intent);
     const missing = computeMissing(state.intent, merged);
 
@@ -151,8 +163,15 @@ async function resolveIntent(intent, business) {
   };
 }
 
+async function beginFlow(businessId, intent, payload) {
+  const missing = computeMissing(intent, { intent, ...payload });
+  await setState(businessId, intent, { intent, ...payload }, missing);
+  return buildPrompt(intent, missing) || null;
+}
+
 module.exports = {
   migrate,
   resolveIntent,
   clearState,
+  beginFlow,
 };

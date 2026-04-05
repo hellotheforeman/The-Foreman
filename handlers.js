@@ -1,6 +1,7 @@
 const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
+const conversation = require('./conversation');
 
 /**
  * Option 2 design: The Foreman never messages customers directly.
@@ -41,6 +42,11 @@ async function handleNewJob(intent, res, business) {
   const job = await db.createJob(business.id, customer.id, description, intent.address, intent.postcode);
   const postcode = intent.postcode ? `, ${intent.postcode}` : '';
   const address = intent.address ? `\n📍 ${intent.address}${postcode}` : '';
+  await conversation.beginFlow(business.id, 'quote', {
+    jobId: job.id,
+    items: job.description,
+  });
+
   messenger.twimlReply(
     res,
     `✅ Job ${db.formatJobId(job.id)} created\n` +
