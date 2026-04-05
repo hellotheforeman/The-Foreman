@@ -124,6 +124,10 @@ function buildPrompt(intent, missingFields) {
     return `Which customer or job should I archive? You can reply with the customer name.`;
   }
 
+  if (intent === 'schedule' && first === 'jobId') {
+    return `Which customer or job do you mean? You can just reply with the customer name.`;
+  }
+
   if (intent === 'schedule' && first === 'date') {
     return `No problem — ${FIELD_PROMPTS.date}`;
   }
@@ -255,7 +259,7 @@ async function resolveMissingJobReference(state, intent, business) {
 async function resolveIntent(intent, business) {
   const state = await getState(business.id);
 
-  if (state && state.missing_fields && state.missing_fields.includes('jobId') && (intent.intent === 'unknown' || intent.intent === 'quote' || intent.intent === 'find')) {
+  if (state && state.missing_fields && state.missing_fields.includes('jobId') && (intent.intent === 'unknown' || intent.intent === 'quote' || intent.intent === 'schedule' || intent.intent === 'find')) {
     return resolveMissingJobReference(state, intent, business);
   }
 
@@ -290,6 +294,42 @@ async function resolveIntent(intent, business) {
     }
     if (likely.length > 1) {
       await setState(business.id, 'archive_job', { intent: 'archive_job', options: likely }, ['jobId']);
+      return {
+        mode: 'prompt',
+        message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
+      };
+    }
+  }
+
+  if (!state && intent.intent === 'schedule' && !intent.jobId) {
+    const query = extractLookupQuery(intent);
+    const likely = await db.findLikelyOpenJobs(business.id, query);
+    if (likely.length === 1) {
+      const merged = {
+        intent: 'schedule',
+        jobId: likely[0].id,
+        date: intent.date,
+        time: intent.time,
+        raw: intent.raw,
+      };
+      const missing = computeMissing('schedule', merged);
+      if (!missing.length) {
+        await clearState(business.id);
+        return {
+          mode: 'resolved',
+          intent: merged,
+        };
+      }
+      await setState(business.id, 'schedule', merged, missing);
+      return {
+        mode: 'prompt',
+        message: missing[0] === 'date'
+          ? `Got it — ${likely[0].customer_name}, ${likely[0].description}. What day should I book it in for?`
+          : buildPrompt('schedule', missing),
+      };
+    }
+    if (likely.length > 1) {
+      await setState(business.id, 'schedule', { intent: 'schedule', date: intent.date, time: intent.time, raw: intent.raw, options: likely }, ['jobId']);
       return {
         mode: 'prompt',
         message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
