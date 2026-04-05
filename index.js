@@ -6,6 +6,7 @@ const { dispatch } = require('./handlers');
 const { twimlReply } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
+const conversation = require('./conversation');
 
 const app = express();
 
@@ -54,7 +55,15 @@ app.post('/webhook', async (req, res) => {
     }
 
     await db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
-    const intent = await parse(body);
+    const parsed = await parse(body);
+    const resolved = await conversation.resolveIntent(parsed, business);
+
+    if (resolved.mode === 'prompt') {
+      console.log(`📥 [${business.business_name}] "${body}" → prompt`);
+      return twimlReply(res, resolved.message);
+    }
+
+    const intent = resolved.intent;
     console.log(`📥 [${business.business_name}] "${body}" → ${intent.intent}`);
     await dispatch(intent, res, business);
 
@@ -82,6 +91,7 @@ function normalisePhone(phone) {
 
 async function start() {
   await db.init();
+  await conversation.migrate();
   app.listen(config.port, () => {
     console.log(`🔨 The Foreman running on port ${config.port}`);
     scheduler.start();

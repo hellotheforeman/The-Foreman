@@ -51,8 +51,9 @@ Rules:
 - period: one of "today", "tomorrow", "week".
 - If the message is a confirmation (yes/yep/yeah/y/send/go/confirm/ok/do it/sure/approved) return { "intent": "confirm" }.
 - If the message is a cancellation (no/nah/cancel/skip/nope/don't) return { "intent": "cancel" }.
-- If you cannot determine a clear intent, return { "intent": "unknown", "raw": "<original message>" }.
-- Never include fields that are not relevant to the intent.`;
+- If you cannot determine a clear intent, still extract any obvious structured fields you can infer from the message and return intent "unknown" with those fields plus raw.
+- Never include fields that are not relevant to the intent.
+- If the user reply looks like it could be an answer to a missing field (for example just a phone number, just a postcode, just a short job description, just a time, just a day/date), include that field even if the intent is unknown.`;
 
 async function parse(raw) {
   const text = raw.trim();
