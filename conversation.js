@@ -19,7 +19,7 @@ const FIELD_PROMPTS = {
   address: 'What is the address?',
   description: 'What is the job for?',
   postcode: 'What is the postcode?',
-  jobId: 'Which job number is this for?',
+  jobId: 'Which customer or job do you mean?',
   amount: 'What amount should I use?',
   items: 'What should I put on the quote?',
   date: 'What day should I book it in for?',
@@ -43,7 +43,12 @@ async function migrate() {
 
 async function getState(businessId) {
   const row = await db.getAll('SELECT * FROM conversation_state WHERE business_id = $1 LIMIT 1', [businessId]);
-  return row[0] || null;
+  if (!row[0]) return null;
+  return {
+    ...row[0],
+    payload: typeof row[0].payload === 'string' ? JSON.parse(row[0].payload) : row[0].payload,
+    missing_fields: typeof row[0].missing_fields === 'string' ? JSON.parse(row[0].missing_fields) : row[0].missing_fields,
+  };
 }
 
 async function clearState(businessId) {
@@ -73,6 +78,10 @@ function computeMissing(intent, payload) {
   return required.filter((field) => isMissing(payload[field]));
 }
 
+function formatJobChoices(jobs) {
+  return jobs.map((job) => `• ${db.formatJobId(job.id)} — ${job.customer_name}, ${job.description}${job.address ? `, ${job.address}` : ''}`).join('\n');
+}
+
 function buildPrompt(intent, missingFields) {
   if (!missingFields.length) return null;
   const [first] = missingFields;
@@ -83,6 +92,10 @@ function buildPrompt(intent, missingFields) {
 
   if (intent === 'new_job' && first === 'description') {
     return `Nice — and what is the job for?`;
+  }
+
+  if (intent === 'quote' && first === 'jobId') {
+    return `Which customer or job do you mean? You can just reply with the customer name.`;
   }
 
   if (intent === 'quote' && first === 'amount') {
@@ -134,8 +147,50 @@ function looksLikeNewJobBare(intent) {
   return intent.intent === 'new_job' && !intent.address && !intent.description;
 }
 
+async function resolveMissingJobReference(state, intent, business) {
+  const query = extractLookupQuery(intent).trim();
+  if (!query || query.toLowerCase() === "i don't know" || query.toLowerCase() === 'idk') {
+    const openJobs = await db.getOpenJobs(business.id);
+    if (!openJobs.length) {
+      return { mode: 'prompt', message: `I couldn't find any open jobs to use right now.` };
+    }
+    return {
+      mode: 'prompt',
+      message: `No problem — here are the open jobs I’ve got:\n${formatJobChoices(openJobs.slice(0, 5))}\n\nWhich one do you mean?`,
+    };
+  }
+
+  const likely = await db.findLikelyOpenJobs(business.id, query);
+  if (likely.length === 1) {
+    const merged = mergeIntent({ intent: state.intent, ...state.payload }, { jobId: likely[0].id });
+    const missing = computeMissing(state.intent, merged);
+    if (!missing.length) {
+      await clearState(business.id);
+      return { mode: 'resolved', intent: { ...merged, intent: state.intent } };
+    }
+    await setState(business.id, state.intent, merged, missing);
+    return { mode: 'prompt', message: buildPrompt(state.intent, missing) };
+  }
+
+  if (likely.length > 1) {
+    return {
+      mode: 'prompt',
+      message: `I found a few matches:\n${formatJobChoices(likely)}\n\nWhich one do you mean?`,
+    };
+  }
+
+  return {
+    mode: 'prompt',
+    message: `I couldn't match that to an open job. Try the customer name or what the job was for.`,
+  };
+}
+
 async function resolveIntent(intent, business) {
   const state = await getState(business.id);
+
+  if (state && state.missing_fields && state.missing_fields.includes('jobId') && (intent.intent === 'unknown' || intent.intent === 'quote' || intent.intent === 'find')) {
+    return resolveMissingJobReference(state, intent, business);
+  }
 
   if (state && (intent.intent === 'unknown' || intent.intent === 'confirm' || intent.intent === 'quote')) {
     const merged = mergeIntent({ intent: state.intent, ...state.payload }, intent);
