@@ -30,6 +30,8 @@ const FIELD_PROMPTS = {
   period: 'Do you mean today, tomorrow, or this week?',
 };
 
+const JOB_REFERENCE_INTENTS = new Set(['quote', 'schedule', 'send_invoice', 'paid', 'done', 'chase', 'follow_up', 'archive_job']);
+
 async function migrate() {
   await db.getAll(`
     CREATE TABLE IF NOT EXISTS conversation_state (
@@ -112,10 +114,6 @@ function buildPrompt(intent, missingFields) {
     return `Nice — and what is the job for?`;
   }
 
-  if (intent === 'quote' && first === 'jobId') {
-    return `Which customer or job do you mean? You can just reply with the customer name.`;
-  }
-
   if (intent === 'quote' && first === 'amount') {
     return `What price should I use on the quote?`;
   }
@@ -124,12 +122,12 @@ function buildPrompt(intent, missingFields) {
     return `Which customer or job should I archive? You can reply with the customer name.`;
   }
 
-  if (intent === 'schedule' && first === 'jobId') {
-    return `Which customer or job do you mean? You can just reply with the customer name.`;
-  }
-
   if (intent === 'schedule' && first === 'date') {
     return `No problem — ${FIELD_PROMPTS.date}`;
+  }
+
+  if (first === 'jobId') {
+    return `Which customer or job do you mean? You can just reply with the customer name.`;
   }
 
   return FIELD_PROMPTS[first] || 'I need a bit more information to do that.';
@@ -173,7 +171,7 @@ function extractLookupQuery(intent) {
   if (intent.raw) {
     const forMatch = intent.raw.match(/for\s+([a-z][a-z\s'.-]+)$/i);
     if (forMatch) return forMatch[1].trim();
-    const quotedPerson = intent.raw.match(/(?:quote|invoice|chase|follow up|schedule)\s+(?:for\s+)?([a-z][a-z\s'.-]+)/i);
+    const quotedPerson = intent.raw.match(/(?:quote|invoice|chase|follow up|schedule|book|paid|done|archive|delete|remove)\s+(?:for\s+)?([a-z][a-z\s'.-]+)/i);
     if (quotedPerson) return quotedPerson[1].trim();
   }
   return intent.raw || '';
@@ -183,7 +181,7 @@ function looksLikeNewJobBare(intent) {
   return intent.intent === 'new_job' && !intent.address && !intent.description;
 }
 
-async function resolveMissingJobReference(state, intent, business) {
+async function resolveWithOptions(state, intent, business) {
   const choices = readChoices(intent);
   if (state.intent === 'archive_job' && Array.isArray(state.payload.options) && choices.length) {
     const selectedJobs = choices[0] === 'all'
@@ -216,6 +214,60 @@ async function resolveMissingJobReference(state, intent, business) {
     return { mode: 'prompt', message: buildPrompt(state.intent, missing) };
   }
 
+  return null;
+}
+
+async function findMatchingJobs(businessId, query) {
+  const trimmed = (query || '').trim();
+  if (!trimmed) return [];
+  return db.findLikelyOpenJobs(businessId, trimmed);
+}
+
+async function resolveJobReference(intentName, basePayload, business, query, optionsFallbackMessage) {
+  const likely = await findMatchingJobs(business.id, query);
+
+  if (likely.length === 1) {
+    const merged = { intent: intentName, ...basePayload, jobId: likely[0].id };
+    const missing = computeMissing(intentName, merged);
+    if (!missing.length) {
+      await clearState(business.id);
+      return { mode: 'resolved', intent: merged };
+    }
+    await setState(business.id, intentName, merged, missing);
+    if (intentName === 'quote' && missing[0] === 'amount') {
+      return {
+        mode: 'prompt',
+        message: `I found ${db.formatJobId(likely[0].id)} for ${likely[0].customer_name} (${likely[0].description}). What price should I use?`,
+      };
+    }
+    if (intentName === 'schedule' && missing[0] === 'date') {
+      return {
+        mode: 'prompt',
+        message: `Got it — ${likely[0].customer_name}, ${likely[0].description}. What day should I book it in for?`,
+      };
+    }
+    return { mode: 'prompt', message: buildPrompt(intentName, missing) };
+  }
+
+  if (likely.length > 1) {
+    await setState(business.id, intentName, { intent: intentName, ...basePayload, options: likely }, ['jobId']);
+    return {
+      mode: 'prompt',
+      message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
+    };
+  }
+
+  if (optionsFallbackMessage) {
+    return { mode: 'prompt', message: optionsFallbackMessage };
+  }
+
+  return null;
+}
+
+async function resolveMissingJobReference(state, intent, business) {
+  const optionResult = await resolveWithOptions(state, intent, business);
+  if (optionResult) return optionResult;
+
   const query = extractLookupQuery(intent).trim();
   if (!query || query.toLowerCase() === "i don't know" || query.toLowerCase() === 'idk') {
     const openJobs = await db.getOpenJobs(business.id);
@@ -230,40 +282,39 @@ async function resolveMissingJobReference(state, intent, business) {
     };
   }
 
-  const likely = await db.findLikelyOpenJobs(business.id, query);
-  if (likely.length === 1) {
-    const merged = mergeIntent({ intent: state.intent, ...state.payload }, { jobId: likely[0].id });
-    const missing = computeMissing(state.intent, merged);
-    if (!missing.length) {
-      await clearState(business.id);
-      return { mode: 'resolved', intent: { ...merged, intent: state.intent } };
-    }
-    await setState(business.id, state.intent, merged, missing);
-    return { mode: 'prompt', message: buildPrompt(state.intent, missing) };
+  const resolved = await resolveJobReference(state.intent, state.payload, business, query, `I couldn't match that to an open job. Try the customer name or what the job was for.`);
+  return resolved || { mode: 'prompt', message: `I couldn't match that to an open job. Try the customer name or what the job was for.` };
+}
+
+async function resolveStandaloneJobIntent(intent, business) {
+  const query = extractLookupQuery(intent);
+
+  if (intent.jobId) {
+    return null;
   }
 
-  if (likely.length > 1) {
-    await setState(business.id, state.intent, { ...state.payload, options: likely }, state.missing_fields);
-    return {
-      mode: 'prompt',
-      message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
-    };
+  if (JOB_REFERENCE_INTENTS.has(intent.intent)) {
+    const resolved = await resolveJobReference(intent.intent, {
+      amount: intent.amount,
+      items: intent.items,
+      date: intent.date,
+      time: intent.time,
+      raw: intent.raw,
+    }, business, query, null);
+    if (resolved) return resolved;
   }
 
-  return {
-    mode: 'prompt',
-    message: `I couldn't match that to an open job. Try the customer name or what the job was for.`,
-  };
+  return null;
 }
 
 async function resolveIntent(intent, business) {
   const state = await getState(business.id);
 
-  if (state && state.missing_fields && state.missing_fields.includes('jobId') && (intent.intent === 'unknown' || intent.intent === 'quote' || intent.intent === 'schedule' || intent.intent === 'find')) {
+  if (state && state.missing_fields && state.missing_fields.includes('jobId') && (intent.intent === 'unknown' || JOB_REFERENCE_INTENTS.has(intent.intent) || intent.intent === 'find')) {
     return resolveMissingJobReference(state, intent, business);
   }
 
-  if (state && (intent.intent === 'unknown' || intent.intent === 'confirm' || intent.intent === 'quote')) {
+  if (state && (intent.intent === 'unknown' || intent.intent === 'confirm' || JOB_REFERENCE_INTENTS.has(intent.intent))) {
     const merged = mergeIntent({ intent: state.intent, ...state.payload }, intent);
     const missing = computeMissing(state.intent, merged);
 
@@ -282,86 +333,9 @@ async function resolveIntent(intent, business) {
     };
   }
 
-  if (!state && intent.intent === 'archive_job' && !intent.jobId) {
-    const query = extractLookupQuery(intent);
-    const likely = await db.findLikelyOpenJobs(business.id, query);
-    if (likely.length === 1) {
-      await clearState(business.id);
-      return {
-        mode: 'resolved',
-        intent: { intent: 'archive_job', jobId: likely[0].id },
-      };
-    }
-    if (likely.length > 1) {
-      await setState(business.id, 'archive_job', { intent: 'archive_job', options: likely }, ['jobId']);
-      return {
-        mode: 'prompt',
-        message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
-      };
-    }
-  }
-
-  if (!state && intent.intent === 'schedule' && !intent.jobId) {
-    const query = extractLookupQuery(intent);
-    const likely = await db.findLikelyOpenJobs(business.id, query);
-    if (likely.length === 1) {
-      const merged = {
-        intent: 'schedule',
-        jobId: likely[0].id,
-        date: intent.date,
-        time: intent.time,
-        raw: intent.raw,
-      };
-      const missing = computeMissing('schedule', merged);
-      if (!missing.length) {
-        await clearState(business.id);
-        return {
-          mode: 'resolved',
-          intent: merged,
-        };
-      }
-      await setState(business.id, 'schedule', merged, missing);
-      return {
-        mode: 'prompt',
-        message: missing[0] === 'date'
-          ? `Got it — ${likely[0].customer_name}, ${likely[0].description}. What day should I book it in for?`
-          : buildPrompt('schedule', missing),
-      };
-    }
-    if (likely.length > 1) {
-      await setState(business.id, 'schedule', { intent: 'schedule', date: intent.date, time: intent.time, raw: intent.raw, options: likely }, ['jobId']);
-      return {
-        mode: 'prompt',
-        message: `I found a few matches:\n${formatJobChoices(likely)}\n\nReply with 1, 2 or 3.`,
-      };
-    }
-  }
-
-  if (!state && intent.intent === 'quote' && !intent.jobId) {
-    const query = extractLookupQuery(intent);
-    const likely = await db.findLikelyOpenJobs(business.id, query);
-    if (likely.length === 1) {
-      const merged = {
-        intent: 'quote',
-        jobId: likely[0].id,
-        amount: intent.amount,
-        items: intent.items || likely[0].description,
-      };
-      const missing = computeMissing('quote', merged);
-      await setState(business.id, 'quote', merged, missing);
-      if (!missing.length) {
-        await clearState(business.id);
-        return {
-          mode: 'resolved',
-          intent: merged,
-        };
-      }
-
-      return {
-        mode: 'prompt',
-        message: `I found ${db.formatJobId(likely[0].id)} for ${likely[0].customer_name} (${likely[0].description}). What price should I use?`,
-      };
-    }
+  const standaloneResolution = await resolveStandaloneJobIntent(intent, business);
+  if (standaloneResolution) {
+    return standaloneResolution;
   }
 
   if (!state && looksLikeNewJobBare(intent)) {
@@ -389,7 +363,7 @@ async function resolveIntent(intent, business) {
           intent: 'quote',
           jobId: openJobs[0].id,
           amount: intent.amount,
-          items: intent.items || intent.raw,
+          items: intent.items || openJobs[0].description,
         },
       };
     }
