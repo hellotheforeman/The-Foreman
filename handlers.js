@@ -26,6 +26,7 @@ const handlers = {
   open_jobs: handleOpenJobs,
   find: handleFind,
   help: handleHelp,
+  thanks: handleThanks,
   unknown: handleUnknown,
 };
 
@@ -324,6 +325,17 @@ async function handleHelp(intent, res, business) {
     `*help* — this message\n\n` +
     `Messages are drafted for you to copy and send from your own WhatsApp. 📋`
   );
+}
+
+async function handleThanks(intent, res, business) {
+  const replies = [
+    'No worries 👍',
+    'Nice one 👍',
+    'Cheers — shout if you need anything else.',
+    'All good 👍',
+  ];
+  const reply = replies[Math.floor(Math.random() * replies.length)];
+  messenger.twimlReply(res, reply);
 }
 
 async function handleUnknown(intent, res, business) {
