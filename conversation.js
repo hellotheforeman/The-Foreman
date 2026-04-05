@@ -135,8 +135,10 @@ function mergeIntent(base, update) {
   if (base.intent === 'quote') {
     if (update.items) merged.items = update.items;
     if (update.amount) merged.amount = update.amount;
-    if (update.raw && !update.items && !base.items) {
-      merged.items = update.raw;
+    const raw = (update.raw || '').trim();
+    const looksLikeAmountOnly = /^£?\s*\d+(?:\.\d{1,2})?$/.test(raw);
+    if (raw && !update.items && !base.items && !looksLikeAmountOnly) {
+      merged.items = raw;
     }
   }
 
