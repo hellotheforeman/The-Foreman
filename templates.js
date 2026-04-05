@@ -9,11 +9,22 @@ function paymentDetails(business) {
   return business?.payment_details || config.paymentDetails;
 }
 
+function customerGreetingName(customer) {
+  const full = (customer?.name || '').trim();
+  if (!full) return 'there';
+  const parts = full.split(/\s+/).filter(Boolean);
+  if (parts.length === 1) return parts[0];
+  if (['mr', 'mrs', 'ms', 'miss', 'dr'].includes(parts[0].toLowerCase().replace('.', ''))) {
+    return parts.slice(0, 2).join(' ');
+  }
+  return parts[0];
+}
+
 function quoteMessage(job, customer, business) {
   const items = job.quote_items || job.description;
   const name = businessName(business);
   return [
-    `Hi ${customer.name.split(' ')[0]}! 👋`,
+    `Hi ${customerGreetingName(customer)}! 👋`,
     '',
     `Thanks for your enquiry. Here's your quote from ${name}:`,
     '',
@@ -37,7 +48,7 @@ function scheduleConfirmation(job, customer, business) {
   const address = job.address ? `📍 ${job.address}${postcode}` : null;
   const name = businessName(business);
   return [
-    `Hi ${customer.name.split(' ')[0]}! ✅`,
+    `Hi ${customerGreetingName(customer)}! ✅`,
     '',
     `Your job is confirmed:`,
     '',
@@ -56,7 +67,7 @@ function invoiceMessage(job, invoice, customer, business) {
   const name = businessName(business);
   const payment = paymentDetails(business);
   return [
-    `Hi ${customer.name.split(' ')[0]},`,
+    `Hi ${customerGreetingName(customer)},`,
     '',
     `Here's your invoice from ${name}:`,
     '',
@@ -79,7 +90,7 @@ function paymentReminder(job, invoice, customer, business) {
   const name = businessName(business);
   const payment = paymentDetails(business);
   return [
-    `Hi ${customer.name.split(' ')[0]},`,
+    `Hi ${customerGreetingName(customer)},`,
     '',
     `Friendly reminder — invoice ${formatJobId(job.id)} for £${Number(invoice.amount).toFixed(2)} was sent ${daysSent} days ago and is still outstanding.`,
     '',
@@ -95,7 +106,7 @@ function paymentReminder(job, invoice, customer, business) {
 function followUpMessage(job, customer, business) {
   const name = businessName(business);
   return [
-    `Hi ${customer.name.split(' ')[0]}! 👋`,
+    `Hi ${customerGreetingName(customer)}! 👋`,
     '',
     `Hope everything's going well since we did your ${job.description.toLowerCase()}.`,
     '',

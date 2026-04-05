@@ -73,7 +73,7 @@ async function handleQuote(intent, res, business) {
     `─────────────────\n` +
     `${msg}\n` +
     `─────────────────\n\n` +
-    `When they accept, use *schedule ${job.id} [day] [time]* to book it in.`
+    `When they’re happy to go ahead, just tell me the day and time and I’ll help you book it in.`
   );
 }
 
