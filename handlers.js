@@ -36,16 +36,17 @@ async function dispatch(intent, res, business) {
 // --- Handlers ---
 
 async function handleNewJob(intent, res, business) {
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode);
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.address, intent.postcode);
   const description = intent.description || 'New job';
-  const job = await db.createJob(business.id, customer.id, description, intent.postcode);
+  const job = await db.createJob(business.id, customer.id, description, intent.address, intent.postcode);
   const postcode = intent.postcode ? `, ${intent.postcode}` : '';
+  const address = intent.address ? `\n📍 ${intent.address}${postcode}` : '';
   messenger.twimlReply(
     res,
     `✅ Job ${db.formatJobId(job.id)} created\n` +
-    `👤 ${customer.name} — ${customer.phone}${postcode}\n` +
+    `👤 ${customer.name} — ${customer.phone}${address}\n` +
     `🔧 ${job.description}\n\n` +
-    `Next: *quote ${job.id} [amount] [description]*`
+    `If you want, I can draft the quote next — just tell me the price.`
   );
 }
 

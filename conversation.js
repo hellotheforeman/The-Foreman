@@ -1,7 +1,7 @@
 const db = require('./db');
 
 const REQUIRED_FIELDS = {
-  new_job: ['name', 'phone', 'description'],
+  new_job: ['name', 'phone', 'address', 'description'],
   quote: ['jobId', 'amount'],
   schedule: ['jobId', 'date'],
   done: ['jobId'],
@@ -16,6 +16,7 @@ const REQUIRED_FIELDS = {
 const FIELD_PROMPTS = {
   name: 'Who is the customer?',
   phone: 'What is their phone number?',
+  address: 'What is the address?',
   description: 'What is the job for?',
   postcode: 'What is the postcode?',
   jobId: 'Which job number is this for?',
@@ -76,8 +77,12 @@ function buildPrompt(intent, missingFields) {
   if (!missingFields.length) return null;
   const [first] = missingFields;
 
+  if (intent === 'new_job' && first === 'address') {
+    return `Got it — I’ve got the customer and number. ${FIELD_PROMPTS.address}`;
+  }
+
   if (intent === 'new_job' && first === 'description') {
-    return `Got it — I’ve got the customer and number. ${FIELD_PROMPTS.description}`;
+    return `Nice — and what is the job for?`;
   }
 
   if (intent === 'schedule' && first === 'date') {
@@ -94,8 +99,12 @@ function mergeIntent(base, update) {
     intent: base.intent || update.intent,
   };
 
-  if (update.raw && !update.description && base.intent === 'new_job') {
-    merged.description = update.raw;
+  if (base.intent === 'new_job') {
+    if (update.raw && !update.address && !base.address) {
+      merged.address = update.raw;
+    } else if (update.raw && !update.description && base.address) {
+      merged.description = update.raw;
+    }
   }
 
   return merged;

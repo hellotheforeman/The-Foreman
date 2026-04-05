@@ -24,7 +24,7 @@ Supported intents and the fields they return:
 
 | intent        | required fields            | optional fields                              |
 |---------------|----------------------------|----------------------------------------------|
-| new_job       | name, phone                | postcode, description                        |
+| new_job       | name, phone                | address, postcode, description               |
 | quote         | jobId, amount              | items                                        |
 | schedule      | jobId                      | date (YYYY-MM-DD), time (HH:MM), raw         |
 | done          | jobId                      | amount (number), notes                       |
@@ -53,7 +53,8 @@ Rules:
 - If the message is a cancellation (no/nah/cancel/skip/nope/don't) return { "intent": "cancel" }.
 - If you cannot determine a clear intent, still extract any obvious structured fields you can infer from the message and return intent "unknown" with those fields plus raw.
 - Never include fields that are not relevant to the intent.
-- If the user reply looks like it could be an answer to a missing field (for example just a phone number, just a postcode, just a short job description, just a time, just a day/date), include that field even if the intent is unknown.`;
+- If the user reply looks like it could be an answer to a missing field (for example just a phone number, just a postcode, just an address, just a short job description, just a time, just a day/date), include that field even if the intent is unknown.
+- For new_job, if the message contains a likely street or property address, return it in the address field.`;
 
 async function parse(raw) {
   const text = raw.trim();

@@ -30,6 +30,7 @@ async function migrate() {
       business_id INTEGER NOT NULL REFERENCES businesses(id),
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
+      address TEXT,
       postcode TEXT,
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -44,6 +45,7 @@ async function migrate() {
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'NEW',
+      address TEXT,
       postcode TEXT,
       quoted_amount NUMERIC,
       quote_items TEXT,
@@ -68,6 +70,9 @@ async function migrate() {
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
+  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS address TEXT');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS message_log (
@@ -139,20 +144,26 @@ async function getAllActiveBusinesses() {
 
 // --- Customer queries ---
 
-async function findOrCreateCustomer(businessId, name, phone, postcode) {
+async function findOrCreateCustomer(businessId, name, phone, address, postcode) {
   let customer = await getOne(
     'SELECT * FROM customers WHERE business_id = $1 AND phone = $2',
     [businessId, phone]
   );
   if (!customer) {
     const result = await pool.query(
-      'INSERT INTO customers (business_id, name, phone, postcode) VALUES ($1, $2, $3, $4) RETURNING *',
-      [businessId, name, phone, postcode || null]
+      'INSERT INTO customers (business_id, name, phone, address, postcode) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [businessId, name, phone, address || null, postcode || null]
     );
     customer = result.rows[0];
-  } else if (postcode && !customer.postcode) {
-    await pool.query('UPDATE customers SET postcode = $1 WHERE id = $2', [postcode, customer.id]);
-    customer.postcode = postcode;
+  } else {
+    if (address && !customer.address) {
+      await pool.query('UPDATE customers SET address = $1 WHERE id = $2', [address, customer.id]);
+      customer.address = address;
+    }
+    if (postcode && !customer.postcode) {
+      await pool.query('UPDATE customers SET postcode = $1 WHERE id = $2', [postcode, customer.id]);
+      customer.postcode = postcode;
+    }
   }
   return customer;
 }
@@ -170,10 +181,10 @@ async function getCustomer(id) {
 
 // --- Job queries ---
 
-async function createJob(businessId, customerId, description, postcode) {
+async function createJob(businessId, customerId, description, address, postcode) {
   const result = await pool.query(
-    "INSERT INTO jobs (business_id, customer_id, description, postcode, status) VALUES ($1, $2, $3, $4, 'NEW') RETURNING *",
-    [businessId, customerId, description, postcode || null]
+    "INSERT INTO jobs (business_id, customer_id, description, address, postcode, status) VALUES ($1, $2, $3, $4, $5, 'NEW') RETURNING *",
+    [businessId, customerId, description, address || null, postcode || null]
   );
   return result.rows[0];
 }
