@@ -1,5 +1,3 @@
-const db = require('./db');
-
 const workflows = {
   create_job: {
     name: 'create_job',
@@ -8,9 +6,26 @@ const workflows = {
   },
   create_quote: {
     name: 'create_quote',
+    kind: 'action',
+    target: 'job',
     requiredFields: ['jobId', 'amount'],
     optionalFields: ['items'],
-    defaults: ({ job }) => ({ items: job?.description }),
+    canReuseFocus: true,
+    canReuseWorkflow: true,
+    collectDefaults: async ({ focus, collected }) => ({
+      items: collected.items || focus?.job?.description || null,
+    }),
+    nextStep: ({ missing }) => {
+      if (missing.includes('jobId')) return { type: 'resolve_target' };
+      if (missing.includes('amount')) return { type: 'ask', promptKey: 'ask_quote_amount' };
+      return { type: 'ready' };
+    },
+    execute: async ({ focus, collected }) => ({
+      intent: 'quote',
+      jobId: focus.jobId,
+      amount: collected.amount,
+      items: collected.items,
+    }),
   },
   schedule_job: {
     name: 'schedule_job',

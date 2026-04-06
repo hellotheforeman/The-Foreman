@@ -77,6 +77,45 @@ async function migrate() {
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_state (
+      business_id INTEGER PRIMARY KEY REFERENCES businesses(id),
+      intent TEXT NOT NULL,
+      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+      missing_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
+      mode TEXT NOT NULL DEFAULT 'idle',
+      workflow TEXT,
+      state JSONB NOT NULL DEFAULT '{}'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'idle'");
+  await pool.query('ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS workflow TEXT');
+  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await pool.query(`
+    UPDATE conversation_state
+    SET workflow = COALESCE(workflow, intent),
+        state = CASE
+          WHEN state = '{}'::jsonb THEN jsonb_build_object(
+            'focus', jsonb_build_object(),
+            'collected', COALESCE(payload, '{}'::jsonb),
+            'pending', CASE
+              WHEN jsonb_array_length(COALESCE(missing_fields, '[]'::jsonb)) > 0
+              THEN jsonb_build_object('type', 'field', 'field', missing_fields->>0)
+              ELSE NULL
+            END,
+            'options', '[]'::jsonb,
+            'lastTurnType', NULL
+          )
+          ELSE state
+        END,
+        mode = CASE
+          WHEN mode IS NOT NULL THEN mode
+          WHEN jsonb_array_length(COALESCE(missing_fields, '[]'::jsonb)) > 0 THEN 'workflow'
+          ELSE 'idle'
+        END
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS message_log (
       id SERIAL PRIMARY KEY,
       business_id INTEGER NOT NULL REFERENCES businesses(id),
@@ -368,19 +407,30 @@ async function getConversationState(businessId) {
   if (!rows[0]) return null;
   const row = rows[0];
   return {
-    workflow: row.intent,
-    state: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
+    mode: row.mode || 'idle',
+    workflow: row.workflow || row.intent || null,
+    state: typeof row.state === 'string' ? JSON.parse(row.state) : row.state,
     updatedAt: row.updated_at,
   };
 }
 
-async function setConversationState(businessId, workflow, state) {
+async function setConversationState(businessId, conversationState) {
   await getAll(
-    `INSERT INTO conversation_state (business_id, intent, payload, missing_fields, updated_at)
-     VALUES ($1, $2, $3::jsonb, '[]'::jsonb, NOW())
+    `INSERT INTO conversation_state (business_id, mode, workflow, state, updated_at, intent, payload, missing_fields)
+     VALUES ($1, $2, $3, $4::jsonb, NOW(), $3, '{}'::jsonb, '[]'::jsonb)
      ON CONFLICT (business_id)
-     DO UPDATE SET intent = EXCLUDED.intent, payload = EXCLUDED.payload, updated_at = NOW()`,
-    [businessId, workflow, JSON.stringify(state || {})]
+     DO UPDATE SET
+       mode = EXCLUDED.mode,
+       workflow = EXCLUDED.workflow,
+       state = EXCLUDED.state,
+       updated_at = NOW(),
+       intent = EXCLUDED.intent`,
+    [
+      businessId,
+      conversationState?.mode || 'idle',
+      conversationState?.workflow || null,
+      JSON.stringify(conversationState?.state || {}),
+    ]
   );
 }
 

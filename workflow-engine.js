@@ -1,6 +1,7 @@
 const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
 const { buildGreeting, buildAcknowledgement, buildChoiceList, buildClarification, buildNoMatch, buildResolvedReference } = require('./response-builder');
 const { resolveSingleJobReference } = require('./entity-resolver');
+const { decideContextPolicy } = require('./context-policy');
 
 function workflowFromIntent(parsedIntent, classifierResult) {
   const map = {
@@ -23,6 +24,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
   }
 
   const workflow = workflowFromIntent(parsedIntent, classifierResult);
+  const policy = decideContextPolicy({
+    messageType: classifierResult?.kind,
+    suggestedWorkflow: workflow,
+    state: currentState,
+    raw,
+  });
+
   if (!workflow) {
     return {
       type: 'action',
@@ -77,10 +85,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     };
   }
 
+  const preservedState = policy.reuseWorkflow ? (currentState?.state || {}) : {};
   const state = {
-    ...(currentState?.state || {}),
+    ...preservedState,
     ...(parsedIntent || {}),
   };
+
+  const focus = policy.reuseFocus ? (currentState?.state?.focus || {}) : {};
 
   if (!state.jobId && currentState?.state?.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
     state.jobId = currentState.state.jobId;
@@ -143,6 +154,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
 
     if (resolved.status === 'resolved') {
       state.jobId = resolved.job.id;
+      state.focus = {
+        jobId: resolved.job.id,
+        customerId: resolved.job.customer_id,
+        customerName: resolved.job.customer_name,
+        jobSummary: resolved.job.description,
+        confidence: 'high',
+      };
       if (workflow === 'create_quote' && !state.items) {
         state.items = resolved.job.description;
       }
@@ -157,10 +175,24 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       return {
         type: 'reply',
         workflow,
-        state,
+        state: {
+          ...state,
+          focus,
+        },
         message: buildClarification('Which customer or job do you mean? You can just reply with the customer name.'),
       };
     }
+  }
+
+  if (workflow === 'create_quote') {
+    const definitionDefaults = await definition.collectDefaults?.({
+      focus: {
+        jobId: state.focus?.jobId,
+        job: state.jobId ? await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobId: state.jobId }, raw, state }).then((r) => r.job) : null,
+      },
+      collected: state,
+    });
+    Object.assign(state, definitionDefaults || {});
   }
 
   const missing = computeMissingFields(workflow, state);
@@ -211,7 +243,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
   return {
     type: 'action',
     workflow,
-    state,
+    state: {
+      focus: state.focus || focus,
+      collected: state,
+      pending: null,
+      options: [],
+      lastTurnType: 'completed_action',
+    },
     intent: {
       ...state,
       intent: intentMap[workflow] || parsedIntent.intent,
