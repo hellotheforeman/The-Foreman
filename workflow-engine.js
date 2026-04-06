@@ -67,6 +67,14 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     ...(parsedIntent || {}),
   };
 
+  if (workflow === 'create_quote' && !state.amount && parsedIntent?.amount) {
+    state.amount = parsedIntent.amount;
+  }
+
+  if (workflow === 'create_quote' && !state.items && !parsedIntent?.amount && raw && !/^£?\s*\d+(?:\.\d{1,2})?$/.test(raw.trim())) {
+    state.items = raw.trim();
+  }
+
   if (definition.requiredFields.includes('jobId') && !state.jobId) {
     const resolved = await resolveSingleJobReference({
       businessId: business.id,
@@ -88,6 +96,8 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     } else {
       return {
         type: 'reply',
+        workflow,
+        state,
         message: buildClarification('Which customer or job do you mean? You can just reply with the customer name.'),
       };
     }

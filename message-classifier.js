@@ -45,6 +45,10 @@ function classifyMessage(raw, parsedIntent, currentState) {
     return { kind: 'follow_up_answer', suggestedWorkflow: currentState.workflow, raw: text };
   }
 
+  if (/^£?\s*\d+(?:\.\d{1,2})?$/.test(text)) {
+    return { kind: 'follow_up_answer', suggestedWorkflow: 'create_quote', raw: text };
+  }
+
   if (parsedIntent?.intent && parsedIntent.intent !== 'unknown') {
     return { kind: 'new_action', suggestedWorkflow: parsedIntent.intent, raw: text };
   }
