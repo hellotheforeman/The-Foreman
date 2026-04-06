@@ -84,6 +84,27 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     if (!state.time && parsedIntent?.time) state.time = parsedIntent.time;
   }
 
+  if (workflow === 'archive_job' && Array.isArray(currentState?.state?.options) && classifierResult?.kind === 'selection') {
+    const raw = (raw || '').trim().toLowerCase();
+    const matches = raw === 'all'
+      ? currentState.state.options
+      : [...new Set((raw.match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0))]
+          .map((index) => currentState.state.options[index - 1])
+          .filter(Boolean);
+
+    if (matches.length) {
+      return {
+        type: 'action',
+        workflow,
+        state: {},
+        intent: {
+          intent: 'archive_job',
+          jobIds: matches.map((job) => job.id),
+        },
+      };
+    }
+  }
+
   if (definition.requiredFields.includes('jobId') && !state.jobId) {
     const resolved = await resolveSingleJobReference({
       businessId: business.id,
@@ -100,6 +121,8 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     } else if (resolved.status === 'multiple') {
       return {
         type: 'reply',
+        workflow,
+        state: { ...state, options: resolved.jobs },
         message: buildChoiceList('I found a few matches:', resolved.jobs.map(buildResolvedReference)),
       };
     } else {
