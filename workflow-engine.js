@@ -2,6 +2,7 @@ const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
 const { buildGreeting, buildAcknowledgement, buildChoiceList, buildClarification, buildNoMatch, buildResolvedReference } = require('./response-builder');
 const { resolveSingleJobReference } = require('./entity-resolver');
 const { decideContextPolicy } = require('./context-policy');
+const { normaliseConversationState } = require('./conversation-state');
 
 function workflowFromIntent(parsedIntent, classifierResult) {
   const map = {
@@ -18,18 +19,13 @@ function workflowFromIntent(parsedIntent, classifierResult) {
 }
 
 function getStoredState(currentState) {
-  if (!currentState?.state) return {};
-  const state = currentState.state;
-  if (state.collected || state.focus || state.pending || state.options) {
-    return {
-      ...(state.collected || {}),
-      focus: state.focus || {},
-      pending: state.pending || null,
-      options: state.options || [],
-      lastTurnType: state.lastTurnType || null,
-    };
-  }
-  return state;
+  const state = normaliseConversationState(currentState);
+  return {
+    ...state.collected,
+    focus: state.focus,
+    pending: state.pending,
+    options: state.options,
+  };
 }
 
 function isExplicitBreakoutMessage(raw, classifierResult) {
@@ -107,6 +103,10 @@ async function handlePendingFieldAnswer({ raw, parsedIntent, currentState }) {
 }
 
 async function handleMessage({ business, raw, parsedIntent, classifierResult, currentState }) {
+  currentState = currentState
+    ? { workflow: currentState.workflow, state: normaliseConversationState(currentState) }
+    : null;
+
   if (currentState?.state?.pending?.field && !isExplicitBreakoutMessage(raw, classifierResult)) {
     const pendingResult = await handlePendingFieldAnswer({ raw, parsedIntent, currentState });
     if (pendingResult?.type === 'reply') return pendingResult;
