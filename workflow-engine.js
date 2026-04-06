@@ -55,7 +55,7 @@ async function handlePendingFieldAnswer({ raw, parsedIntent, currentState }) {
         type: 'reply',
         workflow,
         state: currentState.state,
-        message: 'Sorry — what day do you want to move it to?',
+        message: workflow === 'reschedule_job' ? 'Sorry — what day do you want to move it to?' : 'Sorry — what day do you want to book it in for?',
       };
     }
     collected.date = parsedIntent.date;
@@ -65,7 +65,7 @@ async function handlePendingFieldAnswer({ raw, parsedIntent, currentState }) {
         type: 'reply',
         workflow,
         state: currentState.state,
-        message: 'Sorry — what time do you want?',
+        message: workflow === 'reschedule_job' ? 'Sorry — what time do you want to move it to?' : 'Sorry — what time do you want?',
       };
     }
     collected.time = parsedIntent.time;
@@ -220,7 +220,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     if (resolved.status === 'resolved') {
       const job = resolved.job;
       const when = job.scheduled_date
-        ? `${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`
+        ? `${new Date(`${job.scheduled_date}T00:00:00`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' })}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`
         : 'not booked in yet';
       return {
         type: 'reply',
