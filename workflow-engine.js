@@ -312,9 +312,14 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     state.items = raw.trim();
   }
 
-  if (workflow === 'schedule_job' || workflow === 'reschedule_job') {
+  if (workflow === 'schedule_job') {
     if (!state.date && parsedIntent?.date) state.date = parsedIntent.date;
     if (!state.time && parsedIntent?.time) state.time = parsedIntent.time;
+  }
+
+  if (workflow === 'reschedule_job') {
+    if (parsedIntent?.date) state.date = parsedIntent.date;
+    if (parsedIntent?.time) state.time = parsedIntent.time;
   }
 
   if (workflow === 'archive_job' && Array.isArray(storedState.options) && classifierResult?.kind === 'selection') {
@@ -478,6 +483,23 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     };
   }
 
+  const actionIntent = {
+    ...state,
+    intent: intentMap[workflow] || parsedIntent.intent,
+  };
+
+  if (workflow === 'reschedule_job' && !actionIntent.time) {
+    const resolved = await resolveSingleJobReference({
+      businessId: business.id,
+      parsedIntent: { jobId: state.jobId },
+      raw,
+      state,
+    });
+    if (resolved.status === 'resolved' && resolved.job?.scheduled_time) {
+      actionIntent.time = resolved.job.scheduled_time;
+    }
+  }
+
   return {
     type: 'action',
     workflow,
@@ -488,10 +510,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       options: [],
       lastTurnType: 'completed_action',
     },
-    intent: {
-      ...state,
-      intent: intentMap[workflow] || parsedIntent.intent,
-    },
+    intent: actionIntent,
   };
 }
 
