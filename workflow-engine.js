@@ -42,7 +42,7 @@ function isExplicitBreakoutMessage(raw, classifierResult) {
   return false;
 }
 
-async function handlePendingFieldAnswer({ business, raw, parsedIntent, currentState }) {
+async function handlePendingFieldAnswer({ raw, parsedIntent, currentState }) {
   const storedState = getStoredState(currentState);
   const pendingField = storedState?.pending?.field;
   if (!pendingField) return null;
@@ -93,37 +93,37 @@ async function handlePendingFieldAnswer({ business, raw, parsedIntent, currentSt
     collected.name = parsedIntent?.name || raw.trim();
   }
 
-  const state = {
-    focus: storedState.focus || {},
-    collected,
-    pending: null,
-    options: storedState.options || [],
-    lastTurnType: 'completed_action',
-  };
-
-  const intentMap = {
-    create_job: 'new_job',
-    create_quote: 'quote',
-    schedule_job: 'schedule',
-    reschedule_job: 'schedule',
-    archive_job: 'archive_job',
-  };
-
   return {
-    type: 'action',
+    type: 'continue_workflow',
     workflow,
-    state,
-    intent: {
-      ...collected,
-      intent: intentMap[workflow],
+    state: {
+      focus: storedState.focus || {},
+      collected,
+      pending: null,
+      options: storedState.options || [],
+      lastTurnType: 'answered_question',
     },
   };
 }
 
 async function handleMessage({ business, raw, parsedIntent, classifierResult, currentState }) {
   if (currentState?.state?.pending?.field && !isExplicitBreakoutMessage(raw, classifierResult)) {
-    const pendingResult = await handlePendingFieldAnswer({ business, raw, parsedIntent, currentState });
-    if (pendingResult) return pendingResult;
+    const pendingResult = await handlePendingFieldAnswer({ raw, parsedIntent, currentState });
+    if (pendingResult?.type === 'reply') return pendingResult;
+    if (pendingResult?.type === 'continue_workflow') {
+      currentState = {
+        workflow: pendingResult.workflow,
+        state: pendingResult.state,
+      };
+      parsedIntent = {
+        ...((pendingResult.state && pendingResult.state.collected) || {}),
+      };
+      classifierResult = {
+        kind: 'follow_up_answer',
+        suggestedWorkflow: pendingResult.workflow,
+        raw,
+      };
+    }
   }
 
   if (parsedIntent?.intent === 'hello' || classifierResult?.suggestedWorkflow === 'hello') {
