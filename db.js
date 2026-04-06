@@ -1,56 +1,56 @@
 const { Pool } = require('pg');
 
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL,
+  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
+    ? { rejectUnauthorized: false }
+    : false,
+});
 
 async function init() {
-  await migrate();
-  console.log('📦 Database ready');
-}
-
-async function migrate() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS businesses (
       id SERIAL PRIMARY KEY,
-      business_name TEXT NOT NULL,
-      contact_name TEXT NOT NULL,
-      phone TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      trade TEXT,
+      contact_name TEXT,
       email TEXT,
+      phone TEXT NOT NULL UNIQUE,
+      postcode TEXT,
+      notes TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
-      plan TEXT NOT NULL DEFAULT 'trial',
-      trial_ends_at TIMESTAMPTZ,
-      stripe_customer_id TEXT,
-      subscription_status TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW()
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS customers (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id),
+      business_id INTEGER REFERENCES businesses(id),
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
-      address TEXT,
       postcode TEXT,
       notes TEXT,
-      created_at TIMESTAMPTZ DEFAULT NOW(),
-      UNIQUE(business_id, phone)
+      created_at TIMESTAMPTZ DEFAULT NOW()
     )
+  `);
+
+  await pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_business_phone_idx ON customers (business_id, phone)
   `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS jobs (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id),
+      business_id INTEGER REFERENCES businesses(id),
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       description TEXT NOT NULL,
       status TEXT NOT NULL DEFAULT 'NEW',
-      archived_at TIMESTAMPTZ,
-      address TEXT,
       postcode TEXT,
       quoted_amount NUMERIC,
       quote_items TEXT,
-      scheduled_date DATE,
+      scheduled_date TEXT,
       scheduled_time TEXT,
       completed_at TIMESTAMPTZ,
       completion_notes TEXT,
@@ -61,7 +61,7 @@ async function migrate() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id),
+      business_id INTEGER REFERENCES businesses(id),
       job_id INTEGER NOT NULL REFERENCES jobs(id),
       amount NUMERIC NOT NULL,
       line_items TEXT,
@@ -72,53 +72,10 @@ async function migrate() {
     )
   `);
 
-  await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
-  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS address TEXT');
-  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS archived_at TIMESTAMPTZ');
-
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS conversation_state (
-      business_id INTEGER PRIMARY KEY REFERENCES businesses(id),
-      intent TEXT NOT NULL,
-      payload JSONB NOT NULL DEFAULT '{}'::jsonb,
-      missing_fields JSONB NOT NULL DEFAULT '[]'::jsonb,
-      mode TEXT NOT NULL DEFAULT 'idle',
-      workflow TEXT,
-      state JSONB NOT NULL DEFAULT '{}'::jsonb,
-      updated_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT 'idle'");
-  await pool.query('ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS workflow TEXT');
-  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS state JSONB NOT NULL DEFAULT '{}'::jsonb");
-  await pool.query(`
-    UPDATE conversation_state
-    SET workflow = COALESCE(workflow, intent),
-        state = CASE
-          WHEN state = '{}'::jsonb THEN jsonb_build_object(
-            'focus', jsonb_build_object(),
-            'collected', COALESCE(payload, '{}'::jsonb),
-            'pending', CASE
-              WHEN jsonb_array_length(COALESCE(missing_fields, '[]'::jsonb)) > 0
-              THEN jsonb_build_object('type', 'field', 'field', missing_fields->>0)
-              ELSE NULL
-            END,
-            'options', '[]'::jsonb,
-            'lastTurnType', NULL
-          )
-          ELSE state
-        END,
-        mode = CASE
-          WHEN mode IS NOT NULL THEN mode
-          WHEN jsonb_array_length(COALESCE(missing_fields, '[]'::jsonb)) > 0 THEN 'workflow'
-          ELSE 'idle'
-        END
-  `);
-
   await pool.query(`
     CREATE TABLE IF NOT EXISTS message_log (
       id SERIAL PRIMARY KEY,
-      business_id INTEGER NOT NULL REFERENCES businesses(id),
+      business_id INTEGER REFERENCES businesses(id),
       direction TEXT NOT NULL,
       participant TEXT NOT NULL,
       customer_id INTEGER REFERENCES customers(id),
@@ -128,24 +85,65 @@ async function migrate() {
       whatsapp_message_id TEXT
     )
   `);
-}
 
-function save() {}
+  await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
+  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
+  await pool.query('ALTER TABLE invoices ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
+  await pool.query('ALTER TABLE message_log ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS trade TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS contact_name TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS postcode TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notes TEXT');
+  await pool.query("ALTER TABLE businesses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'");
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()');
 
-async function close() {
-  await pool.end();
+  await pool.query(`
+    UPDATE customers c
+    SET business_id = b.id
+    FROM businesses b
+    WHERE c.business_id IS NULL AND b.phone = c.phone
+  `);
+
+  await pool.query(`
+    UPDATE jobs j
+    SET business_id = c.business_id
+    FROM customers c
+    WHERE j.customer_id = c.id AND j.business_id IS NULL
+  `);
+
+  await pool.query(`
+    UPDATE invoices i
+    SET business_id = j.business_id
+    FROM jobs j
+    WHERE i.job_id = j.id AND i.business_id IS NULL
+  `);
+
+  await pool.query(`
+    UPDATE message_log m
+    SET business_id = COALESCE(j.business_id, c.business_id)
+    FROM jobs j
+    FULL OUTER JOIN customers c ON c.id = m.customer_id
+    WHERE (m.job_id = j.id OR m.customer_id = c.id) AND m.business_id IS NULL
+  `).catch(() => {});
+
+  console.log('📦 Database ready');
 }
 
 // --- Helpers ---
 
 async function getOne(sql, params = []) {
-  const result = await pool.query(sql, params);
-  return result.rows[0] || null;
+  const { rows } = await pool.query(sql, params);
+  return rows[0] || null;
 }
 
 async function getAll(sql, params = []) {
-  const result = await pool.query(sql, params);
-  return result.rows;
+  const { rows } = await pool.query(sql, params);
+  return rows;
+}
+
+async function run(sql, params = []) {
+  await pool.query(sql, params);
 }
 
 function formatJobId(id) {
@@ -157,307 +155,174 @@ function parseJobId(str) {
   return match ? parseInt(match[1], 10) : null;
 }
 
-// --- Business queries ---
+// --- Customer queries ---
+
+async function createBusiness({ name, trade, contact_name, email, phone, postcode, notes }) {
+  const existing = await getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
+  if (existing) {
+    return existing;
+  }
+
+  const { rows } = await pool.query(
+    `INSERT INTO businesses (name, trade, contact_name, email, phone, postcode, notes, status)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+     RETURNING *`,
+    [name, trade || null, contact_name || null, email || null, phone, postcode || null, notes || null]
+  );
+
+  return rows[0];
+}
 
 async function findBusinessByPhone(phone) {
   return getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
 }
 
-async function getBusiness(id) {
-  return getOne('SELECT * FROM businesses WHERE id = $1', [id]);
-}
-
-async function createBusiness({ business_name, contact_name, phone, email }) {
-  const result = await pool.query(
-    'INSERT INTO businesses (business_name, contact_name, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
-    [business_name, contact_name, phone, email || null]
-  );
-  return result.rows[0];
+async function listBusinesses() {
+  return getAll('SELECT * FROM businesses ORDER BY created_at DESC');
 }
 
 async function updateBusinessStatus(id, status) {
-  await pool.query('UPDATE businesses SET status = $1 WHERE id = $2', [status, id]);
-}
-
-async function getAllActiveBusinesses() {
-  return getAll("SELECT * FROM businesses WHERE status = 'active'");
-}
-
-// --- Customer queries ---
-
-async function findOrCreateCustomer(businessId, name, phone, address, postcode) {
-  let customer = await getOne(
-    'SELECT * FROM customers WHERE business_id = $1 AND phone = $2',
-    [businessId, phone]
+  const { rows } = await pool.query(
+    'UPDATE businesses SET status = $1, updated_at = NOW() WHERE id = $2 RETURNING *',
+    [status, id]
   );
+  return rows[0] || null;
+}
+
+async function findOrCreateCustomer(businessId, name, phone, postcode) {
+  let customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
   if (!customer) {
-    const result = await pool.query(
-      'INSERT INTO customers (business_id, name, phone, address, postcode) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [businessId, name, phone, address || null, postcode || null]
+    const { rows } = await pool.query(
+      'INSERT INTO customers (business_id, name, phone, postcode) VALUES ($1, $2, $3, $4) RETURNING *',
+      [businessId, name, phone, postcode || null]
     );
-    customer = result.rows[0];
-  } else {
-    if (address && !customer.address) {
-      await pool.query('UPDATE customers SET address = $1 WHERE id = $2', [address, customer.id]);
-      customer.address = address;
-    }
-    if (postcode && !customer.postcode) {
-      await pool.query('UPDATE customers SET postcode = $1 WHERE id = $2', [postcode, customer.id]);
-      customer.postcode = postcode;
-    }
+    customer = rows[0];
+  } else if (postcode && !customer.postcode) {
+    await run('UPDATE customers SET postcode = $1 WHERE id = $2', [postcode, customer.id]);
+    customer.postcode = postcode;
   }
   return customer;
 }
 
 async function findCustomerByName(businessId, name) {
-  return getAll(
-    'SELECT * FROM customers WHERE business_id = $1 AND name ILIKE $2',
-    [businessId, `%${name}%`]
-  );
+  return getAll("SELECT * FROM customers WHERE business_id = $1 AND LOWER(name) LIKE '%' || LOWER($2) || '%'", [businessId, name]);
 }
 
-async function findCustomerByPhone(businessId, phone) {
-  return getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
-}
-
-async function findCustomersByName(businessId, query) {
-  return getAll(
-    'SELECT * FROM customers WHERE business_id = $1 AND name ILIKE $2 ORDER BY created_at DESC LIMIT 10',
-    [businessId, `%${query}%`]
-  );
-}
-
-async function getCustomer(id) {
+async function getCustomer(id, businessId) {
+  if (businessId) {
+    return getOne('SELECT * FROM customers WHERE id = $1 AND business_id = $2', [id, businessId]);
+  }
   return getOne('SELECT * FROM customers WHERE id = $1', [id]);
 }
 
 // --- Job queries ---
 
-async function createJob(businessId, customerId, description, address, postcode) {
-  const result = await pool.query(
-    "INSERT INTO jobs (business_id, customer_id, description, address, postcode, status) VALUES ($1, $2, $3, $4, $5, 'NEW') RETURNING *",
-    [businessId, customerId, description, address || null, postcode || null]
+async function createJob(businessId, customerId, description, postcode) {
+  const { rows } = await pool.query(
+    'INSERT INTO jobs (business_id, customer_id, description, postcode, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [businessId, customerId, description, postcode || null, 'NEW']
   );
-  return result.rows[0];
+  return rows[0];
 }
 
-async function getJob(id) {
-  return getOne('SELECT * FROM jobs WHERE id = $1 AND archived_at IS NULL', [id]);
+async function getJob(id, businessId) {
+  if (businessId) {
+    return getOne('SELECT * FROM jobs WHERE id = $1 AND business_id = $2', [id, businessId]);
+  }
+  return getOne('SELECT * FROM jobs WHERE id = $1', [id]);
 }
 
-async function getJobWithCustomer(id) {
-  const job = await getJob(id);
+async function getJobWithCustomer(id, businessId) {
+  const job = await getJob(id, businessId);
   if (!job) return null;
-  job.customer = await getCustomer(job.customer_id);
+  job.customer = await getCustomer(job.customer_id, businessId);
   return job;
 }
 
 async function setQuote(jobId, amount, items) {
-  await pool.query(
-    "UPDATE jobs SET quoted_amount = $1, quote_items = $2, status = 'QUOTED' WHERE id = $3",
-    [amount, items, jobId]
-  );
+  await run('UPDATE jobs SET quoted_amount = $1, quote_items = $2, status = $3 WHERE id = $4', [amount, items, 'QUOTED', jobId]);
   return getJob(jobId);
 }
 
 async function scheduleJob(jobId, date, time) {
-  await pool.query(
-    "UPDATE jobs SET scheduled_date = $1, scheduled_time = $2, status = 'SCHEDULED' WHERE id = $3",
-    [date, time || null, jobId]
-  );
+  await run('UPDATE jobs SET scheduled_date = $1, scheduled_time = $2, status = $3 WHERE id = $4', [date, time || null, 'SCHEDULED', jobId]);
   return getJob(jobId);
 }
 
 async function completeJob(jobId, notes) {
-  await pool.query(
-    "UPDATE jobs SET status = 'COMPLETE', completion_notes = $1, completed_at = NOW() WHERE id = $2",
-    [notes || null, jobId]
-  );
+  await run('UPDATE jobs SET status = $1, completion_notes = $2, completed_at = NOW() WHERE id = $3', ['COMPLETE', notes || null, jobId]);
   return getJob(jobId);
 }
 
-async function getScheduleForDate(businessId, dateStr) {
+async function getScheduleForDate(dateStr, businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.scheduled_date = $2 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_time",
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date = $2 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_time",
     [businessId, dateStr]
   );
 }
 
-async function getScheduleRange(businessId, startDate, endDate) {
+async function getScheduleRange(startDate, endDate, businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.scheduled_date BETWEEN $2 AND $3 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_date, j.scheduled_time",
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date BETWEEN $2 AND $3 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_date, j.scheduled_time",
     [businessId, startDate, endDate]
   );
 }
 
 async function getOpenJobs(businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.archived_at IS NULL AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
+    "SELECT j.*, c.name AS customer_name FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
     [businessId]
-  );
-}
-
-async function findLikelyOpenJobs(businessId, query) {
-  return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j
-     JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1
-       AND j.archived_at IS NULL
-       AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS')
-       AND (
-         c.name ILIKE $2 OR
-         c.phone = $3 OR
-         j.description ILIKE $2 OR
-         COALESCE(j.address, '') ILIKE $2
-       )
-     ORDER BY j.created_at DESC
-     LIMIT 5`,
-    [businessId, `%${query}%`, query]
-  );
-}
-
-async function findOpenJobsByCustomerName(businessId, query) {
-  return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j
-     JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1
-       AND j.archived_at IS NULL
-       AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS')
-       AND c.name ILIKE $2
-     ORDER BY j.created_at DESC
-     LIMIT 10`,
-    [businessId, `%${query}%`]
-  );
-}
-
-async function findJobsByDescription(businessId, query) {
-  return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j
-     JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1
-       AND j.archived_at IS NULL
-       AND j.description ILIKE $2
-     ORDER BY j.created_at DESC
-     LIMIT 10`,
-    [businessId, `%${query}%`]
-  );
-}
-
-async function findRecentJobs(businessId, limit = 10) {
-  return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j
-     JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1
-       AND j.archived_at IS NULL
-     ORDER BY j.created_at DESC
-     LIMIT $2`,
-    [businessId, limit]
   );
 }
 
 // --- Invoice queries ---
 
 async function createInvoice(businessId, jobId, amount, lineItems) {
-  const result = await pool.query(
+  const { rows } = await pool.query(
     'INSERT INTO invoices (business_id, job_id, amount, line_items) VALUES ($1, $2, $3, $4) RETURNING *',
     [businessId, jobId, amount, lineItems || null]
   );
-  return result.rows[0];
+  return rows[0];
 }
 
-async function getInvoiceByJob(jobId) {
+async function getInvoiceByJob(jobId, businessId) {
+  if (businessId) {
+    return getOne('SELECT * FROM invoices WHERE job_id = $1 AND business_id = $2', [jobId, businessId]);
+  }
   return getOne('SELECT * FROM invoices WHERE job_id = $1', [jobId]);
 }
 
 async function markInvoicePaid(invoiceId) {
-  await pool.query(
-    "UPDATE invoices SET status = 'PAID', paid_at = NOW() WHERE id = $1",
-    [invoiceId]
-  );
+  await run("UPDATE invoices SET status = 'PAID', paid_at = NOW() WHERE id = $1", [invoiceId]);
   return getOne('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
 }
 
 async function getUnpaidInvoices(businessId) {
   return getAll(
-    "SELECT i.*, j.description AS job_description, c.name AS customer_name, c.phone AS customer_phone FROM invoices i JOIN jobs j ON i.job_id = j.id JOIN customers c ON j.customer_id = c.id WHERE i.business_id = $1 AND j.archived_at IS NULL AND i.status IN ('SENT', 'OVERDUE') ORDER BY i.sent_at",
+    "SELECT i.*, j.description AS job_description, c.name AS customer_name, c.phone AS customer_phone FROM invoices i JOIN jobs j ON i.job_id = j.id JOIN customers c ON j.customer_id = c.id WHERE i.business_id = $1 AND i.status IN ('SENT', 'OVERDUE') ORDER BY i.sent_at",
     [businessId]
   );
 }
 
-async function archiveJob(jobId) {
-  await pool.query('UPDATE jobs SET archived_at = NOW(), status = $1 WHERE id = $2', ['ARCHIVED', jobId]);
-  return getOne('SELECT * FROM jobs WHERE id = $1', [jobId]);
-}
-
 // --- Message log ---
 
-async function logMessage(businessId, direction, participant, body, { customerId, jobId, whatsappMessageId } = {}) {
-  await pool.query(
+async function logMessage(direction, participant, body, { businessId, customerId, jobId, whatsappMessageId } = {}) {
+  await run(
     'INSERT INTO message_log (business_id, direction, participant, customer_id, job_id, body, whatsapp_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
-    [businessId, direction, participant, customerId || null, jobId || null, body, whatsappMessageId || null]
+    [businessId || null, direction, participant, customerId || null, jobId || null, body, whatsappMessageId || null]
   );
-}
-
-async function getConversationState(businessId) {
-  const rows = await getAll('SELECT * FROM conversation_state WHERE business_id = $1 LIMIT 1', [businessId]);
-  if (!rows[0]) return null;
-  const row = rows[0];
-  return {
-    mode: row.mode || 'idle',
-    workflow: row.workflow || row.intent || null,
-    state: typeof row.state === 'string' ? JSON.parse(row.state) : row.state,
-    updatedAt: row.updated_at,
-  };
-}
-
-async function setConversationState(businessId, conversationState) {
-  const mode = conversationState?.mode || 'idle';
-  const workflow = conversationState?.workflow || null;
-  const legacyIntent = workflow || mode || 'idle';
-
-  await getAll(
-    `INSERT INTO conversation_state (business_id, mode, workflow, state, updated_at, intent, payload, missing_fields)
-     VALUES ($1, $2, $3, $4::jsonb, NOW(), $5, '{}'::jsonb, '[]'::jsonb)
-     ON CONFLICT (business_id)
-     DO UPDATE SET
-       mode = EXCLUDED.mode,
-       workflow = EXCLUDED.workflow,
-       state = EXCLUDED.state,
-       updated_at = NOW(),
-       intent = EXCLUDED.intent`,
-    [
-      businessId,
-      mode,
-      workflow,
-      JSON.stringify(conversationState?.state || {}),
-      legacyIntent,
-    ]
-  );
-}
-
-async function clearConversationState(businessId) {
-  await getAll('DELETE FROM conversation_state WHERE business_id = $1', [businessId]);
 }
 
 module.exports = {
   init,
-  save,
-  close,
   formatJobId,
   parseJobId,
-  findBusinessByPhone,
-  getBusiness,
   createBusiness,
+  findBusinessByPhone,
+  listBusinesses,
   updateBusinessStatus,
-  getAllActiveBusinesses,
   findOrCreateCustomer,
   findCustomerByName,
-  findCustomerByPhone,
-  findCustomersByName,
   getCustomer,
   createJob,
   getJob,
@@ -468,18 +333,10 @@ module.exports = {
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
-  findLikelyOpenJobs,
-  findOpenJobsByCustomerName,
-  findJobsByDescription,
-  findRecentJobs,
   createInvoice,
   getInvoiceByJob,
   markInvoicePaid,
   getUnpaidInvoices,
-  archiveJob,
   logMessage,
   getAll,
-  getConversationState,
-  setConversationState,
-  clearConversationState,
 };

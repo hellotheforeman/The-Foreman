@@ -1,22 +1,16 @@
 const express = require('express');
-const path = require('path');
 const config = require('./config');
 const { parse } = require('./parser');
 const { dispatch } = require('./handlers');
+const { logMessage, findBusinessByPhone } = require('./db');
 const { twimlReply } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
-const conversation = require('./conversation');
-const { classifyMessage } = require('./message-classifier');
-const workflowEngine = require('./workflow-engine');
 
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
-app.use(require('./signup'));
-app.use(require('./admin'));
 
 // Health check
 app.get('/', (req, res) => {
@@ -24,9 +18,9 @@ app.get('/', (req, res) => {
 });
 
 /**
- * Twilio webhook — receives inbound WhatsApp messages from registered tradespeople.
+ * Twilio webhook — receives inbound WhatsApp messages from the tradesperson.
  *
- * Option 2 design: only registered tradespeople text this number.
+ * Option 2 design: only the tradesperson texts this number.
  * The bot never messages customers — it drafts messages for the
  * tradesperson to copy and send from their own WhatsApp.
  */
@@ -40,50 +34,20 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).send('Missing From or Body');
     }
 
-    const phone = normalisePhone(from);
-    const business = await db.findBusinessByPhone(phone);
+    const isForeman = normalisePhone(from) === normalisePhone(config.foremanPhone);
 
-    if (!business) {
-      console.log(`📥 Unknown sender (${phone}) — not registered`);
-      const signupMsg = config.signupUrl
-        ? `You're not set up on The Foreman yet. Sign up at ${config.signupUrl}`
-        : `You're not set up on The Foreman yet. Please contact us to get started.`;
-      return twimlReply(res, signupMsg);
+    if (!isForeman) {
+      // Unknown sender — ignore silently (no customer-facing messages)
+      console.log(`📥 Unknown sender (${from}) — ignoring`);
+      return res.sendStatus(200);
     }
 
-    if (business.status === 'suspended') {
-      console.log(`📥 Suspended business (${phone}) — rejecting`);
-      return twimlReply(res, `Your account has been suspended. Please contact support.`);
-    }
-
-    await db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
-    const parsed = await parse(body);
-    const currentState = await db.getConversationState(business.id);
-    const classifierResult = classifyMessage(body, parsed, currentState);
-    const result = await workflowEngine.handleMessage({
-      business,
-      raw: body,
-      parsedIntent: parsed,
-      classifierResult,
-      currentState,
-    });
-
-    if (result.type === 'reply') {
-      if (result.workflow && result.state) {
-        await db.setConversationState(business.id, result.workflow, result.state);
-      }
-      console.log(`📥 [${business.business_name}] "${body}" → reply`);
-      return twimlReply(res, result.message);
-    }
-
-    if (result.workflow && result.state) {
-      await db.setConversationState(business.id, result.workflow, result.state);
-    } else {
-      await db.clearConversationState(business.id);
-    }
-
-    console.log(`📥 [${business.business_name}] "${body}" → ${result.intent.intent}`);
-    return dispatch(result.intent, res, business);
+    const business = await findBusinessByPhone(normalisePhone(from));
+    await logMessage('IN', 'TRADESPERSON', body, { businessId: business?.id, whatsappMessageId: messageSid });
+    const intent = parse(body);
+    if (business) intent.business = business;
+    console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
+    await dispatch(intent, res);
 
   } catch (err) {
     console.error('Webhook error:', err);
@@ -109,7 +73,6 @@ function normalisePhone(phone) {
 
 async function start() {
   await db.init();
-  await conversation.migrate();
   app.listen(config.port, () => {
     console.log(`🔨 The Foreman running on port ${config.port}`);
     scheduler.start();
