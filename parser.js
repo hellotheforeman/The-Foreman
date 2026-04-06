@@ -44,6 +44,7 @@ Supported intents and the fields they return:
 | confirm       |                            |                                              |
 | cancel        |                            |                                              |
 | help          |                            |                                              |
+| hello         |                            |                                              |
 | thanks        |                            |                                              |
 | archive_job   | jobId                      | query                                         |
 | unknown       | raw                        |                                              |
@@ -59,6 +60,7 @@ Rules:
 - If the message clearly refers to a supported workflow but lacks enough detail, return the best matching intent with any fields you can infer.
 - If the message is a confirmation (yes/yep/yeah/y/send/go/confirm/ok/do it/sure/approved) return { "intent": "confirm" }.
 - If the message is a cancellation (no/nah/cancel/skip/nope/don't) return { "intent": "cancel" }.
+- If the message is a greeting (hello/hi/hey/morning/good morning/afternoon) return { "intent": "hello" }.
 - If the message is a thank-you / acknowledgement (thanks/thank you/cheers/nice one/legend/perfect/great stuff) return { "intent": "thanks" }.
 - If you cannot determine a clear intent, still extract any obvious structured fields you can infer from the message and return intent "unknown" with those fields plus raw.
 - Never include fields that are not relevant to the intent.

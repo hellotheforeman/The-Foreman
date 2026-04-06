@@ -10,8 +10,12 @@ function classifyMessage(raw, parsedIntent, currentState) {
     return { kind: 'selection', suggestedWorkflow: currentState?.workflow || null, raw: text };
   }
 
+  if (/^(hello|hi|hey|morning|good morning|afternoon|good afternoon|evening|good evening)\b/i.test(text)) {
+    return { kind: 'social', suggestedWorkflow: 'hello', raw: text };
+  }
+
   if (/^(thanks|thank you|cheers|nice one|legend|perfect|great stuff|ta)\b/i.test(text)) {
-    return { kind: 'social', suggestedWorkflow: null, raw: text };
+    return { kind: 'social', suggestedWorkflow: 'thanks', raw: text };
   }
 
   if (/^(when|when's|when is|what time|what day|has|is|did)\b/i.test(lower)) {

@@ -6,6 +6,16 @@ function buildClarification(text) {
   return text;
 }
 
+function buildGreeting() {
+  const replies = [
+    'Morning 👋 What do you need sorting?',
+    'Alright — what do you need help with?',
+    'Hi 👋 What do you want me to sort out?',
+    'Morning — what are we working on?',
+  ];
+  return replies[Math.floor(Math.random() * replies.length)];
+}
+
 function buildAcknowledgement() {
   const replies = [
     'No worries 👍',
@@ -27,6 +37,7 @@ function buildResolvedReference(job) {
 module.exports = {
   buildChoiceList,
   buildClarification,
+  buildGreeting,
   buildAcknowledgement,
   buildNoMatch,
   buildResolvedReference,

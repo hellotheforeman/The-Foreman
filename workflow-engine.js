@@ -1,5 +1,5 @@
 const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
-const { buildAcknowledgement, buildChoiceList, buildClarification, buildNoMatch, buildResolvedReference } = require('./response-builder');
+const { buildGreeting, buildAcknowledgement, buildChoiceList, buildClarification, buildNoMatch, buildResolvedReference } = require('./response-builder');
 const { resolveSingleJobReference } = require('./entity-resolver');
 
 function workflowFromIntent(parsedIntent, classifierResult) {
@@ -14,6 +14,10 @@ function workflowFromIntent(parsedIntent, classifierResult) {
 }
 
 async function handleMessage({ business, raw, parsedIntent, classifierResult, currentState }) {
+  if (parsedIntent?.intent === 'hello' || classifierResult?.suggestedWorkflow === 'hello') {
+    return { type: 'reply', message: buildGreeting() };
+  }
+
   if (classifierResult?.kind === 'social' || parsedIntent?.intent === 'thanks') {
     return { type: 'reply', message: buildAcknowledgement() };
   }
