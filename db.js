@@ -415,9 +415,13 @@ async function getConversationState(businessId) {
 }
 
 async function setConversationState(businessId, conversationState) {
+  const mode = conversationState?.mode || 'idle';
+  const workflow = conversationState?.workflow || null;
+  const legacyIntent = workflow || mode || 'idle';
+
   await getAll(
     `INSERT INTO conversation_state (business_id, mode, workflow, state, updated_at, intent, payload, missing_fields)
-     VALUES ($1, $2, $3, $4::jsonb, NOW(), $3, '{}'::jsonb, '[]'::jsonb)
+     VALUES ($1, $2, $3, $4::jsonb, NOW(), $5, '{}'::jsonb, '[]'::jsonb)
      ON CONFLICT (business_id)
      DO UPDATE SET
        mode = EXCLUDED.mode,
@@ -427,9 +431,10 @@ async function setConversationState(businessId, conversationState) {
        intent = EXCLUDED.intent`,
     [
       businessId,
-      conversationState?.mode || 'idle',
-      conversationState?.workflow || null,
+      mode,
+      workflow,
       JSON.stringify(conversationState?.state || {}),
+      legacyIntent,
     ]
   );
 }
