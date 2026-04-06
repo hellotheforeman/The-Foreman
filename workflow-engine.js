@@ -35,9 +35,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     });
 
     if (resolved.status === 'resolved') {
+      const job = resolved.job;
+      const when = job.scheduled_date
+        ? `${job.scheduled_date}${job.scheduled_time ? ` at ${job.scheduled_time}` : ''}`
+        : 'not booked in yet';
       return {
         type: 'reply',
-        message: buildResolvedReference(resolved.job),
+        message: `📌 ${job.customer_name} — ${job.description}\nStatus: ${job.status.toLowerCase()}\nScheduled: ${when}`,
       };
     }
 
