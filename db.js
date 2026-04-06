@@ -177,6 +177,17 @@ async function findCustomerByName(businessId, name) {
   );
 }
 
+async function findCustomerByPhone(businessId, phone) {
+  return getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
+}
+
+async function findCustomersByName(businessId, query) {
+  return getAll(
+    'SELECT * FROM customers WHERE business_id = $1 AND name ILIKE $2 ORDER BY created_at DESC LIMIT 10',
+    [businessId, `%${query}%`]
+  );
+}
+
 async function getCustomer(id) {
   return getOne('SELECT * FROM customers WHERE id = $1', [id]);
 }
@@ -267,6 +278,48 @@ async function findLikelyOpenJobs(businessId, query) {
   );
 }
 
+async function findOpenJobsByCustomerName(businessId, query) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.archived_at IS NULL
+       AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS')
+       AND c.name ILIKE $2
+     ORDER BY j.created_at DESC
+     LIMIT 10`,
+    [businessId, `%${query}%`]
+  );
+}
+
+async function findJobsByDescription(businessId, query) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.archived_at IS NULL
+       AND j.description ILIKE $2
+     ORDER BY j.created_at DESC
+     LIMIT 10`,
+    [businessId, `%${query}%`]
+  );
+}
+
+async function findRecentJobs(businessId, limit = 10) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.archived_at IS NULL
+     ORDER BY j.created_at DESC
+     LIMIT $2`,
+    [businessId, limit]
+  );
+}
+
 // --- Invoice queries ---
 
 async function createInvoice(businessId, jobId, amount, lineItems) {
@@ -310,6 +363,31 @@ async function logMessage(businessId, direction, participant, body, { customerId
   );
 }
 
+async function getConversationState(businessId) {
+  const rows = await getAll('SELECT * FROM conversation_state WHERE business_id = $1 LIMIT 1', [businessId]);
+  if (!rows[0]) return null;
+  const row = rows[0];
+  return {
+    workflow: row.intent,
+    state: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function setConversationState(businessId, workflow, state) {
+  await getAll(
+    `INSERT INTO conversation_state (business_id, intent, payload, missing_fields, updated_at)
+     VALUES ($1, $2, $3::jsonb, '[]'::jsonb, NOW())
+     ON CONFLICT (business_id)
+     DO UPDATE SET intent = EXCLUDED.intent, payload = EXCLUDED.payload, updated_at = NOW()`,
+    [businessId, workflow, JSON.stringify(state || {})]
+  );
+}
+
+async function clearConversationState(businessId) {
+  await getAll('DELETE FROM conversation_state WHERE business_id = $1', [businessId]);
+}
+
 module.exports = {
   init,
   save,
@@ -323,6 +401,8 @@ module.exports = {
   getAllActiveBusinesses,
   findOrCreateCustomer,
   findCustomerByName,
+  findCustomerByPhone,
+  findCustomersByName,
   getCustomer,
   createJob,
   getJob,
@@ -334,6 +414,9 @@ module.exports = {
   getScheduleRange,
   getOpenJobs,
   findLikelyOpenJobs,
+  findOpenJobsByCustomerName,
+  findJobsByDescription,
+  findRecentJobs,
   createInvoice,
   getInvoiceByJob,
   markInvoicePaid,
@@ -341,4 +424,7 @@ module.exports = {
   archiveJob,
   logMessage,
   getAll,
+  getConversationState,
+  setConversationState,
+  clearConversationState,
 };
