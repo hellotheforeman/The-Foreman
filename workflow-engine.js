@@ -75,6 +75,11 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     state.items = raw.trim();
   }
 
+  if (workflow === 'schedule_job') {
+    if (!state.date && parsedIntent?.date) state.date = parsedIntent.date;
+    if (!state.time && parsedIntent?.time) state.time = parsedIntent.time;
+  }
+
   if (definition.requiredFields.includes('jobId') && !state.jobId) {
     const resolved = await resolveSingleJobReference({
       businessId: business.id,
@@ -117,6 +122,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       },
       schedule_job: {
         date: 'What day should I book it in for?',
+        time: 'What time should I put it in for?',
       },
       archive_job: {
         jobId: 'Which customer or job should I archive? You can reply with the customer name.',

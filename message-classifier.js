@@ -49,6 +49,10 @@ function classifyMessage(raw, parsedIntent, currentState) {
     return { kind: 'follow_up_answer', suggestedWorkflow: 'create_quote', raw: text };
   }
 
+  if (/^(monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|tomorrow|next\s+\w+|\d{1,2}(?::\d{2})?\s*(?:am|pm)?)$/i.test(text)) {
+    return { kind: 'follow_up_answer', suggestedWorkflow: 'schedule_job', raw: text };
+  }
+
   if (parsedIntent?.intent && parsedIntent.intent !== 'unknown') {
     return { kind: 'new_action', suggestedWorkflow: parsedIntent.intent, raw: text };
   }
