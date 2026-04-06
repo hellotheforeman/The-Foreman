@@ -14,6 +14,21 @@ function workflowFromIntent(parsedIntent, classifierResult) {
   return classifierResult?.suggestedWorkflow || map[parsedIntent?.intent] || null;
 }
 
+function getStoredState(currentState) {
+  if (!currentState?.state) return {};
+  const state = currentState.state;
+  if (state.collected || state.focus || state.pending || state.options) {
+    return {
+      ...(state.collected || {}),
+      focus: state.focus || {},
+      pending: state.pending || null,
+      options: state.options || [],
+      lastTurnType: state.lastTurnType || null,
+    };
+  }
+  return state;
+}
+
 async function handleMessage({ business, raw, parsedIntent, classifierResult, currentState }) {
   if (parsedIntent?.intent === 'hello' || classifierResult?.suggestedWorkflow === 'hello') {
     return { type: 'reply', message: buildGreeting() };
@@ -43,7 +58,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       businessId: business.id,
       parsedIntent,
       raw,
-      state: currentState?.state,
+      state: getStoredState(currentState),
     });
 
     if (resolved.status === 'resolved') {
@@ -55,10 +70,17 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
         type: 'reply',
         workflow: 'query_job_status',
         state: {
-          jobId: job.id,
-          customerId: job.customer_id,
-          customerName: job.customer_name,
-          description: job.description,
+          focus: {
+            jobId: job.id,
+            customerId: job.customer_id,
+            customerName: job.customer_name,
+            jobSummary: job.description,
+            confidence: 'high',
+          },
+          collected: {},
+          pending: null,
+          options: [],
+          lastTurnType: 'answered_query',
         },
         message: `📌 ${job.customer_name} — ${job.description}\nStatus: ${job.status.toLowerCase()}\nScheduled: ${when}`,
       };
@@ -67,6 +89,14 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     if (resolved.status === 'multiple') {
       return {
         type: 'reply',
+        workflow: 'query_job_status',
+        state: {
+          focus: {},
+          collected: {},
+          pending: { type: 'selection', optionsType: 'job' },
+          options: resolved.jobs,
+          lastTurnType: 'showed_options',
+        },
         message: buildChoiceList('I found a few matches:', resolved.jobs.map(buildResolvedReference)),
       };
     }
@@ -85,16 +115,17 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     };
   }
 
-  const preservedState = policy.reuseWorkflow ? (currentState?.state || {}) : {};
+  const storedState = getStoredState(currentState);
+  const preservedState = policy.reuseWorkflow ? storedState : {};
   const state = {
     ...preservedState,
     ...(parsedIntent || {}),
   };
 
-  const focus = policy.reuseFocus ? (currentState?.state?.focus || {}) : {};
+  const focus = policy.reuseFocus ? (storedState.focus || {}) : {};
 
-  if (!state.jobId && currentState?.state?.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
-    state.jobId = currentState.state.jobId;
+  if (!state.jobId && focus.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
+    state.jobId = focus.jobId;
   }
 
   if (workflow === 'schedule_job' && state.jobId) {
@@ -107,6 +138,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     if (job.status === 'resolved' && !state.items) {
       state.customerName = job.job.customer_name;
       state.description = job.job.description;
+      state.focus = {
+        jobId: job.job.id,
+        customerId: job.job.customer_id,
+        customerName: job.job.customer_name,
+        jobSummary: job.job.description,
+        confidence: 'high',
+      };
     }
   }
 
@@ -123,19 +161,25 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     if (!state.time && parsedIntent?.time) state.time = parsedIntent.time;
   }
 
-  if (workflow === 'archive_job' && Array.isArray(currentState?.state?.options) && classifierResult?.kind === 'selection') {
-    const raw = (raw || '').trim().toLowerCase();
-    const matches = raw === 'all'
-      ? currentState.state.options
-      : [...new Set((raw.match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0))]
-          .map((index) => currentState.state.options[index - 1])
+  if (workflow === 'archive_job' && Array.isArray(storedState.options) && classifierResult?.kind === 'selection') {
+    const lowered = (raw || '').trim().toLowerCase();
+    const matches = lowered === 'all'
+      ? storedState.options
+      : [...new Set((lowered.match(/\d+/g) || []).map((n) => parseInt(n, 10)).filter((n) => Number.isInteger(n) && n > 0))]
+          .map((index) => storedState.options[index - 1])
           .filter(Boolean);
 
     if (matches.length) {
       return {
         type: 'action',
         workflow,
-        state: {},
+        state: {
+          focus: {},
+          collected: {},
+          pending: null,
+          options: [],
+          lastTurnType: 'completed_action',
+        },
         intent: {
           intent: 'archive_job',
           jobIds: matches.map((job) => job.id),
@@ -149,7 +193,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       businessId: business.id,
       parsedIntent,
       raw,
-      state: currentState?.state,
+      state: storedState,
     });
 
     if (resolved.status === 'resolved') {
@@ -168,7 +212,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       return {
         type: 'reply',
         workflow,
-        state: { ...state, options: resolved.jobs },
+        state: {
+          focus,
+          collected: state,
+          pending: { type: 'selection', optionsType: 'job' },
+          options: resolved.jobs,
+          lastTurnType: 'showed_options',
+        },
         message: buildChoiceList('I found a few matches:', resolved.jobs.map(buildResolvedReference)),
       };
     } else {
@@ -176,8 +226,11 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
         type: 'reply',
         workflow,
         state: {
-          ...state,
           focus,
+          collected: state,
+          pending: { type: 'field', field: 'jobId' },
+          options: [],
+          lastTurnType: 'asked_question',
         },
         message: buildClarification('Which customer or job do you mean? You can just reply with the customer name.'),
       };
@@ -220,7 +273,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       type: 'reply',
       message: buildClarification(prompts[workflow]?.[missing[0]] || 'I need a bit more information to do that.'),
       workflow,
-      state,
+      state: {
+        focus: state.focus || focus,
+        collected: state,
+        pending: { type: 'field', field: missing[0] },
+        options: state.options || [],
+        lastTurnType: 'asked_question',
+      },
     };
   }
 
@@ -235,7 +294,13 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     return {
       type: 'reply',
       workflow,
-      state,
+      state: {
+        focus: state.focus || focus,
+        collected: state,
+        pending: { type: 'field', field: 'jobId' },
+        options: [],
+        lastTurnType: 'asked_question',
+      },
       message: buildClarification('Which customer or job do you mean? You can just reply with the customer name.'),
     };
   }
