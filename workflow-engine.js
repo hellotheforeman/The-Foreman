@@ -32,7 +32,100 @@ function getStoredState(currentState) {
   return state;
 }
 
+function isExplicitBreakoutMessage(raw, classifierResult) {
+  const text = (raw || '').trim().toLowerCase();
+  if (!text) return false;
+  if (classifierResult?.kind === 'social') return true;
+  if (classifierResult?.kind === 'overview_query') return true;
+  if (/^(help|hello|hi|hey|thanks|thank you|cheers)\b/.test(text)) return true;
+  if (/^(new job|quote|schedule|book|invoice|paid|chase|follow up|archive|delete|remove|done)\b/.test(text)) return true;
+  return false;
+}
+
+async function handlePendingFieldAnswer({ business, raw, parsedIntent, currentState }) {
+  const storedState = getStoredState(currentState);
+  const pendingField = storedState?.pending?.field;
+  if (!pendingField) return null;
+
+  const workflow = currentState?.workflow;
+  const collected = {
+    ...(storedState.collected || {}),
+    ...(storedState.focus?.jobId ? { jobId: storedState.focus.jobId } : {}),
+  };
+
+  if (pendingField === 'date') {
+    if (!parsedIntent?.date) {
+      return {
+        type: 'reply',
+        workflow,
+        state: currentState.state,
+        message: 'Sorry — what day do you want to move it to?',
+      };
+    }
+    collected.date = parsedIntent.date;
+  } else if (pendingField === 'time') {
+    if (!parsedIntent?.time) {
+      return {
+        type: 'reply',
+        workflow,
+        state: currentState.state,
+        message: 'Sorry — what time do you want?',
+      };
+    }
+    collected.time = parsedIntent.time;
+  } else if (pendingField === 'amount') {
+    if (parsedIntent?.amount === undefined || parsedIntent?.amount === null) {
+      return {
+        type: 'reply',
+        workflow,
+        state: currentState.state,
+        message: 'Sorry — what price should I use?',
+      };
+    }
+    collected.amount = parsedIntent.amount;
+  } else if (pendingField === 'address') {
+    collected.address = raw.trim();
+  } else if (pendingField === 'description') {
+    collected.description = raw.trim();
+  } else if (pendingField === 'phone') {
+    collected.phone = parsedIntent?.phone || raw.trim();
+  } else if (pendingField === 'name') {
+    collected.name = parsedIntent?.name || raw.trim();
+  }
+
+  const state = {
+    focus: storedState.focus || {},
+    collected,
+    pending: null,
+    options: storedState.options || [],
+    lastTurnType: 'completed_action',
+  };
+
+  const intentMap = {
+    create_job: 'new_job',
+    create_quote: 'quote',
+    schedule_job: 'schedule',
+    reschedule_job: 'schedule',
+    archive_job: 'archive_job',
+  };
+
+  return {
+    type: 'action',
+    workflow,
+    state,
+    intent: {
+      ...collected,
+      intent: intentMap[workflow],
+    },
+  };
+}
+
 async function handleMessage({ business, raw, parsedIntent, classifierResult, currentState }) {
+  if (currentState?.state?.pending?.field && !isExplicitBreakoutMessage(raw, classifierResult)) {
+    const pendingResult = await handlePendingFieldAnswer({ business, raw, parsedIntent, currentState });
+    if (pendingResult) return pendingResult;
+  }
+
   if (parsedIntent?.intent === 'hello' || classifierResult?.suggestedWorkflow === 'hello') {
     return { type: 'reply', message: buildGreeting() };
   }
