@@ -10,6 +10,8 @@ function workflowFromIntent(parsedIntent, classifierResult) {
     schedule: 'schedule_job',
     archive_job: 'archive_job',
     thanks: 'social',
+    open_jobs: 'open_jobs',
+    view_schedule: 'view_schedule',
   };
   return classifierResult?.suggestedWorkflow || map[parsedIntent?.intent] || null;
 }
@@ -50,6 +52,66 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     return {
       type: 'action',
       intent: parsedIntent,
+    };
+  }
+
+  if (workflow === 'open_jobs') {
+    return {
+      type: 'action',
+      intent: { intent: 'open_jobs' },
+      workflow: null,
+      state: {
+        focus: {},
+        collected: {},
+        pending: null,
+        options: [],
+        lastTurnType: 'answered_query',
+      },
+    };
+  }
+
+  if (workflow === 'view_schedule_today') {
+    return {
+      type: 'action',
+      intent: { intent: 'view_schedule', period: 'today' },
+      workflow: null,
+      state: {
+        focus: {},
+        collected: {},
+        pending: null,
+        options: [],
+        lastTurnType: 'answered_query',
+      },
+    };
+  }
+
+  if (workflow === 'view_schedule_tomorrow') {
+    return {
+      type: 'action',
+      intent: { intent: 'view_schedule', period: 'tomorrow' },
+      workflow: null,
+      state: {
+        focus: {},
+        collected: {},
+        pending: null,
+        options: [],
+        lastTurnType: 'answered_query',
+      },
+    };
+  }
+
+  if (workflow === 'view_schedule_week') {
+    return {
+      type: 'action',
+      intent: { intent: 'view_schedule', period: 'week' },
+      workflow: null,
+      state: {
+        focus: {},
+        collected: {},
+        pending: null,
+        options: [],
+        lastTurnType: 'answered_query',
+      },
     };
   }
 
