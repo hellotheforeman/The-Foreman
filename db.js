@@ -363,6 +363,31 @@ async function logMessage(businessId, direction, participant, body, { customerId
   );
 }
 
+async function getConversationState(businessId) {
+  const rows = await getAll('SELECT * FROM conversation_state WHERE business_id = $1 LIMIT 1', [businessId]);
+  if (!rows[0]) return null;
+  const row = rows[0];
+  return {
+    workflow: row.intent,
+    state: typeof row.payload === 'string' ? JSON.parse(row.payload) : row.payload,
+    updatedAt: row.updated_at,
+  };
+}
+
+async function setConversationState(businessId, workflow, state) {
+  await getAll(
+    `INSERT INTO conversation_state (business_id, intent, payload, missing_fields, updated_at)
+     VALUES ($1, $2, $3::jsonb, '[]'::jsonb, NOW())
+     ON CONFLICT (business_id)
+     DO UPDATE SET intent = EXCLUDED.intent, payload = EXCLUDED.payload, updated_at = NOW()`,
+    [businessId, workflow, JSON.stringify(state || {})]
+  );
+}
+
+async function clearConversationState(businessId) {
+  await getAll('DELETE FROM conversation_state WHERE business_id = $1', [businessId]);
+}
+
 module.exports = {
   init,
   save,
@@ -399,4 +424,7 @@ module.exports = {
   archiveJob,
   logMessage,
   getAll,
+  getConversationState,
+  setConversationState,
+  clearConversationState,
 };
