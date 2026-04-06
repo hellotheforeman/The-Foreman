@@ -35,7 +35,7 @@ function classifyMessage(raw, parsedIntent, currentState) {
   }
 
   if (/(change this to|change it to|move this to|move it to|reschedule this to|reschedule it to|change this|move this|reschedule this)/i.test(lower)) {
-    return { kind: 'new_action', suggestedWorkflow: 'schedule_job', raw: text };
+    return { kind: 'new_action', suggestedWorkflow: 'reschedule_job', raw: text };
   }
 
   if (/^(when|when's|when is|what time|what day|has|is|did)\b/i.test(lower)) {

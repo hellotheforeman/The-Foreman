@@ -32,6 +32,26 @@ const workflows = {
     requiredFields: ['jobId', 'date'],
     optionalFields: ['time'],
   },
+  reschedule_job: {
+    name: 'reschedule_job',
+    kind: 'action',
+    target: 'job',
+    requiredFields: ['jobId', 'date'],
+    optionalFields: ['time'],
+    canReuseFocus: true,
+    canReuseWorkflow: true,
+    nextStep: ({ missing }) => {
+      if (missing.includes('jobId')) return { type: 'resolve_target' };
+      if (missing.includes('date')) return { type: 'ask', promptKey: 'ask_schedule_date' };
+      return { type: 'ready' };
+    },
+    execute: async ({ focus, collected }) => ({
+      intent: 'schedule',
+      jobId: focus.jobId,
+      date: collected.date,
+      time: collected.time,
+    }),
+  },
   query_job_status: {
     name: 'query_job_status',
     requiredFields: ['jobId'],

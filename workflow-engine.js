@@ -12,6 +12,7 @@ function workflowFromIntent(parsedIntent, classifierResult) {
     thanks: 'social',
     open_jobs: 'open_jobs',
     view_schedule: 'view_schedule',
+    reschedule_job: 'reschedule_job',
   };
   return classifierResult?.suggestedWorkflow || map[parsedIntent?.intent] || null;
 }
@@ -186,11 +187,11 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
 
   const focus = policy.reuseFocus ? (storedState.focus || {}) : {};
 
-  if (!state.jobId && focus.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
+  if (!state.jobId && focus.jobId && ['schedule_job', 'reschedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
     state.jobId = focus.jobId;
   }
 
-  if (workflow === 'schedule_job' && state.jobId) {
+  if ((workflow === 'schedule_job' || workflow === 'reschedule_job') && state.jobId) {
     const job = await resolveSingleJobReference({
       businessId: business.id,
       parsedIntent: { jobId: state.jobId },
@@ -218,7 +219,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     state.items = raw.trim();
   }
 
-  if (workflow === 'schedule_job') {
+  if (workflow === 'schedule_job' || workflow === 'reschedule_job') {
     if (!state.date && parsedIntent?.date) state.date = parsedIntent.date;
     if (!state.time && parsedIntent?.time) state.time = parsedIntent.time;
   }
@@ -310,6 +311,18 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     Object.assign(state, definitionDefaults || {});
   }
 
+  if (workflow === 'reschedule_job' && state.jobId && !state.time) {
+    const resolved = await resolveSingleJobReference({
+      businessId: business.id,
+      parsedIntent: { jobId: state.jobId },
+      raw,
+      state,
+    });
+    if (resolved.status === 'resolved' && resolved.job?.scheduled_time) {
+      state.time = resolved.job.scheduled_time;
+    }
+  }
+
   const missing = computeMissingFields(workflow, state);
   if (missing.length) {
     const prompts = {
@@ -325,6 +338,10 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       schedule_job: {
         date: 'What day should I book it in for?',
         time: 'What time should I put it in for?',
+      },
+      reschedule_job: {
+        date: 'What day do you want to move it to?',
+        time: 'What time should I move it to?',
       },
       archive_job: {
         jobId: 'Which customer or job should I archive? You can reply with the customer name.',
@@ -349,6 +366,7 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     create_job: 'new_job',
     create_quote: 'quote',
     schedule_job: 'schedule',
+    reschedule_job: 'schedule',
     archive_job: 'archive_job',
   };
 
