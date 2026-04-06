@@ -46,7 +46,12 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
       return {
         type: 'reply',
         workflow: 'query_job_status',
-        state: { jobId: job.id, customerId: job.customer_id },
+        state: {
+          jobId: job.id,
+          customerId: job.customer_id,
+          customerName: job.customer_name,
+          description: job.description,
+        },
         message: `📌 ${job.customer_name} — ${job.description}\nStatus: ${job.status.toLowerCase()}\nScheduled: ${when}`,
       };
     }
@@ -79,6 +84,19 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
 
   if (!state.jobId && currentState?.state?.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
     state.jobId = currentState.state.jobId;
+  }
+
+  if (workflow === 'schedule_job' && state.jobId) {
+    const job = await resolveSingleJobReference({
+      businessId: business.id,
+      parsedIntent: { jobId: state.jobId },
+      raw,
+      state,
+    });
+    if (job.status === 'resolved' && !state.items) {
+      state.customerName = job.job.customer_name;
+      state.description = job.job.description;
+    }
   }
 
   if (workflow === 'create_quote' && !state.amount && parsedIntent?.amount) {
