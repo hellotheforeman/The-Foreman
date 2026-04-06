@@ -58,46 +58,32 @@ app.post('/webhook', async (req, res) => {
 
     await db.logMessage(business.id, 'IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
     const parsed = await parse(body);
+    const currentState = await db.getConversationState(business.id);
+    const classifierResult = classifyMessage(body, parsed, currentState);
+    const result = await workflowEngine.handleMessage({
+      business,
+      raw: body,
+      parsedIntent: parsed,
+      classifierResult,
+      currentState,
+    });
 
-    if (config.conversationEngineV2) {
-      const currentState = await db.getConversationState(business.id);
-      const classifierResult = classifyMessage(body, parsed, currentState);
-      const result = await workflowEngine.handleMessage({
-        business,
-        raw: body,
-        parsedIntent: parsed,
-        classifierResult,
-        currentState,
-      });
-
-      if (result.type === 'reply') {
-        if (result.workflow && result.state) {
-          await db.setConversationState(business.id, result.workflow, result.state);
-        }
-        console.log(`📥 [${business.business_name}] "${body}" → reply`);
-        return twimlReply(res, result.message);
-      }
-
+    if (result.type === 'reply') {
       if (result.workflow && result.state) {
         await db.setConversationState(business.id, result.workflow, result.state);
-      } else {
-        await db.clearConversationState(business.id);
       }
-
-      console.log(`📥 [${business.business_name}] "${body}" → ${result.intent.intent}`);
-      return dispatch(result.intent, res, business);
+      console.log(`📥 [${business.business_name}] "${body}" → reply`);
+      return twimlReply(res, result.message);
     }
 
-    const resolved = await conversation.resolveIntent(parsed, business);
-
-    if (resolved.mode === 'prompt') {
-      console.log(`📥 [${business.business_name}] "${body}" → prompt`);
-      return twimlReply(res, resolved.message);
+    if (result.workflow && result.state) {
+      await db.setConversationState(business.id, result.workflow, result.state);
+    } else {
+      await db.clearConversationState(business.id);
     }
 
-    const intent = resolved.intent;
-    console.log(`📥 [${business.business_name}] "${body}" → ${intent.intent}`);
-    await dispatch(intent, res, business);
+    console.log(`📥 [${business.business_name}] "${body}" → ${result.intent.intent}`);
+    return dispatch(result.intent, res, business);
 
   } catch (err) {
     console.error('Webhook error:', err);
