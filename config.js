@@ -11,6 +11,7 @@ const config = {
   port: parseInt(process.env.PORT, 10) || 3000,
   signupUrl: process.env.SIGNUP_URL || '',
   adminSecret: process.env.ADMIN_SECRET || '',
+  conversationEngineV2: process.env.CONVERSATION_ENGINE_V2 === 'true',
 };
 
 // Validate required config
