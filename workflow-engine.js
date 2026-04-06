@@ -45,6 +45,8 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
         : 'not booked in yet';
       return {
         type: 'reply',
+        workflow: 'query_job_status',
+        state: { jobId: job.id, customerId: job.customer_id },
         message: `📌 ${job.customer_name} — ${job.description}\nStatus: ${job.status.toLowerCase()}\nScheduled: ${when}`,
       };
     }
@@ -74,6 +76,10 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     ...(currentState?.state || {}),
     ...(parsedIntent || {}),
   };
+
+  if (!state.jobId && currentState?.state?.jobId && ['schedule_job', 'create_quote', 'archive_job', 'query_job_status'].includes(workflow)) {
+    state.jobId = currentState.state.jobId;
+  }
 
   if (workflow === 'create_quote' && !state.amount && parsedIntent?.amount) {
     state.amount = parsedIntent.amount;
@@ -174,6 +180,15 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
     schedule_job: 'schedule',
     archive_job: 'archive_job',
   };
+
+  if (definition.requiredFields.includes('jobId') && !state.jobId) {
+    return {
+      type: 'reply',
+      workflow,
+      state,
+      message: buildClarification('Which customer or job do you mean? You can just reply with the customer name.'),
+    };
+  }
 
   return {
     type: 'action',
