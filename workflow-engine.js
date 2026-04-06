@@ -21,8 +21,8 @@ function workflowFromIntent(parsedIntent, classifierResult) {
 function getStoredState(currentState) {
   const state = normaliseConversationState(currentState);
   return {
-    ...state.collected,
     focus: state.focus,
+    collected: state.collected,
     pending: state.pending,
     options: state.options,
   };
@@ -272,9 +272,9 @@ async function handleMessage({ business, raw, parsedIntent, classifierResult, cu
   }
 
   const storedState = getStoredState(currentState);
-  const preservedState = policy.reuseWorkflow ? storedState : {};
+  const preservedCollected = policy.reuseWorkflow ? (storedState.collected || {}) : {};
   const state = {
-    ...preservedState,
+    ...preservedCollected,
     ...(parsedIntent || {}),
   };
 

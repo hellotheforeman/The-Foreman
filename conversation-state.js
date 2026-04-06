@@ -34,6 +34,11 @@ function normaliseConversationState(currentState) {
     };
   }
 
+  const collected = { ...raw };
+  delete collected.focus;
+  delete collected.pending;
+  delete collected.options;
+
   return {
     workflow,
     focus: {
@@ -42,7 +47,7 @@ function normaliseConversationState(currentState) {
       customerId: raw.customerId || null,
       customerName: raw.customerName || null,
     },
-    collected: { ...raw },
+    collected,
     pending: raw.pending || null,
     options: Array.isArray(raw.options) ? raw.options : [],
   };
