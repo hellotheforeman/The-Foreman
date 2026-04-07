@@ -1,6 +1,7 @@
 const assert = require('assert');
 const { parse } = require('./parser');
 const templates = require('./templates');
+const workflowEngine = require('./workflow-engine');
 
 function testParseNewJob() {
   const result = parse('new job Mrs Patel 07700900123 boiler service BD7 1AH');
@@ -101,14 +102,149 @@ function testTemplateRendering() {
   assert.ok(scheduleDay.includes('Mrs Patel'));
 }
 
-function run() {
+async function testWorkflowCancelClearsPending() {
+  const result = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'cancel',
+    parsedIntent: { kind: 'continuation', intent: 'cancel' },
+    currentState: {
+      workflow: 'quote',
+      focus: {},
+      collected: {},
+      pending: { type: 'field', field: 'jobId' },
+      options: [],
+    },
+  });
+
+  assert.equal(result.type, 'cancel');
+}
+
+async function testWorkflowHelpDoesNotClearPending() {
+  const result = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'help',
+    parsedIntent: { kind: 'query', intent: 'help' },
+    currentState: {
+      workflow: 'quote',
+      focus: {},
+      collected: {},
+      pending: { type: 'field', field: 'jobId' },
+      options: [],
+    },
+  });
+
+  assert.equal(result.type, 'action');
+  assert.equal(result.clearState, false);
+}
+
+function testWorkflowExplicitCommandOverride() {
+  assert.equal(workflowEngine.isExplicitNewCommand({ kind: 'command', intent: 'quote' }), 'quote');
+  assert.equal(workflowEngine.isExplicitNewCommand({ kind: 'query', intent: 'help' }), false);
+}
+
+async function testQuoteWorkflowPromptsForAmountAfterResolvingByName() {
+  const result = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'quote wood',
+    parsedIntent: { kind: 'command', intent: 'quote' },
+    currentState: null,
+    resolveJobReference: async () => ({
+      status: 'resolved',
+      job: { id: 5, description: 'boiler service', customer_name: 'Wood' },
+    }),
+  });
+
+  assert.equal(result.type, 'prompt');
+  assert.equal(result.workflow, 'quote');
+  assert.equal(result.state.collected.jobId, 5);
+  assert.equal(result.state.pending.field, 'amount');
+  assert.equal(result.message, 'What price should I use?');
+}
+
+async function testQuoteWorkflowAmbiguousMatchPromptsForSelection() {
+  const result = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'quote wood',
+    parsedIntent: { kind: 'command', intent: 'quote' },
+    currentState: null,
+    resolveJobReference: async () => ({
+      status: 'multiple',
+      jobs: [
+        { id: 5, customer_name: 'Mrs Wood', description: 'boiler service' },
+        { id: 6, customer_name: 'John Wood', description: 'radiator leak' },
+      ],
+    }),
+  });
+
+  assert.equal(result.type, 'prompt');
+  assert.equal(result.state.pending.type, 'selection');
+  assert.equal(result.state.options.length, 2);
+  assert.ok(result.message.includes('1. Mrs Wood — boiler service'));
+}
+
+async function testScheduleWorkflowCollectsDateThenTime() {
+  const first = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'schedule wood',
+    parsedIntent: { kind: 'command', intent: 'schedule' },
+    currentState: null,
+    resolveJobReference: async () => ({
+      status: 'resolved',
+      job: { id: 7, description: 'boiler service', customer_name: 'Wood' },
+    }),
+  });
+
+  assert.equal(first.type, 'prompt');
+  assert.equal(first.state.pending.field, 'date');
+  assert.equal(first.state.collected.jobId, 7);
+  assert.equal(first.message, 'What day should I book it in for?');
+
+  const second = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: 'thursday',
+    parsedIntent: { kind: 'unknown', intent: 'unknown', date: '2026-04-09' },
+    currentState: first.state,
+    resolveJobReference: async () => ({ status: 'resolved', job: { id: 7 } }),
+  });
+
+  assert.equal(second.type, 'prompt');
+  assert.equal(second.state.pending.field, 'time');
+  assert.equal(second.state.collected.jobId, 7);
+  assert.equal(second.state.collected.date, '2026-04-09');
+  assert.equal(second.message, 'What time should I put down?');
+
+  const third = await workflowEngine.handleMessage({
+    business: { id: 1 },
+    raw: '9am',
+    parsedIntent: { kind: 'unknown', intent: 'unknown', time: '09:00' },
+    currentState: second.state,
+    resolveJobReference: async () => ({ status: 'resolved', job: { id: 7 } }),
+  });
+
+  assert.equal(third.type, 'action');
+  assert.equal(third.intent.intent, 'schedule');
+  assert.equal(third.intent.jobId, 7);
+  assert.equal(third.intent.date, '2026-04-09');
+  assert.equal(third.intent.time, '09:00');
+}
+
+async function run() {
   testParseNewJob();
   testParseQuote();
   testParseSchedule();
   testParseScheduleWithoutDateDoesNotAssumeToday();
   testParseQueriesAndContinuations();
   testTemplateRendering();
+  await testWorkflowCancelClearsPending();
+  await testWorkflowHelpDoesNotClearPending();
+  testWorkflowExplicitCommandOverride();
+  await testQuoteWorkflowPromptsForAmountAfterResolvingByName();
+  await testQuoteWorkflowAmbiguousMatchPromptsForSelection();
+  await testScheduleWorkflowCollectsDateThenTime();
   console.log('smoke-test: ok');
 }
 
-run();
+run().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});

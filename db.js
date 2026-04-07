@@ -86,6 +86,18 @@ async function init() {
     )
   `);
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS conversation_state (
+      business_id INTEGER PRIMARY KEY REFERENCES businesses(id),
+      workflow TEXT NOT NULL,
+      focus JSONB NOT NULL DEFAULT '{}'::jsonb,
+      collected JSONB NOT NULL DEFAULT '{}'::jsonb,
+      pending JSONB,
+      options JSONB NOT NULL DEFAULT '[]'::jsonb,
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
   await pool.query('ALTER TABLE invoices ADD COLUMN IF NOT EXISTS business_id INTEGER REFERENCES businesses(id)');
@@ -270,9 +282,40 @@ async function getScheduleRange(startDate, endDate, businessId) {
 
 async function getOpenJobs(businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
     [businessId]
   );
+}
+
+async function findOpenJobsByCustomerName(businessId, query) {
+  return getAll(
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') AND LOWER(c.name) LIKE '%' || LOWER($2) || '%' ORDER BY j.created_at DESC LIMIT 10",
+    [businessId, query]
+  );
+}
+
+async function findJobsByDescription(businessId, query) {
+  return getAll(
+    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') AND LOWER(j.description) LIKE '%' || LOWER($2) || '%' ORDER BY j.created_at DESC LIMIT 10",
+    [businessId, query]
+  );
+}
+
+async function findLikelyOpenJobs(businessId, query) {
+  const trimmed = (query || '').trim();
+  if (!trimmed) return [];
+
+  const [byName, byDescription] = await Promise.all([
+    findOpenJobsByCustomerName(businessId, trimmed),
+    findJobsByDescription(businessId, trimmed),
+  ]);
+
+  const seen = new Set();
+  return [...byName, ...byDescription].filter((job) => {
+    if (seen.has(job.id)) return false;
+    seen.add(job.id);
+    return true;
+  });
 }
 
 // --- Invoice queries ---
@@ -304,6 +347,49 @@ async function getUnpaidInvoices(businessId) {
   );
 }
 
+// --- Conversation state ---
+
+async function getConversationState(businessId) {
+  const row = await getOne('SELECT * FROM conversation_state WHERE business_id = $1', [businessId]);
+  if (!row) return null;
+  return {
+    business_id: row.business_id,
+    workflow: row.workflow,
+    focus: row.focus || {},
+    collected: row.collected || {},
+    pending: row.pending || null,
+    options: row.options || [],
+    updated_at: row.updated_at,
+  };
+}
+
+async function setConversationState(businessId, state) {
+  await pool.query(
+    `INSERT INTO conversation_state (business_id, workflow, focus, collected, pending, options, updated_at)
+     VALUES ($1, $2, $3::jsonb, $4::jsonb, $5::jsonb, $6::jsonb, NOW())
+     ON CONFLICT (business_id)
+     DO UPDATE SET
+       workflow = EXCLUDED.workflow,
+       focus = EXCLUDED.focus,
+       collected = EXCLUDED.collected,
+       pending = EXCLUDED.pending,
+       options = EXCLUDED.options,
+       updated_at = NOW()`,
+    [
+      businessId,
+      state.workflow,
+      JSON.stringify(state.focus || {}),
+      JSON.stringify(state.collected || {}),
+      state.pending == null ? null : JSON.stringify(state.pending),
+      JSON.stringify(state.options || []),
+    ]
+  );
+}
+
+async function clearConversationState(businessId) {
+  await run('DELETE FROM conversation_state WHERE business_id = $1', [businessId]);
+}
+
 // --- Message log ---
 
 async function logMessage(direction, participant, body, { businessId, customerId, jobId, whatsappMessageId } = {}) {
@@ -333,10 +419,16 @@ module.exports = {
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
+  findOpenJobsByCustomerName,
+  findJobsByDescription,
+  findLikelyOpenJobs,
   createInvoice,
   getInvoiceByJob,
   markInvoicePaid,
   getUnpaidInvoices,
+  getConversationState,
+  setConversationState,
+  clearConversationState,
   logMessage,
   getAll,
 };

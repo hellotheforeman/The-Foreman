@@ -8,6 +8,8 @@ const scheduler = require('./scheduler');
 const db = require('./db');
 const { registerAdminRoutes } = require('./admin');
 const { registerSignupRoutes } = require('./signup');
+const workflowEngine = require('./workflow-engine');
+const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
 
 const app = express();
 
@@ -52,6 +54,40 @@ app.post('/webhook', async (req, res) => {
     const intent = parse(body);
     if (business) intent.business = business;
     console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
+
+    if (business && business.status === 'active') {
+      const currentState = await getConversationState(business.id);
+      const workflowResult = await workflowEngine.handleMessage({
+        business,
+        raw: body,
+        parsedIntent: intent,
+        currentState,
+      });
+
+      if (workflowResult?.type === 'prompt') {
+        await setConversationState(business.id, workflowResult.state);
+        return twimlReply(res, workflowResult.message);
+      }
+
+      if (workflowResult?.type === 'cancel') {
+        await clearConversationState(business.id);
+        return twimlReply(res, workflowResult.message);
+      }
+
+      if (workflowResult?.type === 'action') {
+        if (workflowResult.clearState === false) {
+          // leave existing state alone for out-of-band help/query handling
+        } else if (workflowResult.state) {
+          await setConversationState(business.id, workflowResult.state);
+        } else {
+          await clearConversationState(business.id);
+        }
+
+        const nextIntent = { ...workflowResult.intent, business };
+        return dispatch(nextIntent, res);
+      }
+    }
+
     await dispatch(intent, res);
 
   } catch (err) {
