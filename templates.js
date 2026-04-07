@@ -1,8 +1,11 @@
 const config = require('./config');
-const { formatJobId } = require('./db');
+
+function formatJobId(id) {
+  return `#${String(id).padStart(4, '0')}`;
+}
 
 function businessName(business) {
-  return business?.business_name || config.businessName;
+  return business?.name || config.businessName;
 }
 
 function paymentDetails(business) {
@@ -45,7 +48,6 @@ function scheduleConfirmation(job, customer, business) {
   const date = formatDate(job.scheduled_date);
   const time = job.scheduled_time || 'TBC';
   const postcode = job.postcode ? ` (${job.postcode})` : '';
-  const address = job.address ? `📍 ${job.address}${postcode}` : null;
   const name = businessName(business);
   return [
     `Hi ${customerGreetingName(customer)}! ✅`,
@@ -53,13 +55,12 @@ function scheduleConfirmation(job, customer, business) {
     `Your job is confirmed:`,
     '',
     `📅 *${date} at ${time}*`,
-    `🔧 ${job.description}`,
-    address,
+    `🔧 ${job.description}${postcode}`,
     '',
     `We'll see you then! If you need to reschedule, just reply to this message.`,
     '',
     `— ${name}`,
-  ].filter(Boolean).join('\n');
+  ].join('\n');
 }
 
 function invoiceMessage(job, invoice, customer, business) {
@@ -131,8 +132,7 @@ function formatScheduleDay(jobs, dateStr) {
   const lines = jobs.map((j) => {
     const time = j.scheduled_time || 'TBC';
     const postcode = j.postcode ? `, ${j.postcode}` : '';
-    const address = j.address ? `, ${j.address}` : '';
-    return `• ${time} — ${j.customer_name}, ${j.description}${address}${postcode}`;
+    return `• ${time} — ${j.customer_name}, ${j.description}${postcode}`;
   });
   return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
 }

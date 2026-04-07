@@ -14,7 +14,11 @@ async function sendToForeman(body, { jobId, businessId, businessPhone } = {}) {
   const to = `whatsapp:${phone}`;
   try {
     const msg = await client.messages.create({ from, to, body });
-    logMessage(businessId || null, 'OUT', 'TRADESPERSON', body, { jobId, whatsappMessageId: msg.sid });
+    await logMessage('OUT', 'TRADESPERSON', body, {
+      businessId: businessId || null,
+      jobId,
+      whatsappMessageId: msg.sid,
+    });
     return msg.sid;
   } catch (err) {
     console.error(`Failed to send message to foreman (${phone}):`, err.message);

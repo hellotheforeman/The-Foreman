@@ -4,8 +4,6 @@
  * Designed to handle fuzzy, on-site typing.
  */
 
-const { parseJobId } = require('./db');
-
 // Normalise input: trim, collapse whitespace, lowercase
 function normalise(text) {
   return text.trim().replace(/\s+/g, ' ');

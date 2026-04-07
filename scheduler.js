@@ -21,7 +21,10 @@ function start() {
 
       if (jobs.length) {
         const summary = templates.formatScheduleDay(jobs, dateStr);
-        await messenger.sendToForeman(`📅 *Tomorrow's schedule:*\n\n${summary}`);
+        await messenger.sendToForeman(`📅 *Tomorrow's schedule:*\n\n${summary}`, {
+          businessId: business.id,
+          businessPhone: business.phone,
+        });
       }
     } catch (err) {
       console.error('Evening reminder failed:', err.message);
@@ -68,7 +71,10 @@ function start() {
         parts.push(`\n📋 *${quotedJobs.length} quotes awaiting response*`);
       }
 
-      await messenger.sendToForeman(parts.join('\n'));
+      await messenger.sendToForeman(parts.join('\n'), {
+        businessId: business.id,
+        businessPhone: business.phone,
+      });
     } catch (err) {
       console.error('Weekly summary failed:', err.message);
     }
@@ -89,7 +95,11 @@ function start() {
       for (const inv of overdue) {
         const days = Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000);
         await messenger.sendToForeman(
-          `⚠️ Invoice ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${days} days old.\n\nReply *chase ${inv.job_id}* to send a reminder.`
+          `⚠️ Invoice ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${days} days old.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
+          {
+            businessId: business.id,
+            businessPhone: business.phone,
+          }
         );
       }
     } catch (err) {

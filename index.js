@@ -6,11 +6,16 @@ const { logMessage, findBusinessByPhone } = require('./db');
 const { twimlReply } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
+const { registerAdminRoutes } = require('./admin');
+const { registerSignupRoutes } = require('./signup');
 
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+
+registerSignupRoutes(app);
+registerAdminRoutes(app);
 
 // Health check
 app.get('/', (req, res) => {

@@ -92,7 +92,7 @@ async function handleQuote(intent, res) {
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
 
-  const msg = templates.quoteMessage(job, job.customer);
+  const msg = templates.quoteMessage(job, job.customer, business);
 
   messenger.twimlReply(
     res,
@@ -118,7 +118,7 @@ async function handleSchedule(intent, res) {
   job.scheduled_time = intent.time;
 
   const timeStr = intent.time || 'TBC';
-  const msg = templates.scheduleConfirmation(job, job.customer);
+  const msg = templates.scheduleConfirmation(job, job.customer, business);
 
   messenger.twimlReply(
     res,
@@ -153,7 +153,7 @@ async function handleDone(intent, res) {
   if (!invoice) {
     invoice = await db.createInvoice(business.id, job.id, amount, lineItems);
   }
-  const msg = templates.invoiceMessage(job, invoice, job.customer);
+  const msg = templates.invoiceMessage(job, invoice, job.customer, business);
 
   messenger.twimlReply(
     res,
@@ -193,7 +193,7 @@ async function handleSendInvoice(intent, res) {
     invoice = await db.createInvoice(business.id, job.id, job.quoted_amount, job.quote_items || job.description);
   }
 
-  const msg = templates.invoiceMessage(job, invoice, job.customer);
+  const msg = templates.invoiceMessage(job, invoice, job.customer, business);
 
   messenger.twimlReply(
     res,
@@ -216,7 +216,7 @@ async function handleChase(intent, res) {
   if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(job.id)}.`);
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
-  const msg = templates.paymentReminder(job, invoice, job.customer);
+  const msg = templates.paymentReminder(job, invoice, job.customer, business);
 
   messenger.twimlReply(
     res,
@@ -235,7 +235,7 @@ async function handleFollowUp(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  const msg = templates.followUpMessage(job, job.customer);
+  const msg = templates.followUpMessage(job, job.customer, business);
 
   messenger.twimlReply(
     res,
