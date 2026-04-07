@@ -132,12 +132,20 @@ async function init() {
   `);
 
   await pool.query(`
-    UPDATE message_log m
-    SET business_id = COALESCE(j.business_id, c.business_id)
+    UPDATE message_log
+    SET business_id = j.business_id
     FROM jobs j
-    FULL OUTER JOIN customers c ON c.id = m.customer_id
-    WHERE (m.job_id = j.id OR m.customer_id = c.id) AND m.business_id IS NULL
-  `).catch(() => {});
+    WHERE message_log.job_id = j.id
+      AND message_log.business_id IS NULL
+  `);
+
+  await pool.query(`
+    UPDATE message_log
+    SET business_id = c.business_id
+    FROM customers c
+    WHERE message_log.customer_id = c.id
+      AND message_log.business_id IS NULL
+  `);
 
   console.log('📦 Database ready');
 }
