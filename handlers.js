@@ -564,38 +564,22 @@ async function handleFind(intent, res) {
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
-    `🔨 *The Foreman — Commands*\n\n` +
-    `*CUSTOMERS*\n` +
-    `*new customer* [name] [phone] [postcode] — add a customer\n` +
-    `*find* [name] — look up a customer and their jobs\n` +
-    `*update* [name] [phone/email/address] [value]\n\n` +
-    `*JOBS*\n` +
-    `*new job* [name] [phone] [description] [postcode]\n` +
-    `*note* [job#] [text] — add a note to a job\n` +
-    `*cancel job* [job#]\n\n` +
-    `*QUOTES*\n` +
-    `*quote* [job#] — guided (quick or itemised)\n` +
-    `*quote* [job#] [amount] — quick quote\n` +
-    `*quote* [job#] [desc amount, desc amount] — itemised quote\n` +
-    `*schedule* [job#] [day] [time]\n` +
-    `*reschedule* [job#] [day] [time]\n\n` +
-    `*INVOICING*\n` +
-    `*invoice* [job#] — guided flow (uses quote if one exists)\n` +
-    `*invoice* [job#] [amount] [desc] — quick invoice\n` +
-    `*invoice* [job#] [desc amount, desc amount] — itemised invoice\n` +
-    `*amend* [job#] [amount] — update unpaid invoice\n` +
-    `*amend* [job#] [desc amount, desc amount] — itemised amend\n` +
+    `🔨 *The Foreman*\n\n` +
+    `*new customer* — add a customer\n` +
+    `*new job* — add a job\n` +
+    `*find* [name] — look up a customer\n\n` +
+    `*quote* [job#] — send a quote\n` +
+    `*schedule* [job#] [day] [time] — book a job\n` +
+    `*invoice* [job#] — send an invoice\n` +
+    `*amend* [job#] — update an unpaid invoice\n` +
     `*paid* [job#] — mark invoice as paid\n` +
     `*chase* [job#] — send payment reminder\n\n` +
-    `*SCHEDULE & REPORTING*\n` +
-    `*today* / *tomorrow* / *this week* / *next week*\n` +
-    `*what's on [day]* — specific date\n` +
-    `*unpaid* — all outstanding invoices\n` +
-    `*jobs* — all open jobs\n` +
-    `*earnings* [today/this week/this month/this year]\n\n` +
-    `*OTHER*\n` +
-    `*review* [job#] — send a review request to a customer\n` +
-    `*settings* — update business name, trade, email, address, payment details\n` +
+    `*today* / *this week* — view schedule\n` +
+    `*jobs* — open jobs\n` +
+    `*unpaid* — outstanding invoices\n` +
+    `*earnings* — income summary\n\n` +
+    `*review* [job#] — request a review\n` +
+    `*settings* — business settings\n` +
     `*help* — this message`
   );
 }
