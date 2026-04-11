@@ -17,6 +17,8 @@ async function init() {
       email TEXT,
       phone TEXT NOT NULL UNIQUE,
       postcode TEXT,
+      address TEXT,
+      payment_details TEXT,
       notes TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ DEFAULT NOW(),
@@ -31,6 +33,8 @@ async function init() {
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
       postcode TEXT,
+      email TEXT,
+      address TEXT,
       notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
@@ -46,14 +50,16 @@ async function init() {
       business_id INTEGER REFERENCES businesses(id),
       customer_id INTEGER NOT NULL REFERENCES customers(id),
       description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'NEW',
+      status TEXT NOT NULL DEFAULT 'active',
       postcode TEXT,
       quoted_amount NUMERIC,
       quote_items TEXT,
+      quote_line_items_json JSONB,
       scheduled_date TEXT,
       scheduled_time TEXT,
       completed_at TIMESTAMPTZ,
       completion_notes TEXT,
+      notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -65,6 +71,7 @@ async function init() {
       job_id INTEGER NOT NULL REFERENCES jobs(id),
       amount NUMERIC NOT NULL,
       line_items TEXT,
+      line_items_json JSONB,
       status TEXT NOT NULL DEFAULT 'SENT',
       sent_at TIMESTAMPTZ DEFAULT NOW(),
       paid_at TIMESTAMPTZ,
