@@ -6,10 +6,10 @@ const { generateQuotePdf, generateInvoicePdf, pdfUrl } = require('./pdf');
 // --- Settings helpers (menu shown by handleSettings; flow processed in index.js) ---
 
 const SETTINGS_FIELDS = [
-  { key: 'name',            label: 'Business name' },
-  { key: 'trade',           label: 'Trade / type of work' },
-  { key: 'email',           label: 'Email' },
-  { key: 'address',         label: 'Address' },
+  { key: 'business_name',  label: 'Business name' },
+  { key: 'trade',          label: 'Trade' },
+  { key: 'email',          label: 'Email' },
+  { key: 'address',        label: 'Address' },
   { key: 'payment_details', label: 'Payment details' },
 ];
 

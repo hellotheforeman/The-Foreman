@@ -61,7 +61,7 @@ app.post('/webhook', async (req, res) => {
 
     const intent = parse(body);
     intent.business = business;
-    console.log(`📥 ${business.name}: "${body}" → ${intent.intent}`);
+    console.log(`📥 ${business.business_name || business.name}: "${body}" → ${intent.intent}`);
 
     const currentState = await getConversationState(business.id);
 

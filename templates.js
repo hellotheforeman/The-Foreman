@@ -5,7 +5,7 @@ function formatJobId(id) {
 }
 
 function businessName(business) {
-  return business?.name || config.businessName;
+  return business?.business_name || business?.name || config.businessName;
 }
 
 function paymentDetails(business) {

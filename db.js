@@ -12,6 +12,7 @@ async function init() {
     CREATE TABLE IF NOT EXISTS businesses (
       id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
+      business_name TEXT,
       trade TEXT,
       contact_name TEXT,
       email TEXT,
@@ -118,6 +119,8 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_details TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS business_name TEXT');
+  await pool.query('UPDATE businesses SET business_name = name WHERE business_name IS NULL');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
@@ -220,8 +223,8 @@ async function createBusiness({ name, trade, contact_name, email, phone, postcod
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO businesses (name, trade, contact_name, email, phone, postcode, notes, status)
-     VALUES ($1, $2, $3, $4, $5, $6, $7, 'pending')
+    `INSERT INTO businesses (name, business_name, trade, contact_name, email, phone, postcode, notes, status)
+     VALUES ($1, $1, $2, $3, $4, $5, $6, $7, 'pending')
      RETURNING *`,
     [name, trade || null, contact_name || null, email || null, phone, postcode || null, notes || null]
   );

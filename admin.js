@@ -88,7 +88,7 @@ function renderBusinessCard(business) {
     <article class="card">
       <div class="card-head">
         <div>
-          <h3>${escapeHtml(business.name)}</h3>
+          <h3>${escapeHtml(business.business_name || business.name)}</h3>
           <p class="muted">${escapeHtml(business.trade || 'Trade not provided')}</p>
         </div>
         <span class="badge ${statusClass}">${escapeHtml(business.status)}</span>
