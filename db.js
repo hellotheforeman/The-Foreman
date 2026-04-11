@@ -116,6 +116,8 @@ async function init() {
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_line_items_json JSONB');
   await pool.query('ALTER TABLE invoices ADD COLUMN IF NOT EXISTS line_items_json JSONB');
+  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS focus JSONB NOT NULL DEFAULT '{}'::jsonb");
+  await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS options JSONB NOT NULL DEFAULT '[]'::jsonb");
 
   // Normalise job status: collapse all non-cancelled values to 'active'
   await pool.query(`
