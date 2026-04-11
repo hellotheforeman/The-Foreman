@@ -41,51 +41,55 @@ app.post('/webhook', async (req, res) => {
       return res.status(400).send('Missing From or Body');
     }
 
-    const isForeman = normalisePhone(from) === normalisePhone(config.foremanPhone);
+    const normPhone = normalisePhone(from);
+    const business = await findBusinessByPhone(normPhone);
 
-    if (!isForeman) {
-      // Unknown sender — ignore silently (no customer-facing messages)
-      console.log(`📥 Unknown sender (${from}) — ignoring`);
-      return res.sendStatus(200);
+    if (!business) {
+      console.log(`📥 Unregistered sender (${from}) — sending sign-up message`);
+      await logMessage('IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
+      return twimlReply(res, `Your number isn't registered with The Foreman yet.\n\nVisit theforeman.co.uk/signup to get started.`);
     }
 
-    const business = await findBusinessByPhone(normalisePhone(from));
-    await logMessage('IN', 'TRADESPERSON', body, { businessId: business?.id, whatsappMessageId: messageSid });
+    await logMessage('IN', 'TRADESPERSON', body, { businessId: business.id, whatsappMessageId: messageSid });
+
+    if (business.status !== 'active') {
+      console.log(`📥 ${from} — account ${business.status}, blocking`);
+      return twimlReply(res, `Your Foreman account is ${business.status}. We'll be in touch once it's active.`);
+    }
+
     const intent = parse(body);
-    if (business) intent.business = business;
-    console.log(`📥 Foreman: "${body}" → ${intent.intent}`);
+    intent.business = business;
+    console.log(`📥 ${business.name}: "${body}" → ${intent.intent}`);
 
-    if (business && business.status === 'active') {
-      const currentState = await getConversationState(business.id);
-      const workflowResult = await workflowEngine.handleMessage({
-        business,
-        raw: body,
-        parsedIntent: intent,
-        currentState,
-      });
+    const currentState = await getConversationState(business.id);
+    const workflowResult = await workflowEngine.handleMessage({
+      business,
+      raw: body,
+      parsedIntent: intent,
+      currentState,
+    });
 
-      if (workflowResult?.type === 'prompt') {
+    if (workflowResult?.type === 'prompt') {
+      await setConversationState(business.id, workflowResult.state);
+      return twimlReply(res, workflowResult.message);
+    }
+
+    if (workflowResult?.type === 'cancel') {
+      await clearConversationState(business.id);
+      return twimlReply(res, workflowResult.message);
+    }
+
+    if (workflowResult?.type === 'action') {
+      if (workflowResult.clearState === false) {
+        // leave existing state for out-of-band help/query handling
+      } else if (workflowResult.state) {
         await setConversationState(business.id, workflowResult.state);
-        return twimlReply(res, workflowResult.message);
-      }
-
-      if (workflowResult?.type === 'cancel') {
+      } else {
         await clearConversationState(business.id);
-        return twimlReply(res, workflowResult.message);
       }
 
-      if (workflowResult?.type === 'action') {
-        if (workflowResult.clearState === false) {
-          // leave existing state alone for out-of-band help/query handling
-        } else if (workflowResult.state) {
-          await setConversationState(business.id, workflowResult.state);
-        } else {
-          await clearConversationState(business.id);
-        }
-
-        const nextIntent = { ...workflowResult.intent, business };
-        return dispatch(nextIntent, res);
-      }
+      const nextIntent = { ...workflowResult.intent, business };
+      return dispatch(nextIntent, res);
     }
 
     await dispatch(intent, res);

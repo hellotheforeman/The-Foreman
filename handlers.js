@@ -40,6 +40,7 @@ const queryHandlers = {
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
   find: handleFind,
+  earnings: handleEarnings,
   help: handleHelp,
 };
 
@@ -282,9 +283,79 @@ async function handleViewSchedule(intent, res) {
     return messenger.twimlReply(res, `*This week:*\n\n${lines}`);
   }
 
+  if (intent.period === 'next_week') {
+    // Advance to next Monday
+    const daysUntilNextMonday = ((1 - now.getDay() + 7) % 7) || 7;
+    const start = new Date(now);
+    start.setDate(start.getDate() + daysUntilNextMonday);
+    const startStr = start.toISOString().split('T')[0];
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    const endStr = end.toISOString().split('T')[0];
+    const jobs = await db.getScheduleRange(startStr, endStr, business.id);
+
+    if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled next week. 📭`);
+
+    const byDate = {};
+    for (const j of jobs) {
+      if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
+      byDate[j.scheduled_date].push(j);
+    }
+    const lines = Object.entries(byDate)
+      .map(([d, js]) => templates.formatScheduleDay(js, d))
+      .join('\n\n');
+
+    return messenger.twimlReply(res, `*Next week:*\n\n${lines}`);
+  }
+
   const dateStr = now.toISOString().split('T')[0];
   const jobs = await db.getScheduleForDate(dateStr, business.id);
   messenger.twimlReply(res, `*Today:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
+}
+
+async function handleEarnings(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const now = new Date();
+  let start, end, label;
+
+  if (intent.period === 'today') {
+    start = new Date(now); start.setHours(0, 0, 0, 0);
+    end = new Date(now); end.setHours(23, 59, 59, 999);
+    label = 'Today';
+  } else if (intent.period === 'week') {
+    const daysToMonday = (now.getDay() + 6) % 7;
+    start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
+    end = new Date(now); end.setHours(23, 59, 59, 999);
+    label = 'This week';
+  } else if (intent.period === 'year') {
+    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    end = new Date(now); end.setHours(23, 59, 59, 999);
+    label = 'This year';
+  } else {
+    // month (default)
+    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+    end = new Date(now); end.setHours(23, 59, 59, 999);
+    label = 'This month';
+  }
+
+  const summary = await db.getEarningsSummary(business.id, start.toISOString(), end.toISOString());
+
+  const invoiced = Number(summary.total_invoiced).toFixed(2);
+  const paid = Number(summary.total_paid).toFixed(2);
+  const unpaid = Number(summary.total_unpaid).toFixed(2);
+  const overdue = Number(summary.total_overdue);
+
+  let msg =
+    `💰 *${label}*\n\n` +
+    `Invoiced: £${invoiced}\n` +
+    `Paid:     £${paid}\n` +
+    `Unpaid:   £${unpaid}`;
+
+  if (overdue > 0) msg += `\nOverdue:  £${overdue.toFixed(2)}`;
+
+  messenger.twimlReply(res, msg);
 }
 
 async function handleUnpaid(intent, res) {

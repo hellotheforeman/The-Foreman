@@ -109,6 +109,9 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notes TEXT');
   await pool.query("ALTER TABLE businesses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'");
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT');
+  await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT');
+  await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
 
   await pool.query(`
     UPDATE customers c
@@ -355,6 +358,23 @@ async function getUnpaidInvoices(businessId) {
   );
 }
 
+// --- Earnings ---
+
+async function getEarningsSummary(businessId, startDate, endDate) {
+  const row = await getOne(
+    `SELECT
+      COALESCE(SUM(amount), 0)                                           AS total_invoiced,
+      COALESCE(SUM(CASE WHEN status = 'PAID'    THEN amount END), 0)    AS total_paid,
+      COALESCE(SUM(CASE WHEN status != 'PAID'   THEN amount END), 0)    AS total_unpaid,
+      COALESCE(SUM(CASE WHEN status = 'OVERDUE' THEN amount END), 0)    AS total_overdue,
+      COUNT(*)                                                           AS invoice_count
+     FROM invoices
+     WHERE business_id = $1 AND created_at >= $2 AND created_at <= $3`,
+    [businessId, startDate, endDate]
+  );
+  return row;
+}
+
 // --- Conversation state ---
 
 async function getConversationState(businessId) {
@@ -434,6 +454,7 @@ module.exports = {
   getInvoiceByJob,
   markInvoicePaid,
   getUnpaidInvoices,
+  getEarningsSummary,
   getConversationState,
   setConversationState,
   clearConversationState,
