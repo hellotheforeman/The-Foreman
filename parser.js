@@ -148,30 +148,10 @@ function parse(raw) {
     return { kind: 'command', intent: 'add_note', jobId: parseInt(noteMatch[1], 10), note: noteMatch[2].trim() };
   }
 
-  // --- Job status update ---
-  // "start 6", "start job 6", "cancel 6", "cancel job 6", "mark 6 as in progress"
-  const startMatch = lower.match(/^(?:start(?:ed)?(?:\s+job)?)\s+#?(\d+)\s*$/);
-  if (startMatch) {
-    return { kind: 'command', intent: 'status_update', jobId: parseInt(startMatch[1], 10), status: 'IN_PROGRESS' };
-  }
-
+  // --- Cancel job (the only manual status action — can't be inferred from data) ---
   const cancelJobMatch = lower.match(/^cancel(?:\s+job)?\s+#?(\d+)\s*$/);
   if (cancelJobMatch) {
-    return { kind: 'command', intent: 'status_update', jobId: parseInt(cancelJobMatch[1], 10), status: 'CANCELLED' };
-  }
-
-  const markMatch = lower.match(/^mark\s+#?(\d+)\s+(?:as\s+)?(.+)$/);
-  if (markMatch) {
-    const statusMap = {
-      'in progress': 'IN_PROGRESS', 'in-progress': 'IN_PROGRESS', 'started': 'IN_PROGRESS', 'active': 'IN_PROGRESS',
-      'cancelled': 'CANCELLED', 'canceled': 'CANCELLED',
-      'complete': 'COMPLETE', 'completed': 'COMPLETE', 'done': 'COMPLETE',
-      'scheduled': 'SCHEDULED',
-    };
-    const status = statusMap[markMatch[2].trim()];
-    if (status) {
-      return { kind: 'command', intent: 'status_update', jobId: parseInt(markMatch[1], 10), status };
-    }
+    return { kind: 'command', intent: 'cancel_job', jobId: parseInt(cancelJobMatch[1], 10) };
   }
 
   // --- Set payment details ---

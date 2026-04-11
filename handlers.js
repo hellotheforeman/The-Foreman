@@ -35,7 +35,7 @@ const commandHandlers = {
   send_invoice: handleSendInvoice,
   chase: handleChase,
   follow_up: handleFollowUp,
-  status_update: handleStatusUpdate,
+  cancel_job: handleCancelJob,
   add_note: handleAddNote,
   set_payment: handleSetPayment,
   update_customer: handleUpdateCustomer,
@@ -288,17 +288,16 @@ async function handleReschedule(intent, res) {
   );
 }
 
-async function handleStatusUpdate(intent, res) {
+async function handleCancelJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
   const job = await db.getJob(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (job.status === 'cancelled') return messenger.twimlReply(res, `Job ${db.formatJobId(intent.jobId)} is already cancelled.`);
 
-  await db.updateJob(intent.jobId, business.id, { status: intent.status });
-
-  const labels = { IN_PROGRESS: 'in progress', CANCELLED: 'cancelled', COMPLETE: 'complete', SCHEDULED: 'scheduled', NEW: 'reopened' };
-  messenger.twimlReply(res, `✅ Job ${db.formatJobId(intent.jobId)} marked as ${labels[intent.status] || intent.status.toLowerCase()}.`);
+  await db.cancelJob(intent.jobId, business.id);
+  messenger.twimlReply(res, `🚫 Job ${db.formatJobId(intent.jobId)} cancelled.`);
 }
 
 async function handleAddNote(intent, res) {
@@ -474,7 +473,11 @@ async function handleOpenJobs(intent, res) {
   const jobs = await db.getOpenJobs(business.id);
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${j.status.toLowerCase()}]`);
+  const lines = jobs.map((j) => {
+    const invoice = j.invoice_id ? { status: j.invoice_status } : null;
+    const status = db.deriveStatus(j, invoice);
+    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${status}]`;
+  });
   messenger.twimlReply(res, `📋 *${jobs.length} open jobs*\n\n${lines.join('\n')}`);
 }
 
@@ -490,7 +493,8 @@ async function handleFind(intent, res) {
     const jobs = await db.getAll('SELECT * FROM jobs WHERE business_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT 5', [business.id, c.id]);
     const jobLines = jobs.map((j) => {
       const amount = j.quoted_amount ? ` £${Number(j.quoted_amount).toFixed(2)}` : '';
-      return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${j.status.toLowerCase()}]`;
+      const status = db.deriveStatus(j);
+      return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
     });
     const contactParts = [c.phone, c.email, c.address || c.postcode].filter(Boolean);
     results.push(
@@ -515,7 +519,6 @@ async function handleHelp(intent, res) {
     `*paid* [job#]\n` +
     `*chase* [job#]\n` +
     `*follow up* [job#]\n` +
-    `*start* [job#] — mark in progress\n` +
     `*cancel* [job#]\n` +
     `*note* [job#] [text]\n\n` +
     `*today* / *tomorrow* / *this week* / *next week*\n` +

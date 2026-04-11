@@ -115,6 +115,15 @@ async function init() {
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
 
+  // Normalise job status: collapse all non-cancelled values to 'active'
+  await pool.query(`
+    UPDATE jobs SET status = CASE
+      WHEN LOWER(status) = 'cancelled' THEN 'cancelled'
+      ELSE 'active'
+    END
+    WHERE status NOT IN ('active', 'cancelled')
+  `);
+
   await pool.query(`
     UPDATE customers c
     SET business_id = b.id
@@ -242,10 +251,21 @@ async function getCustomer(id, businessId) {
 
 // --- Job queries ---
 
+// Derives the display status from job data and its invoice (if any).
+// Status is never stored manually — it's always computed from position in the funnel.
+function deriveStatus(job, invoice = null) {
+  if (job.status === 'cancelled') return 'cancelled';
+  if (invoice?.status === 'PAID') return 'complete';
+  if (invoice) return 'outstanding';
+  if (!job.scheduled_date) return 'new';
+  const today = new Date().toISOString().split('T')[0];
+  return job.scheduled_date > today ? 'planned' : 'in progress';
+}
+
 async function createJob(businessId, customerId, description, postcode) {
   const { rows } = await pool.query(
     'INSERT INTO jobs (business_id, customer_id, description, postcode, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [businessId, customerId, description, postcode || null, 'NEW']
+    [businessId, customerId, description, postcode || null, 'active']
   );
   return rows[0];
 }
@@ -265,51 +285,83 @@ async function getJobWithCustomer(id, businessId) {
 }
 
 async function setQuote(jobId, amount, items) {
-  await run('UPDATE jobs SET quoted_amount = $1, quote_items = $2, status = $3 WHERE id = $4', [amount, items, 'QUOTED', jobId]);
+  await run('UPDATE jobs SET quoted_amount = $1, quote_items = $2 WHERE id = $3', [amount, items, jobId]);
   return getJob(jobId);
 }
 
 async function scheduleJob(jobId, date, time) {
-  await run('UPDATE jobs SET scheduled_date = $1, scheduled_time = $2, status = $3 WHERE id = $4', [date, time || null, 'SCHEDULED', jobId]);
+  await run('UPDATE jobs SET scheduled_date = $1, scheduled_time = $2 WHERE id = $3', [date, time || null, jobId]);
   return getJob(jobId);
 }
 
 async function completeJob(jobId, notes) {
-  await run('UPDATE jobs SET status = $1, completion_notes = $2, completed_at = NOW() WHERE id = $3', ['COMPLETE', notes || null, jobId]);
+  await run('UPDATE jobs SET completion_notes = $1, completed_at = NOW() WHERE id = $2', [notes || null, jobId]);
   return getJob(jobId);
+}
+
+async function cancelJob(jobId, businessId) {
+  await run("UPDATE jobs SET status = 'cancelled' WHERE id = $1 AND business_id = $2", [jobId, businessId]);
+  return getJob(jobId, businessId);
 }
 
 async function getScheduleForDate(dateStr, businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date = $2 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_time",
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1 AND j.scheduled_date = $2 AND j.status != 'cancelled'
+     ORDER BY j.scheduled_time`,
     [businessId, dateStr]
   );
 }
 
 async function getScheduleRange(startDate, endDate, businessId) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.scheduled_date BETWEEN $2 AND $3 AND j.status IN ('SCHEDULED', 'IN_PROGRESS') ORDER BY j.scheduled_date, j.scheduled_time",
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1 AND j.scheduled_date BETWEEN $2 AND $3 AND j.status != 'cancelled'
+     ORDER BY j.scheduled_date, j.scheduled_time`,
     [businessId, startDate, endDate]
   );
 }
 
 async function getOpenJobs(businessId) {
+  // Open = not cancelled, and no paid invoice
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') ORDER BY j.created_at DESC",
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone,
+            i.id AS invoice_id, i.status AS invoice_status
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     LEFT JOIN invoices i ON i.job_id = j.id
+     WHERE j.business_id = $1
+       AND j.status != 'cancelled'
+       AND (i.id IS NULL OR i.status != 'PAID')
+     ORDER BY j.created_at DESC`,
     [businessId]
   );
 }
 
 async function findOpenJobsByCustomerName(businessId, query) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') AND LOWER(c.name) LIKE '%' || LOWER($2) || '%' ORDER BY j.created_at DESC LIMIT 10",
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     LEFT JOIN invoices i ON i.job_id = j.id
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND (i.id IS NULL OR i.status != 'PAID')
+       AND LOWER(c.name) LIKE '%' || LOWER($2) || '%'
+     ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
   );
 }
 
 async function findJobsByDescription(businessId, query) {
   return getAll(
-    "SELECT j.*, c.name AS customer_name, c.phone AS customer_phone FROM jobs j JOIN customers c ON j.customer_id = c.id WHERE j.business_id = $1 AND j.status IN ('NEW', 'QUOTED', 'SCHEDULED', 'IN_PROGRESS') AND LOWER(j.description) LIKE '%' || LOWER($2) || '%' ORDER BY j.created_at DESC LIMIT 10",
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     LEFT JOIN invoices i ON i.job_id = j.id
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND (i.id IS NULL OR i.status != 'PAID')
+       AND LOWER(j.description) LIKE '%' || LOWER($2) || '%'
+     ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
   );
 }
@@ -532,6 +584,8 @@ module.exports = {
   createInvoice,
   getInvoiceByJob,
   markInvoicePaid,
+  deriveStatus,
+  cancelJob,
   getUnpaidInvoices,
   getEarningsSummary,
   updateBusiness,
