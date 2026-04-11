@@ -128,13 +128,89 @@ function parse(raw) {
     return { kind: 'command', intent: 'follow_up', jobId: parseInt(followMatch[1], 10) };
   }
 
+  // --- Reschedule ---
+  const rescheduleMatch = text.match(/^(?:reschedule|rebook|move)\s+#?(\d+)\s+(?:to\s+)?(.+)$/i);
+  if (rescheduleMatch) {
+    const { date, time } = parseDatetime(rescheduleMatch[2].trim());
+    return {
+      kind: 'command',
+      intent: 'reschedule',
+      jobId: parseInt(rescheduleMatch[1], 10),
+      date,
+      time,
+      raw: rescheduleMatch[2].trim(),
+    };
+  }
+
+  // --- Add note to job ---
+  const noteMatch = text.match(/^(?:note|add\s+note)\s+#?(\d+)\s+(.+)$/i);
+  if (noteMatch) {
+    return { kind: 'command', intent: 'add_note', jobId: parseInt(noteMatch[1], 10), note: noteMatch[2].trim() };
+  }
+
+  // --- Job status update ---
+  // "start 6", "start job 6", "cancel 6", "cancel job 6", "mark 6 as in progress"
+  const startMatch = lower.match(/^(?:start(?:ed)?(?:\s+job)?)\s+#?(\d+)\s*$/);
+  if (startMatch) {
+    return { kind: 'command', intent: 'status_update', jobId: parseInt(startMatch[1], 10), status: 'IN_PROGRESS' };
+  }
+
+  const cancelJobMatch = lower.match(/^cancel(?:\s+job)?\s+#?(\d+)\s*$/);
+  if (cancelJobMatch) {
+    return { kind: 'command', intent: 'status_update', jobId: parseInt(cancelJobMatch[1], 10), status: 'CANCELLED' };
+  }
+
+  const markMatch = lower.match(/^mark\s+#?(\d+)\s+(?:as\s+)?(.+)$/);
+  if (markMatch) {
+    const statusMap = {
+      'in progress': 'IN_PROGRESS', 'in-progress': 'IN_PROGRESS', 'started': 'IN_PROGRESS', 'active': 'IN_PROGRESS',
+      'cancelled': 'CANCELLED', 'canceled': 'CANCELLED',
+      'complete': 'COMPLETE', 'completed': 'COMPLETE', 'done': 'COMPLETE',
+      'scheduled': 'SCHEDULED',
+    };
+    const status = statusMap[markMatch[2].trim()];
+    if (status) {
+      return { kind: 'command', intent: 'status_update', jobId: parseInt(markMatch[1], 10), status };
+    }
+  }
+
+  // --- Set payment details ---
+  const paymentMatch = text.match(/^(?:(?:set|update)\s+)?(?:payment|bank)\s+(?:details?|info)\s*[:\-]?\s*(.+)$/i);
+  if (paymentMatch) {
+    return { kind: 'command', intent: 'set_payment', details: paymentMatch[1].trim() };
+  }
+
+  // --- Update customer ---
+  // "update Dave Smith email dave@example.com"
+  const updateCustomerMatch = text.match(/^update\s+(?:customer\s+)?(.+?)\s+(phone|email|address|notes?)\s+(.+)$/i);
+  if (updateCustomerMatch) {
+    const fieldRaw = updateCustomerMatch[2].toLowerCase();
+    const field = fieldRaw === 'note' ? 'notes' : fieldRaw;
+    return {
+      kind: 'command',
+      intent: 'update_customer',
+      customerName: updateCustomerMatch[1].trim(),
+      field,
+      value: updateCustomerMatch[3].trim(),
+    };
+  }
+
   // --- Schedule view ---
-  if (/^(today|tomorrow|this week|next week|schedule|diary|what'?s on)\s*(today|tomorrow)?$/i.test(lower)) {
+  if (/^(today|tomorrow|this week|next week|schedule|diary|what'?s on)\s*(today|tomorrow)?\s*$/i.test(lower)) {
     let period = 'today';
     if (lower.includes('tomorrow')) period = 'tomorrow';
     else if (lower.includes('next week')) period = 'next_week';
     else if (lower.includes('this week') || lower.includes('week')) period = 'week';
     return { kind: 'query', intent: 'view_schedule', period };
+  }
+
+  // Specific date: "what's on friday", "what have I got on thursday", "schedule tuesday"
+  const specificScheduleMatch = lower.match(/^(?:what'?s\s+on|what(?:\s+have|'ve)\s+i\s+got(?:\s+on)?|schedule\s+|diary\s+)(.+)$/);
+  if (specificScheduleMatch) {
+    const { date } = parseDatetime(specificScheduleMatch[1].trim());
+    if (date) {
+      return { kind: 'query', intent: 'view_schedule', period: 'date', date };
+    }
   }
 
   // --- Earnings / income summary ---

@@ -110,8 +110,10 @@ async function init() {
   await pool.query("ALTER TABLE businesses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'");
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_details TEXT');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
+  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
 
   await pool.query(`
     UPDATE customers c
@@ -358,6 +360,83 @@ async function getUnpaidInvoices(businessId) {
   );
 }
 
+// --- Update helpers ---
+
+async function updateBusiness(id, fields) {
+  const allowed = ['name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name'];
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const [key, val] of Object.entries(fields)) {
+    if (allowed.includes(key)) {
+      updates.push(`${key} = $${i++}`);
+      values.push(val);
+    }
+  }
+  if (!updates.length) return null;
+  updates.push('updated_at = NOW()');
+  values.push(id);
+  const { rows } = await pool.query(
+    `UPDATE businesses SET ${updates.join(', ')} WHERE id = $${i} RETURNING *`,
+    values
+  );
+  return rows[0] || null;
+}
+
+async function updateJob(id, businessId, fields) {
+  const allowed = ['status', 'scheduled_date', 'scheduled_time', 'notes', 'completion_notes', 'description'];
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const [key, val] of Object.entries(fields)) {
+    if (allowed.includes(key)) {
+      updates.push(`${key} = $${i++}`);
+      values.push(val);
+    }
+  }
+  if (!updates.length) return null;
+  values.push(id, businessId);
+  const { rows } = await pool.query(
+    `UPDATE jobs SET ${updates.join(', ')} WHERE id = $${i++} AND business_id = $${i} RETURNING *`,
+    values
+  );
+  return rows[0] || null;
+}
+
+async function appendJobNote(id, businessId, note) {
+  const job = await getJob(id, businessId);
+  if (!job) return null;
+  const newNotes = job.notes ? `${job.notes}\n${note}` : note;
+  return updateJob(id, businessId, { notes: newNotes });
+}
+
+async function updateCustomer(id, businessId, fields) {
+  const allowed = ['name', 'phone', 'email', 'address', 'notes'];
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const [key, val] of Object.entries(fields)) {
+    if (allowed.includes(key)) {
+      updates.push(`${key} = $${i++}`);
+      values.push(val);
+    }
+  }
+  if (!updates.length) return null;
+  values.push(id, businessId);
+  const { rows } = await pool.query(
+    `UPDATE customers SET ${updates.join(', ')} WHERE id = $${i++} AND business_id = $${i} RETURNING *`,
+    values
+  );
+  return rows[0] || null;
+}
+
+async function markAllOverdueInvoices() {
+  await run(
+    `UPDATE invoices SET status = 'OVERDUE'
+     WHERE status = 'SENT' AND sent_at < NOW() - INTERVAL '14 days'`
+  );
+}
+
 // --- Earnings ---
 
 async function getEarningsSummary(businessId, startDate, endDate) {
@@ -455,6 +534,11 @@ module.exports = {
   markInvoicePaid,
   getUnpaidInvoices,
   getEarningsSummary,
+  updateBusiness,
+  updateJob,
+  appendJobNote,
+  updateCustomer,
+  markAllOverdueInvoices,
   getConversationState,
   setConversationState,
   clearConversationState,
