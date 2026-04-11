@@ -543,9 +543,16 @@ async function handleFind(intent, res) {
 
   const results = [];
   for (const c of customers.slice(0, 5)) {
-    const jobs = await db.getAll('SELECT * FROM jobs WHERE business_id = $1 AND customer_id = $2 ORDER BY created_at DESC LIMIT 5', [business.id, c.id]);
+    const jobs = await db.getAll(
+      `SELECT j.*, COALESCE(i.amount, j.quoted_amount) AS latest_amount
+       FROM jobs j
+       LEFT JOIN invoices i ON i.job_id = j.id
+       WHERE j.business_id = $1 AND j.customer_id = $2
+       ORDER BY j.created_at DESC LIMIT 5`,
+      [business.id, c.id]
+    );
     const jobLines = jobs.map((j) => {
-      const amount = j.quoted_amount ? ` £${Number(j.quoted_amount).toFixed(2)}` : '';
+      const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
       return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
     });
