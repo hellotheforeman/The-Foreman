@@ -38,9 +38,15 @@ function twimlReply(res, body) {
 
 function twimlReplyWithMedia(res, body, mediaUrl) {
   const twiml = new twilio.twiml.MessagingResponse();
-  const msg = twiml.message();
-  msg.body(body);
-  msg.media(mediaUrl);
+  twiml.message(body);
+  twiml.message().media(mediaUrl);
+  res.type('text/xml').send(twiml.toString());
+}
+
+function twimlReplyPair(res, body1, body2) {
+  const twiml = new twilio.twiml.MessagingResponse();
+  twiml.message(body1);
+  twiml.message(body2);
   res.type('text/xml').send(twiml.toString());
 }
 
@@ -48,4 +54,5 @@ module.exports = {
   sendToForeman,
   twimlReply,
   twimlReplyWithMedia,
+  twimlReplyPair,
 };

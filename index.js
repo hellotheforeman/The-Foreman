@@ -3,7 +3,7 @@ const config = require('./config');
 const { parse, parseLineItems } = require('./parser');
 const { dispatch, SETTINGS_FIELDS, buildSettingsMenu } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
-const { twimlReply } = require('./messenger');
+const { twimlReply, twimlReplyPair } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
 const { registerAdminRoutes } = require('./admin');
@@ -165,7 +165,7 @@ app.post('/webhook', async (req, res) => {
             collected: { ...currentState.collected, quote_type: 'itemised' },
             pending: { type: 'field', field: 'items' },
           });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250 | Parts 45 | Callout fee 50*\n\nFormat: description amount, separated by |');
+          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*\n\nFormat: description amount, separated by commas');
         }
       }
 
@@ -179,7 +179,7 @@ app.post('/webhook', async (req, res) => {
       if (currentState.pending?.field === 'items') {
         const lineItems = parseLineItems(trimmed);
         if (!lineItems) {
-          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250 | Parts 45*\n\nEach item needs a description and an amount.");
+          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250, Parts 45*\n\nEach item needs a description and an amount.");
         }
         const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
         await clearConversationState(business.id);
@@ -209,7 +209,12 @@ app.post('/webhook', async (req, res) => {
         await setConversationState(business.id, {
           workflow: 'invoice_guided',
           focus: { jobId: job.id },
-          collected: { jobId: job.id, quoted_amount: Number(job.quoted_amount) },
+          collected: {
+            jobId: job.id,
+            quoted_amount: Number(job.quoted_amount),
+            quote_items: job.quote_items || null,
+            quote_line_items_json: job.quote_line_items_json || null,
+          },
           pending: { type: 'choice', field: 'invoice_mode' },
           options: [],
         });
@@ -263,15 +268,23 @@ app.post('/webhook', async (req, res) => {
             ...currentState,
             pending: { type: 'field', field: 'amend_items' },
           });
-          const quotedStr = `£${Number(currentState.collected.quoted_amount).toFixed(2)}`;
-          return twimlReply(res, `What should the invoice show instead?\n\n*Boiler service 280 | Parts 55*\nor just *480*\n\n(Quote was ${quotedStr})`);
+          const currentItemsStr = formatItemsForCopy(
+            currentState.collected.quote_line_items_json,
+            currentState.collected.quote_items,
+            currentState.collected.quoted_amount
+          );
+          return twimlReplyPair(
+            res,
+            `What should the invoice show instead? Currently:`,
+            currentItemsStr
+          );
         }
         if (n === 3) {
           await setConversationState(business.id, {
             ...currentState,
             pending: { type: 'field', field: 'manual_amount' },
           });
-          return twimlReply(res, 'What amount?\n\n(Or list items: *service 250 | parts 45*)');
+          return twimlReply(res, 'What amount?\n\n(Or list items: *service 250, parts 45*)');
         }
       }
 
@@ -292,7 +305,7 @@ app.post('/webhook', async (req, res) => {
             ...currentState,
             pending: { type: 'field', field: 'items' },
           });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250 | Parts 45 | Callout fee 50*');
+          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*');
         }
       }
 
@@ -305,7 +318,7 @@ app.post('/webhook', async (req, res) => {
           return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount, items: trimmed, lineItems, business }, res);
         }
         const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*(.*)$/);
-        if (!m) return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250 | parts 45*');
+        if (!m) return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
         const amount = parseFloat(m[1]);
         const desc = m[2].trim() || null;
         const li = desc ? [{ description: desc, amount }] : null;
@@ -317,7 +330,7 @@ app.post('/webhook', async (req, res) => {
       if (currentState.pending?.field === 'items') {
         const lineItems = parseLineItems(trimmed);
         if (!lineItems) {
-          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250 | Parts 45*\n\nEach item needs a description and an amount.");
+          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250, Parts 45*\n\nEach item needs a description and an amount.");
         }
         const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
         await clearConversationState(business.id);
@@ -375,6 +388,19 @@ app.post('/status', (req, res) => {
   console.log(`📊 Status: ${MessageSid} → ${MessageStatus}`);
   res.sendStatus(200);
 });
+
+function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
+  let items = lineItemsJson;
+  if (typeof items === 'string') {
+    try { items = JSON.parse(items); } catch { items = null; }
+  }
+  if (Array.isArray(items) && items.length) {
+    return items.map((i) => `${i.description} ${i.amount}`).join(', ');
+  }
+  if (quoteItems) return quoteItems;
+  if (quotedAmount) return String(quotedAmount);
+  return '';
+}
 
 function normalisePhone(phone) {
   let p = phone.replace(/\s+/g, '').replace('whatsapp:', '');

@@ -619,16 +619,16 @@ async function handleHelp(intent, res) {
     `*cancel* [job#]\n\n` +
     `*QUOTES & SCHEDULING*\n` +
     `*quote* [job#] [amount] [description] — quick PDF quote\n` +
-    `*quote* [job#] [desc amount | desc amount] — itemised PDF quote\n` +
+    `*quote* [job#] [desc amount, desc amount] — itemised PDF quote\n` +
     `*schedule* [job#] [day] [time]\n` +
     `*reschedule* [job#] [day] [time]\n\n` +
     `*INVOICING*\n` +
     `*done* [job#] total [amount] — marks complete and creates invoice PDF\n` +
-    `*done* [job#] [desc amount | desc amount] — itemised invoice\n` +
+    `*done* [job#] [desc amount, desc amount] — itemised invoice\n` +
     `*invoice* [job#] — invoice from existing quote\n` +
     `*invoice* [job#] [amount] [desc] — quick invoice\n` +
-    `*invoice* [job#] [desc amount | desc amount] — itemised invoice\n` +
-    `*amend* [job#] [amount] or [desc amount | desc amount] — update unpaid invoice\n` +
+    `*invoice* [job#] [desc amount, desc amount] — itemised invoice\n` +
+    `*amend* [job#] [amount] or [desc amount, desc amount] — update unpaid invoice\n` +
     `*paid* [job#] — mark invoice as paid\n` +
     `*chase* [job#] — send payment reminder to customer\n\n` +
     `*SCHEDULE & REPORTING*\n` +

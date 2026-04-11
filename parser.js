@@ -165,8 +165,8 @@ function parse(raw) {
   );
   if (doneMatch) {
     const rest = doneMatch[2].trim();
-    // Only use line-item parsing when pipe-separated — avoids misreading "total 140"
-    if (rest.includes('|')) {
+    // Only use line-item parsing when comma-separated — avoids misreading "total 140"
+    if (rest.includes(',')) {
       const lineItems = parseLineItems(rest);
       if (lineItems) {
         return {
@@ -397,10 +397,10 @@ function parse(raw) {
 
 // --- Line item parsing ---
 
-// Parses pipe-separated items: "boiler service 250 | parts 45"
+// Parses comma-separated items: "boiler service 250, parts 45"
 // Returns [{description, amount}] or null if any part fails to parse.
 function parseLineItems(str) {
-  const parts = str.split(/\s*\|\s*/).map((s) => s.trim()).filter(Boolean);
+  const parts = str.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
   const items = [];
   for (const part of parts) {
     // Match: "description £?amount" — number at the end

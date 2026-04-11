@@ -42,7 +42,7 @@ function testParseScheduleWithoutDateDoesNotAssumeToday() {
 
 function testParseItemisedQuote() {
   // Multi-item
-  const multi = parse('quote 14 boiler service 250 | parts 45 | callout 50');
+  const multi = parse('quote 14 boiler service 250, parts 45, callout 50');
   assert.equal(multi.kind, 'command');
   assert.equal(multi.intent, 'quote');
   assert.equal(multi.jobId, 14);
@@ -78,7 +78,7 @@ function testParseInvoiceVariants() {
   assert.equal(quick.items, 'boiler service');
 
   // Itemised
-  const itemised = parse('invoice 14 boiler service 250 | parts 45');
+  const itemised = parse('invoice 14 boiler service 250, parts 45');
   assert.equal(itemised.intent, 'send_invoice');
   assert.equal(itemised.amount, 295);
   assert.equal(itemised.lineItems.length, 2);
@@ -94,7 +94,7 @@ function testParseAmendInvoice() {
   assert.equal(quick.items, 'updated service');
 
   // Itemised
-  const itemised = parse('amend invoice 14 service 280 | parts 55');
+  const itemised = parse('amend invoice 14 service 280, parts 55');
   assert.equal(itemised.intent, 'amend_invoice');
   assert.equal(itemised.jobId, 14);
   assert.equal(itemised.amount, 335);
