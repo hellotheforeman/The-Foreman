@@ -1,7 +1,7 @@
 const express = require('express');
 const config = require('./config');
 const { parse } = require('./parser');
-const { dispatch } = require('./handlers');
+const { dispatch, SETTINGS_FIELDS, buildSettingsMenu } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
 const { twimlReply } = require('./messenger');
 const scheduler = require('./scheduler');
@@ -64,6 +64,58 @@ app.post('/webhook', async (req, res) => {
     console.log(`📥 ${business.name}: "${body}" → ${intent.intent}`);
 
     const currentState = await getConversationState(business.id);
+
+    // --- Settings workflow (menu-driven, handled outside the generic workflow engine) ---
+    if (intent.intent === 'settings') {
+      await setConversationState(business.id, {
+        workflow: 'settings',
+        focus: {},
+        collected: {},
+        pending: { type: 'field', field: 'choose' },
+        options: [],
+      });
+      return twimlReply(res, buildSettingsMenu(business));
+    }
+
+    if (currentState?.workflow === 'settings') {
+      const trimmed = body.trim();
+
+      // Allow cancelling out of settings
+      if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Settings closed.');
+      }
+
+      if (currentState.pending?.field === 'choose') {
+        const n = parseInt(trimmed, 10);
+        if (!n || n < 1 || n > SETTINGS_FIELDS.length) {
+          return twimlReply(res, `Please reply with a number 1–${SETTINGS_FIELDS.length}, or *cancel*.`);
+        }
+        const setting = SETTINGS_FIELDS[n - 1];
+        await setConversationState(business.id, {
+          workflow: 'settings',
+          focus: {},
+          collected: { settingKey: setting.key, settingLabel: setting.label },
+          pending: { type: 'field', field: 'value' },
+          options: [],
+        });
+        return twimlReply(res, `What should I change *${setting.label}* to?\n\n(Reply *cancel* to go back)`);
+      }
+
+      if (currentState.pending?.field === 'value') {
+        const { settingKey, settingLabel } = currentState.collected || {};
+        if (settingKey) {
+          await db.updateBusiness(business.id, { [settingKey]: trimmed });
+          await clearConversationState(business.id);
+          return twimlReply(res, `✅ *${settingLabel}* updated to: ${trimmed}`);
+        }
+      }
+
+      // Fallback — show menu again
+      return twimlReply(res, buildSettingsMenu(business));
+    }
+    // --- End settings workflow ---
+
     const workflowResult = await workflowEngine.handleMessage({
       business,
       raw: body,

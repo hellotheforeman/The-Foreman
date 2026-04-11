@@ -1,4 +1,12 @@
 const WORKFLOWS = {
+  new_customer: {
+    requiredFields: ['name', 'phone'],
+    optionalFields: [],
+    prompts: {
+      name: "What's the customer's name?",
+      phone: "What's their phone number?",
+    },
+  },
   new_job: {
     requiredFields: ['name', 'phone', 'description'],
     optionalFields: ['postcode'],

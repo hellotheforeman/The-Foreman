@@ -84,7 +84,7 @@ function testTemplateRendering() {
   const schedule = templates.scheduleConfirmation(job, customer, business);
   const invoiceMsg = templates.invoiceMessage(job, invoice, customer, business);
   const reminder = templates.paymentReminder(job, invoice, customer, business);
-  const followUp = templates.followUpMessage(job, customer, business);
+  const followUp = templates.reviewRequestMessage(job, customer, business);
   const scheduleDay = templates.formatScheduleDay([
     {
       customer_name: 'Mrs Patel',

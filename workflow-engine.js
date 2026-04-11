@@ -4,7 +4,7 @@ const { normaliseConversationState } = require('./conversation-state');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
-  const supported = new Set(['new_job', 'quote', 'schedule']);
+  const supported = new Set(['new_customer', 'new_job', 'quote', 'schedule']);
   return supported.has(parsedIntent.intent) ? parsedIntent.intent : null;
 }
 

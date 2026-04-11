@@ -104,16 +104,16 @@ function paymentReminder(job, invoice, customer, business) {
   ].join('\n');
 }
 
-function followUpMessage(job, customer, business) {
+function reviewRequestMessage(job, customer, business) {
   const name = businessName(business);
   return [
-    `Hi ${customerGreetingName(customer)}! 👋`,
+    `Hi ${customerGreetingName(customer)}! 😊`,
     '',
-    `Hope everything's going well since we did your ${job.description.toLowerCase()}.`,
+    `Thank you for choosing ${name} for your ${job.description.toLowerCase()} — it was great working with you.`,
     '',
-    `If you were happy with the work, a quick Google review would really help us out. 🙏`,
+    `If you were happy with the work, we'd really appreciate a quick Google review. It only takes a minute and means a lot to a small business like ours. 🙏`,
     '',
-    `Thanks again for choosing ${name}!`,
+    `Thanks again!`,
     '',
     `— ${name}`,
   ].join('\n');
@@ -142,7 +142,7 @@ module.exports = {
   scheduleConfirmation,
   invoiceMessage,
   paymentReminder,
-  followUpMessage,
+  reviewRequestMessage,
   formatDate,
   formatScheduleDay,
 };

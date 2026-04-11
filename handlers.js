@@ -3,6 +3,28 @@ const templates = require('./templates');
 const messenger = require('./messenger');
 const { generateQuotePdf, generateInvoicePdf, pdfUrl } = require('./pdf');
 
+// --- Settings helpers (menu shown by handleSettings; flow processed in index.js) ---
+
+const SETTINGS_FIELDS = [
+  { key: 'name',            label: 'Business name' },
+  { key: 'trade',           label: 'Trade / type of work' },
+  { key: 'email',           label: 'Email' },
+  { key: 'address',         label: 'Address' },
+  { key: 'payment_details', label: 'Payment details' },
+];
+
+function buildSettingsMenu(business) {
+  const lines = ['⚙️ *Business Settings*\n', 'Reply with a number to update:\n'];
+  SETTINGS_FIELDS.forEach((s, i) => {
+    const val = business[s.key];
+    const display = val ? (val.length > 45 ? val.slice(0, 45) + '…' : val) : '_not set_';
+    lines.push(`${i + 1}. ${s.label}: ${display}`);
+  });
+  lines.push('\nReply *cancel* to dismiss.');
+  return lines.join('\n');
+}
+
+
 function requireBusiness(intent, res) {
   if (!intent.business) {
     messenger.twimlReply(res, `You're not set up on The Foreman yet. Please contact us to get started.`);
@@ -26,6 +48,7 @@ function requireBusiness(intent, res) {
 // --- Dispatch ---
 
 const commandHandlers = {
+  new_customer: handleNewCustomer,
   new_job: handleNewJob,
   quote: handleQuote,
   schedule: handleSchedule,
@@ -34,10 +57,9 @@ const commandHandlers = {
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   chase: handleChase,
-  follow_up: handleFollowUp,
+  review: handleReview,
   cancel_job: handleCancelJob,
   add_note: handleAddNote,
-  set_payment: handleSetPayment,
   update_customer: handleUpdateCustomer,
 };
 
@@ -47,6 +69,7 @@ const queryHandlers = {
   open_jobs: handleOpenJobs,
   find: handleFind,
   earnings: handleEarnings,
+  settings: handleSettings,
   help: handleHelp,
 };
 
@@ -71,6 +94,19 @@ async function dispatch(intent, res) {
 }
 
 // --- Handlers ---
+
+async function handleNewCustomer(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, null);
+  messenger.twimlReply(
+    res,
+    `👤 Customer saved\n\n` +
+    `*${customer.name}*\n${customer.phone}\n\n` +
+    `To add a job: *new job ${customer.name} ${customer.phone} [description]*`
+  );
+}
 
 async function handleNewJob(intent, res) {
   const business = requireBusiness(intent, res);
@@ -249,18 +285,18 @@ async function handleChase(intent, res) {
   );
 }
 
-async function handleFollowUp(intent, res) {
+async function handleReview(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
 
-  const msg = templates.followUpMessage(job, job.customer, business);
+  const msg = templates.reviewRequestMessage(job, job.customer, business);
 
   messenger.twimlReply(
     res,
-    `⭐ Follow-up for ${job.customer.name} (${job.customer.phone}):\n` +
+    `⭐ Review request for ${job.customer.name} (${job.customer.phone}):\n` +
     `─────────────────\n` +
     `${msg}\n` +
     `─────────────────\n\n` +
@@ -310,12 +346,11 @@ async function handleAddNote(intent, res) {
   messenger.twimlReply(res, `📝 Note added to ${db.formatJobId(intent.jobId)}.`);
 }
 
-async function handleSetPayment(intent, res) {
+async function handleSettings(intent, res) {
+  // Just shows the menu — state management handled in index.js
   const business = requireBusiness(intent, res);
   if (!business) return;
-
-  await db.updateBusiness(business.id, { payment_details: intent.details });
-  messenger.twimlReply(res, `✅ Payment details saved:\n\n${intent.details}\n\nThis will appear on all future invoices.`);
+  messenger.twimlReply(res, buildSettingsMenu(business));
 }
 
 async function handleUpdateCustomer(intent, res) {
@@ -510,25 +545,32 @@ async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
     `🔨 *The Foreman — Commands*\n\n` +
+    `*CUSTOMERS*\n` +
+    `*new customer* [name] [phone]\n` +
+    `*find* [name] — look up a customer and their jobs\n` +
+    `*update* [name] [phone/email/address] [value]\n\n` +
+    `*JOBS*\n` +
     `*new job* [name] [phone] [description]\n` +
-    `*quote* [job#] [amount] [description]\n` +
+    `*note* [job#] [text] — add a note to a job\n` +
+    `*cancel* [job#]\n\n` +
+    `*QUOTES & SCHEDULING*\n` +
+    `*quote* [job#] [amount] [description] — generates a PDF quote\n` +
     `*schedule* [job#] [day] [time]\n` +
-    `*reschedule* [job#] [day] [time]\n` +
-    `*done* [job#] [notes] total [amount]\n` +
-    `*invoice* [job#]\n` +
-    `*paid* [job#]\n` +
-    `*chase* [job#]\n` +
-    `*follow up* [job#]\n` +
-    `*cancel* [job#]\n` +
-    `*note* [job#] [text]\n\n` +
+    `*reschedule* [job#] [day] [time]\n\n` +
+    `*INVOICING*\n` +
+    `*done* [job#] total [amount] — marks complete and creates invoice PDF\n` +
+    `*invoice* [job#] — resend invoice PDF\n` +
+    `*paid* [job#] — mark invoice as paid\n` +
+    `*chase* [job#] — send payment reminder to customer\n\n` +
+    `*SCHEDULE & REPORTING*\n` +
     `*today* / *tomorrow* / *this week* / *next week*\n` +
     `*what's on [day]* — specific date\n` +
-    `*unpaid* — outstanding invoices\n` +
-    `*jobs* — open jobs\n` +
-    `*earnings* — this month's summary\n` +
-    `*find* [name] — customer lookup\n` +
-    `*update* [name] [phone/email/address] [value]\n` +
-    `*payment details* [bank details]\n` +
+    `*unpaid* — all outstanding invoices\n` +
+    `*jobs* — all open jobs\n` +
+    `*earnings* [today/this week/this month/this year]\n\n` +
+    `*OTHER*\n` +
+    `*review* [job#] — send a review request to a customer\n` +
+    `*settings* — update business name, trade, email, address, payment details\n` +
     `*help* — this message`
   );
 }
@@ -545,4 +587,4 @@ async function handleUnknown(intent, res) {
   messenger.twimlReply(res, `🤔 Didn't catch that. Reply *help* for commands.`);
 }
 
-module.exports = { dispatch };
+module.exports = { dispatch, SETTINGS_FIELDS, buildSettingsMenu };

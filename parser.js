@@ -23,6 +23,33 @@ function parse(raw) {
     return { kind: 'continuation', intent: 'cancel' };
   }
 
+  // --- New customer (no job) ---
+  // "new customer Dave Smith 07700900123"
+  const newCustomerMatch = text.match(
+    /^(?:new|add)\s+customer\s+(.+?)\s+((?:\+?44|0)7\d{8,9})\s*$/i
+  );
+  if (newCustomerMatch) {
+    return {
+      kind: 'command',
+      intent: 'new_customer',
+      name: newCustomerMatch[1].trim(),
+      phone: normalisePhone(newCustomerMatch[2]),
+    };
+  }
+
+  // "new customer" or "new customer Dave" — trigger workflow to collect missing fields
+  const newCustomerPartialMatch = text.match(/^(?:new|add)\s+customer(?:\s+(.+))?$/i);
+  if (newCustomerPartialMatch) {
+    const rest = (newCustomerPartialMatch[1] || '').trim();
+    const looksLikePhone = /^(?:\+?44|0)7\d/.test(rest);
+    return {
+      kind: 'command',
+      intent: 'new_customer',
+      name: rest && !looksLikePhone ? rest : null,
+      phone: null,
+    };
+  }
+
   // --- New job ---
   // "new job Mrs Patel 07700900123 boiler service BD7 1AH"
   const newJobMatch = text.match(
@@ -121,11 +148,11 @@ function parse(raw) {
     return { kind: 'command', intent: 'chase', jobId: parseInt(chaseMatch[1], 10) };
   }
 
-  // --- Follow up ---
-  // "follow up 42" or "followup 42"
-  const followMatch = lower.match(/^follow\s*up\s+#?(\d+)\s*$/);
-  if (followMatch) {
-    return { kind: 'command', intent: 'follow_up', jobId: parseInt(followMatch[1], 10) };
+  // --- Review request (ask customer for a review after job complete) ---
+  // "review 42", "follow up 42", "ask for review 42"
+  const reviewMatch = lower.match(/^(?:review|follow\s*up|ask\s+for\s+review)\s+#?(\d+)\s*$/);
+  if (reviewMatch) {
+    return { kind: 'command', intent: 'review', jobId: parseInt(reviewMatch[1], 10) };
   }
 
   // --- Reschedule ---
@@ -154,10 +181,9 @@ function parse(raw) {
     return { kind: 'command', intent: 'cancel_job', jobId: parseInt(cancelJobMatch[1], 10) };
   }
 
-  // --- Set payment details ---
-  const paymentMatch = text.match(/^(?:(?:set|update)\s+)?(?:payment|bank)\s+(?:details?|info)\s*[:\-]?\s*(.+)$/i);
-  if (paymentMatch) {
-    return { kind: 'command', intent: 'set_payment', details: paymentMatch[1].trim() };
+  // --- Business settings menu ---
+  if (/^(?:settings?|business\s+settings?|my\s+settings?)$/i.test(lower)) {
+    return { kind: 'query', intent: 'settings' };
   }
 
   // --- Update customer ---
