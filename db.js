@@ -223,17 +223,31 @@ async function updateBusinessStatus(id, status) {
   return rows[0] || null;
 }
 
-async function findOrCreateCustomer(businessId, name, phone, postcode) {
+async function findOrCreateCustomer(businessId, name, phone, postcode, email) {
   let customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
   if (!customer) {
     const { rows } = await pool.query(
-      'INSERT INTO customers (business_id, name, phone, postcode) VALUES ($1, $2, $3, $4) RETURNING *',
-      [businessId, name, phone, postcode || null]
+      'INSERT INTO customers (business_id, name, phone, postcode, email) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [businessId, name, phone, postcode || null, email || null]
     );
     customer = rows[0];
-  } else if (postcode && !customer.postcode) {
-    await run('UPDATE customers SET postcode = $1 WHERE id = $2', [postcode, customer.id]);
-    customer.postcode = postcode;
+  } else {
+    const updates = [];
+    const vals = [];
+    if (postcode && !customer.postcode) {
+      updates.push(`postcode = $${vals.length + 1}`);
+      vals.push(postcode);
+      customer.postcode = postcode;
+    }
+    if (email && !customer.email) {
+      updates.push(`email = $${vals.length + 1}`);
+      vals.push(email);
+      customer.email = email;
+    }
+    if (updates.length) {
+      vals.push(customer.id);
+      await run(`UPDATE customers SET ${updates.join(', ')} WHERE id = $${vals.length}`, vals);
+    }
   }
   return customer;
 }

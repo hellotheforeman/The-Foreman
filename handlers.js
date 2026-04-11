@@ -99,11 +99,12 @@ async function handleNewCustomer(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, null);
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode || null, intent.email || null);
+  const details = [customer.phone, customer.postcode, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
     `👤 Customer saved\n\n` +
-    `*${customer.name}*\n${customer.phone}\n\n` +
+    `*${customer.name}*\n${details}\n\n` +
     `To add a job: *new job ${customer.name} ${customer.phone} [description]*`
   );
 }
@@ -112,13 +113,13 @@ async function handleNewJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode);
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode, intent.email || null);
   const job = await db.createJob(business.id, customer.id, intent.description, intent.postcode);
-  const postcode = intent.postcode ? `, ${intent.postcode}` : '';
+  const details = [customer.phone, intent.postcode, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
     `✅ Job ${db.formatJobId(job.id)} created\n` +
-    `👤 ${customer.name} — ${customer.phone}${postcode}\n` +
+    `👤 ${customer.name} — ${details}\n` +
     `🔧 ${job.description}\n\n` +
     `Next: *quote ${job.id} [amount] [description]*`
   );
@@ -550,7 +551,7 @@ async function handleHelp(intent, res) {
     `*find* [name] — look up a customer and their jobs\n` +
     `*update* [name] [phone/email/address] [value]\n\n` +
     `*JOBS*\n` +
-    `*new job* [name] [phone] [description]\n` +
+    `*new job* [name] [phone] [description] [postcode]\n` +
     `*note* [job#] [text] — add a note to a job\n` +
     `*cancel* [job#]\n\n` +
     `*QUOTES & SCHEDULING*\n` +

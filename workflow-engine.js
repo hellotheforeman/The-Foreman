@@ -11,7 +11,7 @@ function workflowFromIntent(parsedIntent) {
 function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
   const merged = { ...base };
 
-  for (const key of ['name', 'phone', 'description', 'postcode', 'jobId', 'amount', 'items', 'date', 'time']) {
+  for (const key of ['name', 'phone', 'description', 'postcode', 'email', 'jobId', 'amount', 'items', 'date', 'time']) {
     if (parsedIntent[key] !== undefined && parsedIntent[key] !== null && parsedIntent[key] !== '') {
       merged[key] = parsedIntent[key];
     }
@@ -19,6 +19,14 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
 
   if (base.__expecting === 'description' && raw && !parsedIntent.intent) {
     merged.description = raw.trim();
+  }
+
+  if (base.__expecting === 'postcode' && raw && !parsedIntent.intent) {
+    merged.postcode = raw.trim().toUpperCase();
+  }
+
+  if (base.__expecting === 'email' && raw && !parsedIntent.intent) {
+    merged.email = raw.trim().toLowerCase();
   }
 
   if (base.__expecting === 'amount' && parsedIntent.amount != null) {

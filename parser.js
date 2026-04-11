@@ -26,7 +26,7 @@ function parse(raw) {
   // --- New customer (no job) ---
   // "new customer Dave Smith 07700900123"
   const newCustomerMatch = text.match(
-    /^(?:new|add)\s+customer\s+(.+?)\s+((?:\+?44|0)7\d{8,9})\s*$/i
+    /^(?:new|add)\s+customer\s+(.+?)\s+((?:\+?44|0)7\d{8,9})(?:\s+([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}))?(?:\s+(\S+@\S+))?\s*$/i
   );
   if (newCustomerMatch) {
     return {
@@ -34,6 +34,8 @@ function parse(raw) {
       intent: 'new_customer',
       name: newCustomerMatch[1].trim(),
       phone: normalisePhone(newCustomerMatch[2]),
+      postcode: newCustomerMatch[3] ? newCustomerMatch[3].toUpperCase() : null,
+      email: newCustomerMatch[4] ? newCustomerMatch[4].toLowerCase() : null,
     };
   }
 
@@ -53,7 +55,7 @@ function parse(raw) {
   // --- New job ---
   // "new job Mrs Patel 07700900123 boiler service BD7 1AH"
   const newJobMatch = text.match(
-    /^new\s+(?:job\s+)?(.+?)\s+((?:\+?44|0)7\d{8,9})\s+(.+?)(?:\s+([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}))?\s*$/i
+    /^new\s+(?:job\s+)?(.+?)\s+((?:\+?44|0)7\d{8,9})\s+(.+?)(?:\s+([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}))?(?:\s+(\S+@\S+))?\s*$/i
   );
   if (newJobMatch) {
     return {
@@ -63,6 +65,7 @@ function parse(raw) {
       phone: normalisePhone(newJobMatch[2]),
       description: newJobMatch[3].trim(),
       postcode: newJobMatch[4] ? newJobMatch[4].toUpperCase() : null,
+      email: newJobMatch[5] ? newJobMatch[5].toLowerCase() : null,
     };
   }
 
