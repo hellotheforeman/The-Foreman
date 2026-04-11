@@ -30,12 +30,21 @@ const WORKFLOWS = {
     },
   },
   schedule: {
-    requiredFields: ['jobId', 'date', 'time'],
-    optionalFields: [],
+    requiredFields: ['jobId', 'date'],
+    optionalFields: ['time', 'duration', 'durationUnit'],
     prompts: {
       jobId: 'Which customer or job do you mean?',
       date: 'What day should I book it in for?',
       time: 'What time should I put down?',
+    },
+  },
+  add_block: {
+    requiredFields: ['jobId', 'date'],
+    optionalFields: ['time', 'duration', 'durationUnit'],
+    prompts: {
+      jobId: 'Which job should I add this block to?',
+      date: 'What day should I book it in for?',
+      time: 'What time?',
     },
   },
 };

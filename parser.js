@@ -140,20 +140,39 @@ function parse(raw) {
     };
   }
 
-  // --- Schedule ---
-  // "schedule 42 thursday 9am" or "schedule #0042 tomorrow 2pm"
+  // --- Schedule / Book ---
+  // "schedule 42 thursday 9am", "book 14 friday at 10", "book job 14 for 2 days from tuesday"
   const scheduleMatch = text.match(
-    /^schedule\s+#?(\d+)\s+(.+)$/i
+    /^(?:book(?:\s+job)?|schedule)\s+#?(\d+)\s+(.+)$/i
   );
   if (scheduleMatch) {
-    const { date, time } = parseDatetime(scheduleMatch[2].trim());
+    const { date, time, duration, durationUnit } = parseDatetime(scheduleMatch[2].trim());
     return {
       kind: 'command',
       intent: 'schedule',
       jobId: parseInt(scheduleMatch[1], 10),
       date,
       time,
+      duration: duration || null,
+      durationUnit: durationUnit || null,
       raw: scheduleMatch[2].trim(),
+    };
+  }
+
+  // --- Follow-up block ---
+  // "and then 3 days from following monday", "also friday at 9"
+  const addBlockMatch = text.match(/^(?:and\s+then|also|followed\s+by|then)\s+(.+)$/i);
+  if (addBlockMatch) {
+    const { date, time, duration, durationUnit } = parseDatetime(addBlockMatch[1].trim());
+    return {
+      kind: 'command',
+      intent: 'add_block',
+      jobId: null,
+      date,
+      time,
+      duration: duration || null,
+      durationUnit: durationUnit || null,
+      raw: addBlockMatch[1].trim(),
     };
   }
 
@@ -252,15 +271,18 @@ function parse(raw) {
   }
 
   // --- Reschedule ---
-  const rescheduleMatch = text.match(/^(?:reschedule|rebook|move)\s+#?(\d+)\s+(?:to\s+)?(.+)$/i);
+  // "reschedule 14 to thursday 9am", "reschedule job 14 to Thursday at 9"
+  const rescheduleMatch = text.match(/^(?:reschedule|rebook|move)\s+(?:job\s+)?#?(\d+)\s+(?:to\s+)?(.+)$/i);
   if (rescheduleMatch) {
-    const { date, time } = parseDatetime(rescheduleMatch[2].trim());
+    const { date, time, duration, durationUnit } = parseDatetime(rescheduleMatch[2].trim());
     return {
       kind: 'command',
       intent: 'reschedule',
       jobId: parseInt(rescheduleMatch[1], 10),
       date,
       time,
+      duration: duration || null,
+      durationUnit: durationUnit || null,
       raw: rescheduleMatch[2].trim(),
     };
   }
@@ -367,49 +389,178 @@ function parseLineItems(str) {
 
 // --- Date/time parsing ---
 
+const MONTH_NAMES = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+const SHORT_MONTH_NAMES = ['jan','feb','mar','apr','may','jun','jul','aug','sep','oct','nov','dec'];
+const DAY_NAMES = ['sunday','monday','tuesday','wednesday','thursday','friday','saturday'];
+const SHORT_DAY_NAMES = ['sun','mon','tue','wed','thu','fri','sat'];
+const ALL_MONTHS_PATTERN = [...MONTH_NAMES, ...SHORT_MONTH_NAMES].join('|');
+
 function parseDatetime(str) {
-  const lower = str.toLowerCase();
+  const lower = str.toLowerCase().trim();
   const now = new Date();
   let date = null;
   let time = null;
+  let duration = null;
+  let durationUnit = null;
 
-  // Extract time first (9am, 2pm, 14:00, 9:30am etc)
-  const timeMatch = lower.match(/(\d{1,2})(?::(\d{2}))?\s*(am|pm)?/);
-  if (timeMatch) {
-    let hours = parseInt(timeMatch[1], 10);
-    const mins = timeMatch[2] ? parseInt(timeMatch[2], 10) : 0;
-    const ampm = timeMatch[3];
-    if (ampm === 'pm' && hours < 12) hours += 12;
-    if (ampm === 'am' && hours === 12) hours = 0;
-    time = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}`;
+  // --- Duration: "for 2 days", "2 days from tuesday", "3 hours" ---
+  const durationMatch = lower.match(/\b(?:for\s+)?(\d+)\s+(hour|day)s?\b/);
+  if (durationMatch) {
+    duration = parseInt(durationMatch[1], 10);
+    durationUnit = durationMatch[2] === 'hour' ? 'hours' : 'days';
   }
 
-  // Parse date
+  // --- Time (most specific first to avoid false matches) ---
+
+  // 1. Explicit am/pm: "9am", "2pm", "9:30am", "14:30pm"
+  const ampmMatch = lower.match(/\b(\d{1,2})(?::(\d{2}))?\s*(am|pm)\b/);
+  if (ampmMatch) {
+    let h = parseInt(ampmMatch[1], 10);
+    const m = ampmMatch[2] ? parseInt(ampmMatch[2], 10) : 0;
+    if (ampmMatch[3] === 'pm' && h < 12) h += 12;
+    if (ampmMatch[3] === 'am' && h === 12) h = 0;
+    time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  }
+
+  // 2. "at HH[:MM]" — unambiguous time prefix
+  if (!time) {
+    const atMatch = lower.match(/\bat\s+(\d{1,2})(?::(\d{2}))?\b/);
+    if (atMatch) {
+      const h = parseInt(atMatch[1], 10);
+      const m = atMatch[2] ? parseInt(atMatch[2], 10) : 0;
+      time = `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+    }
+  }
+
+  // 3. HH:MM with colon (24-hour, both sides exactly)
+  if (!time) {
+    const hmMatch = lower.match(/\b(\d{2}):(\d{2})\b/);
+    if (hmMatch) {
+      time = `${hmMatch[1]}:${hmMatch[2]}`;
+    }
+  }
+
+  // --- Date (most specific first) ---
+
+  // 1. ISO: 2026-03-12
+  const isoMatch = lower.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (isoMatch) {
+    date = `${isoMatch[1]}-${isoMatch[2]}-${isoMatch[3]}`;
+    return { date, time, duration, durationUnit };
+  }
+
+  // 2. UK short date: 12/03 or 12/03/26 or 12/03/2026
+  const ukMatch = lower.match(/\b(\d{1,2})\/(\d{1,2})(?:\/(\d{2,4}))?\b/);
+  if (ukMatch) {
+    const day = parseInt(ukMatch[1], 10);
+    const month = parseInt(ukMatch[2], 10);
+    let year = ukMatch[3] ? parseInt(ukMatch[3], 10) : null;
+    if (year !== null && year < 100) year += 2000;
+    if (year === null) {
+      year = now.getFullYear();
+      if (new Date(year, month - 1, day) < now) year++;
+    }
+    date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { date, time, duration, durationUnit };
+  }
+
+  // 3. Month name + day: "march 12" or "march 12th"
+  const monthDayRe = new RegExp(`\\b(${ALL_MONTHS_PATTERN})\\s+(\\d{1,2})(?:st|nd|rd|th)?\\b`);
+  const monthDayMatch = lower.match(monthDayRe);
+  if (monthDayMatch) {
+    const mName = monthDayMatch[1];
+    const mIdx = MONTH_NAMES.indexOf(mName) !== -1 ? MONTH_NAMES.indexOf(mName) : SHORT_MONTH_NAMES.indexOf(mName);
+    const day = parseInt(monthDayMatch[2], 10);
+    let year = now.getFullYear();
+    if (new Date(year, mIdx, day) < now) year++;
+    date = `${year}-${String(mIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { date, time, duration, durationUnit };
+  }
+
+  // 4. Day + month name: "12th march" or "12 march"
+  const dayMonthRe = new RegExp(`\\b(\\d{1,2})(?:st|nd|rd|th)?\\s+(${ALL_MONTHS_PATTERN})\\b`);
+  const dayMonthMatch = lower.match(dayMonthRe);
+  if (dayMonthMatch) {
+    const day = parseInt(dayMonthMatch[1], 10);
+    const mName = dayMonthMatch[2];
+    const mIdx = MONTH_NAMES.indexOf(mName) !== -1 ? MONTH_NAMES.indexOf(mName) : SHORT_MONTH_NAMES.indexOf(mName);
+    let year = now.getFullYear();
+    if (new Date(year, mIdx, day) < now) year++;
+    date = `${year}-${String(mIdx + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { date, time, duration, durationUnit };
+  }
+
+  // 5. Ordinal day only: "12th", "1st" — no month specified
+  // Requires the ordinal suffix to distinguish from bare numbers
+  const ordinalMatch = lower.match(/\b(\d{1,2})(st|nd|rd|th)\b/);
+  if (ordinalMatch) {
+    const day = parseInt(ordinalMatch[1], 10);
+    let year = now.getFullYear();
+    let month = now.getMonth();
+    // If the day of month has already passed this month, use next month
+    if (day <= now.getDate()) {
+      month++;
+      if (month > 11) { month = 0; year++; }
+    }
+    date = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+    return { date, time, duration, durationUnit };
+  }
+
+  // 6. today / tomorrow
   if (lower.includes('today')) {
     date = formatDateISO(now);
-  } else if (lower.includes('tomorrow')) {
+    return { date, time, duration, durationUnit };
+  }
+  if (lower.includes('tomorrow')) {
     const d = new Date(now);
     d.setDate(d.getDate() + 1);
     date = formatDateISO(d);
-  } else {
-    // Try day name (monday, tuesday, etc)
-    const days = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-    const shortDays = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+    return { date, time, duration, durationUnit };
+  }
+
+  // 7. "next week" → Monday of next week
+  if (/\bnext\s+week\b/.test(lower)) {
+    const d = new Date(now);
+    const daysToNextMon = ((1 - d.getDay() + 7) % 7) || 7;
+    d.setDate(d.getDate() + daysToNextMon);
+    date = formatDateISO(d);
+    return { date, time, duration, durationUnit };
+  }
+
+  // 8. "following [day]" → next occurrence + 7
+  const followingMatch = lower.match(/\bfollowing\s+(\w+)\b/);
+  if (followingMatch) {
+    const name = followingMatch[1];
     for (let i = 0; i < 7; i++) {
-      if (lower.includes(days[i]) || lower.includes(shortDays[i])) {
-        const target = i;
+      if (DAY_NAMES[i] === name || SHORT_DAY_NAMES[i] === name) {
         const current = now.getDay();
-        let diff = target - current;
+        let diff = i - current;
         if (diff <= 0) diff += 7;
+        diff += 7; // one week further
         const d = new Date(now);
         d.setDate(d.getDate() + diff);
         date = formatDateISO(d);
-        break;
+        return { date, time, duration, durationUnit };
       }
     }
   }
 
-  return { date, time };
+  // 9. Day names — "monday", "next monday", "fri", etc.
+  // Strip "next" prefix so "next monday" behaves the same as "monday"
+  const strForDays = lower.replace(/\bnext\s+/, '');
+  for (let i = 0; i < 7; i++) {
+    if (strForDays.includes(DAY_NAMES[i]) || strForDays.includes(SHORT_DAY_NAMES[i])) {
+      const current = now.getDay();
+      let diff = i - current;
+      if (diff <= 0) diff += 7;
+      const d = new Date(now);
+      d.setDate(d.getDate() + diff);
+      date = formatDateISO(d);
+      break;
+    }
+  }
+
+  return { date, time, duration, durationUnit };
 }
 
 function normalisePhone(phone) {

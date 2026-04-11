@@ -64,6 +64,27 @@ async function init() {
   `);
 
   await pool.query(`
+    CREATE TABLE IF NOT EXISTS booking_blocks (
+      id SERIAL PRIMARY KEY,
+      job_id INTEGER NOT NULL REFERENCES jobs(id),
+      business_id INTEGER NOT NULL REFERENCES businesses(id),
+      start_date TEXT NOT NULL,
+      start_time TEXT,
+      duration INTEGER,
+      duration_unit TEXT DEFAULT 'hours',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS booking_blocks_job_id_idx ON booking_blocks (job_id)
+  `);
+
+  await pool.query(`
+    CREATE INDEX IF NOT EXISTS booking_blocks_business_date_idx ON booking_blocks (business_id, start_date)
+  `);
+
+  await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
       id SERIAL PRIMARY KEY,
       business_id INTEGER REFERENCES businesses(id),
@@ -190,6 +211,19 @@ async function init() {
     FROM customers c
     WHERE message_log.customer_id = c.id
       AND message_log.business_id IS NULL
+  `);
+
+  // Migrate existing scheduled jobs into booking_blocks (idempotent)
+  await pool.query(`
+    INSERT INTO booking_blocks (job_id, business_id, start_date, start_time)
+    SELECT id, business_id, scheduled_date, scheduled_time
+    FROM jobs
+    WHERE scheduled_date IS NOT NULL
+      AND business_id IS NOT NULL
+      AND status NOT IN ('cancelled', 'complete')
+      AND NOT EXISTS (
+        SELECT 1 FROM booking_blocks WHERE job_id = jobs.id
+      )
   `);
 
   console.log('📦 Database ready');
@@ -340,6 +374,33 @@ async function scheduleJob(jobId, date, time) {
   return getJob(jobId);
 }
 
+async function addBookingBlock(jobId, businessId, startDate, startTime, duration, durationUnit) {
+  const { rows } = await pool.query(
+    `INSERT INTO booking_blocks (job_id, business_id, start_date, start_time, duration, duration_unit)
+     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
+    [jobId, businessId, startDate, startTime || null, duration || null, durationUnit || 'hours']
+  );
+  // Keep jobs.scheduled_date in sync for status transitions and sorting
+  await run(
+    `UPDATE jobs SET scheduled_date = $1, scheduled_time = $2,
+      status = CASE WHEN status IN ('new', 'in progress') THEN 'in progress' ELSE status END
+     WHERE id = $3`,
+    [startDate, startTime || null, jobId]
+  );
+  return rows[0];
+}
+
+async function clearBookingBlocks(jobId, businessId) {
+  await run('DELETE FROM booking_blocks WHERE job_id = $1 AND business_id = $2', [jobId, businessId]);
+}
+
+async function getBookingBlocksForJob(jobId, businessId) {
+  return getAll(
+    'SELECT * FROM booking_blocks WHERE job_id = $1 AND business_id = $2 ORDER BY start_date, start_time NULLS LAST',
+    [jobId, businessId]
+  );
+}
+
 async function cancelJob(jobId, businessId) {
   await run("UPDATE jobs SET status = 'cancelled' WHERE id = $1 AND business_id = $2", [jobId, businessId]);
   return getJob(jobId, businessId);
@@ -347,20 +408,60 @@ async function cancelJob(jobId, businessId) {
 
 async function getScheduleForDate(dateStr, businessId) {
   return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1 AND j.scheduled_date = $2 AND j.status != 'cancelled'
-     ORDER BY j.scheduled_time`,
+    `SELECT
+       j.id, j.description, j.postcode, j.status,
+       bb.id AS block_id,
+       bb.start_date AS scheduled_date,
+       bb.start_time AS scheduled_time,
+       bb.duration,
+       bb.duration_unit,
+       c.name AS customer_name,
+       c.phone AS customer_phone
+     FROM booking_blocks bb
+     JOIN jobs j ON bb.job_id = j.id
+     JOIN customers c ON j.customer_id = c.id
+     WHERE bb.business_id = $1
+       AND j.status != 'cancelled'
+       AND (
+         bb.start_date = $2
+         OR (
+           bb.duration_unit = 'days'
+           AND bb.duration IS NOT NULL
+           AND $2::date > bb.start_date::date
+           AND $2::date <= (bb.start_date::date + (bb.duration - 1) * INTERVAL '1 day')::date
+         )
+       )
+     ORDER BY bb.start_time NULLS LAST`,
     [businessId, dateStr]
   );
 }
 
 async function getScheduleRange(startDate, endDate, businessId) {
   return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1 AND j.scheduled_date BETWEEN $2 AND $3 AND j.status != 'cancelled'
-     ORDER BY j.scheduled_date, j.scheduled_time`,
+    `SELECT
+       j.id, j.description, j.postcode, j.status,
+       bb.id AS block_id,
+       bb.start_date AS scheduled_date,
+       bb.start_time AS scheduled_time,
+       bb.duration,
+       bb.duration_unit,
+       c.name AS customer_name,
+       c.phone AS customer_phone
+     FROM booking_blocks bb
+     JOIN jobs j ON bb.job_id = j.id
+     JOIN customers c ON j.customer_id = c.id
+     WHERE bb.business_id = $1
+       AND j.status != 'cancelled'
+       AND (
+         bb.start_date BETWEEN $2 AND $3
+         OR (
+           bb.duration_unit = 'days'
+           AND bb.duration IS NOT NULL
+           AND bb.start_date::date <= $3::date
+           AND (bb.start_date::date + (bb.duration - 1) * INTERVAL '1 day')::date >= $2::date
+         )
+       )
+     ORDER BY bb.start_date, bb.start_time NULLS LAST`,
     [businessId, startDate, endDate]
   );
 }
@@ -633,6 +734,9 @@ module.exports = {
   getJobWithCustomer,
   setQuote,
   scheduleJob,
+  addBookingBlock,
+  clearBookingBlocks,
+  getBookingBlocksForJob,
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,

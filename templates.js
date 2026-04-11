@@ -49,12 +49,13 @@ function scheduleConfirmation(job, customer, business) {
   const time = job.scheduled_time || 'TBC';
   const postcode = job.postcode ? ` (${job.postcode})` : '';
   const name = businessName(business);
+  const durationSuffix = job.duration ? ` for ${job.duration} ${job.duration_unit || 'hours'}` : '';
   return [
     `Hi ${customerGreetingName(customer)}! ✅`,
     '',
     `Your job is confirmed:`,
     '',
-    `📅 *${date} at ${time}*`,
+    `📅 *${date} at ${time}${durationSuffix}*`,
     `🔧 ${job.description}${postcode}`,
     '',
     `We'll see you then! If you need to reschedule, just reply to this message.`,
@@ -130,9 +131,10 @@ function formatDate(dateStr) {
 function formatScheduleDay(jobs, dateStr) {
   if (!jobs.length) return 'Nothing scheduled.';
   const lines = jobs.map((j) => {
-    const time = j.scheduled_time || 'TBC';
+    const time = j.scheduled_time || j.start_time || 'TBC';
     const postcode = j.postcode ? `, ${j.postcode}` : '';
-    return `• ${time} — ${j.customer_name}, ${j.description}${postcode}`;
+    const durationStr = j.duration ? ` (${j.duration} ${j.duration_unit || 'hrs'})` : '';
+    return `• ${time} — ${j.customer_name}, ${j.description}${postcode}${durationStr}`;
   });
   return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
 }

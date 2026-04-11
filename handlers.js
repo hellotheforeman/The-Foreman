@@ -53,6 +53,7 @@ const commandHandlers = {
   quote: handleQuote,
   schedule: handleSchedule,
   reschedule: handleReschedule,
+  add_block: handleAddBlock,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   amend_invoice: handleAmend,
@@ -164,20 +165,40 @@ async function handleSchedule(intent, res) {
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date from "${intent.raw}". Try: *schedule ${intent.jobId} thursday 9am*`);
 
-  await db.scheduleJob(job.id, intent.date, intent.time);
-  job.scheduled_date = intent.date;
-  job.scheduled_time = intent.time;
+  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
 
   const timeStr = intent.time || 'TBC';
-  const msg = templates.scheduleConfirmation(job, job.customer, business);
+  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
+  const jobForTemplate = { ...job, scheduled_date: intent.date, scheduled_time: intent.time, duration: intent.duration, duration_unit: intent.durationUnit };
+  const msg = templates.scheduleConfirmation(jobForTemplate, job.customer, business);
 
   messenger.twimlReply(
     res,
-    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}\n\n` +
+    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n\n` +
     `Send this confirmation to ${job.customer.name} (${job.customer.phone}):\n` +
     `─────────────────\n` +
     `${msg}\n` +
     `─────────────────`
+  );
+}
+
+async function handleAddBlock(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *and then friday at 9*`);
+
+  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
+
+  const timeStr = intent.time || 'TBC';
+  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
+
+  messenger.twimlReply(
+    res,
+    `📅 Block added: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
+    `${db.formatJobId(job.id)} — ${job.customer.name}.`
   );
 }
 
@@ -332,13 +353,17 @@ async function handleReschedule(intent, res) {
   if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *reschedule ${intent.jobId} thursday 9am*`);
 
-  await db.scheduleJob(job.id, intent.date, intent.time);
+  await db.clearBookingBlocks(job.id, business.id);
+  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
+
   const timeStr = intent.time || 'TBC';
-  const msg = templates.scheduleConfirmation({ ...job, scheduled_date: intent.date, scheduled_time: intent.time }, job.customer, business);
+  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
+  const jobForTemplate = { ...job, scheduled_date: intent.date, scheduled_time: intent.time, duration: intent.duration, duration_unit: intent.durationUnit };
+  const msg = templates.scheduleConfirmation(jobForTemplate, job.customer, business);
 
   messenger.twimlReply(
     res,
-    `📅 Rescheduled: ${templates.formatDate(intent.date)} at ${timeStr}\n\n` +
+    `📅 Rescheduled: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n\n` +
     `Send this update to ${job.customer.name} (${job.customer.phone}):\n` +
     `─────────────────\n${msg}\n─────────────────`
   );

@@ -342,10 +342,22 @@ app.post('/webhook', async (req, res) => {
     }
     // --- End invoice guided workflow ---
 
+    // Inject jobId from follow-up context for add_block when user sent "and then X"
+    // after a successful schedule/add_block action
+    let resolvedIntent = intent;
+    if (
+      intent.intent === 'add_block' &&
+      !intent.jobId &&
+      currentState?.workflow === 'add_block' &&
+      currentState.focus?.jobId
+    ) {
+      resolvedIntent = { ...intent, jobId: currentState.focus.jobId };
+    }
+
     const workflowResult = await workflowEngine.handleMessage({
       business,
       raw: body,
-      parsedIntent: intent,
+      parsedIntent: resolvedIntent,
       currentState,
     });
 
@@ -360,6 +372,8 @@ app.post('/webhook', async (req, res) => {
     }
 
     if (workflowResult?.type === 'action') {
+      const completedIntent = workflowResult.intent;
+
       if (workflowResult.clearState === false) {
         // leave existing state for out-of-band help/query handling
       } else if (workflowResult.state) {
@@ -368,7 +382,19 @@ app.post('/webhook', async (req, res) => {
         await clearConversationState(business.id);
       }
 
-      const nextIntent = { ...workflowResult.intent, business };
+      // After scheduling or adding a block, save follow-up context so the next
+      // "and then X" message knows which job to add another block to.
+      if (['schedule', 'add_block'].includes(completedIntent?.intent) && completedIntent?.jobId) {
+        await setConversationState(business.id, {
+          workflow: 'add_block',
+          focus: { jobId: completedIntent.jobId },
+          collected: { jobId: completedIntent.jobId },
+          pending: null,
+          options: [],
+        });
+      }
+
+      const nextIntent = { ...completedIntent, business };
       return dispatch(nextIntent, res);
     }
 
