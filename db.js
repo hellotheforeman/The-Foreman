@@ -69,12 +69,15 @@ async function init() {
       job_id INTEGER NOT NULL REFERENCES jobs(id),
       business_id INTEGER NOT NULL REFERENCES businesses(id),
       start_date TEXT NOT NULL,
+      end_date TEXT,
       start_time TEXT,
       duration INTEGER,
       duration_unit TEXT DEFAULT 'hours',
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
+
+  await pool.query('ALTER TABLE booking_blocks ADD COLUMN IF NOT EXISTS end_date TEXT');
 
   await pool.query(`
     CREATE INDEX IF NOT EXISTS booking_blocks_job_id_idx ON booking_blocks (job_id)
@@ -374,11 +377,30 @@ async function scheduleJob(jobId, date, time) {
   return getJob(jobId);
 }
 
+// Returns the date that is numDays working days after startDateStr (inclusive).
+// e.g. addWorkingDays('2026-04-17', 3) → '2026-04-21' (Fri → Mon → Tue)
+function addWorkingDays(startDateStr, numDays) {
+  // Use noon UTC to avoid DST edge-cases when formatting back to ISO date
+  const d = new Date(startDateStr + 'T12:00:00Z');
+  let remaining = numDays - 1; // the start date counts as day 1
+  while (remaining > 0) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) remaining--; // skip Sun(0) and Sat(6)
+  }
+  return d.toISOString().split('T')[0];
+}
+
 async function addBookingBlock(jobId, businessId, startDate, startTime, duration, durationUnit) {
+  // For multi-day blocks, compute the last working day so queries can do a simple range check
+  const endDate = (durationUnit === 'days' && duration > 1)
+    ? addWorkingDays(startDate, duration)
+    : startDate;
+
   const { rows } = await pool.query(
-    `INSERT INTO booking_blocks (job_id, business_id, start_date, start_time, duration, duration_unit)
-     VALUES ($1, $2, $3, $4, $5, $6) RETURNING *`,
-    [jobId, businessId, startDate, startTime || null, duration || null, durationUnit || 'hours']
+    `INSERT INTO booking_blocks (job_id, business_id, start_date, end_date, start_time, duration, duration_unit)
+     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
+    [jobId, businessId, startDate, endDate, startTime || null, duration || null, durationUnit || 'hours']
   );
   // Keep jobs.scheduled_date in sync for status transitions and sorting
   await run(
@@ -407,6 +429,10 @@ async function cancelJob(jobId, businessId) {
 }
 
 async function getScheduleForDate(dateStr, businessId) {
+  // Weekends are never working days — return nothing for Sat/Sun
+  const dow = new Date(dateStr + 'T12:00:00Z').getUTCDay();
+  if (dow === 0 || dow === 6) return [];
+
   return getAll(
     `SELECT
        j.id, j.description, j.postcode, j.status,
@@ -422,26 +448,21 @@ async function getScheduleForDate(dateStr, businessId) {
      JOIN customers c ON j.customer_id = c.id
      WHERE bb.business_id = $1
        AND j.status != 'cancelled'
-       AND (
-         bb.start_date = $2
-         OR (
-           bb.duration_unit = 'days'
-           AND bb.duration IS NOT NULL
-           AND $2::date > bb.start_date::date
-           AND $2::date <= (bb.start_date::date + (bb.duration - 1) * INTERVAL '1 day')::date
-         )
-       )
+       AND $2::date BETWEEN bb.start_date::date AND COALESCE(bb.end_date::date, bb.start_date::date)
      ORDER BY bb.start_time NULLS LAST`,
     [businessId, dateStr]
   );
 }
 
 async function getScheduleRange(startDate, endDate, businessId) {
-  return getAll(
+  // Fetch all blocks that overlap the requested range, then expand multi-day
+  // blocks so each working day within the range gets its own row.
+  const blocks = await getAll(
     `SELECT
        j.id, j.description, j.postcode, j.status,
        bb.id AS block_id,
-       bb.start_date AS scheduled_date,
+       bb.start_date,
+       bb.end_date,
        bb.start_time AS scheduled_time,
        bb.duration,
        bb.duration_unit,
@@ -452,18 +473,49 @@ async function getScheduleRange(startDate, endDate, businessId) {
      JOIN customers c ON j.customer_id = c.id
      WHERE bb.business_id = $1
        AND j.status != 'cancelled'
-       AND (
-         bb.start_date BETWEEN $2 AND $3
-         OR (
-           bb.duration_unit = 'days'
-           AND bb.duration IS NOT NULL
-           AND bb.start_date::date <= $3::date
-           AND (bb.start_date::date + (bb.duration - 1) * INTERVAL '1 day')::date >= $2::date
-         )
-       )
+       AND bb.start_date::date <= $3::date
+       AND COALESCE(bb.end_date::date, bb.start_date::date) >= $2::date
      ORDER BY bb.start_date, bb.start_time NULLS LAST`,
     [businessId, startDate, endDate]
   );
+
+  // Expand multi-day blocks into one row per working day within the range
+  const rows = [];
+  const rangeStart = new Date(startDate + 'T12:00:00Z');
+  const rangeEnd = new Date(endDate + 'T12:00:00Z');
+
+  for (const block of blocks) {
+    const blockEnd = block.end_date || block.start_date;
+    if (block.start_date === blockEnd) {
+      // Single-day block — include as-is if it's a weekday
+      const d = new Date(block.start_date + 'T12:00:00Z');
+      const dow = d.getUTCDay();
+      if (dow !== 0 && dow !== 6) {
+        rows.push({ ...block, scheduled_date: block.start_date });
+      }
+    } else {
+      // Multi-day: emit one row per working day within [rangeStart, rangeEnd]
+      const blockStart = new Date(block.start_date + 'T12:00:00Z');
+      const blockEndDate = new Date(blockEnd + 'T12:00:00Z');
+      const cursor = new Date(Math.max(blockStart, rangeStart));
+      const limit = new Date(Math.min(blockEndDate, rangeEnd));
+      while (cursor <= limit) {
+        const dow = cursor.getUTCDay();
+        if (dow !== 0 && dow !== 6) {
+          rows.push({ ...block, scheduled_date: cursor.toISOString().split('T')[0] });
+        }
+        cursor.setUTCDate(cursor.getUTCDate() + 1);
+      }
+    }
+  }
+
+  rows.sort((a, b) => {
+    if (a.scheduled_date < b.scheduled_date) return -1;
+    if (a.scheduled_date > b.scheduled_date) return 1;
+    return (a.scheduled_time || '') < (b.scheduled_time || '') ? -1 : 1;
+  });
+
+  return rows;
 }
 
 async function getOpenJobs(businessId) {
