@@ -149,7 +149,7 @@ async function init() {
     UPDATE jobs SET status = CASE
       WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.job_id = jobs.id AND i.status = 'PAID') THEN 'complete'
       WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.job_id = jobs.id) THEN 'outstanding'
-      WHEN scheduled_date IS NOT NULL THEN 'planned'
+      WHEN scheduled_date IS NOT NULL THEN 'in progress'
       ELSE 'new'
     END
     WHERE status = 'active'
@@ -296,13 +296,7 @@ async function getCustomer(id, businessId) {
 
 // --- Job queries ---
 
-// Status is stored directly on the job. The only exception is 'in progress',
-// which is derived from 'planned' + date since it's time-sensitive.
 function deriveStatus(job) {
-  if (job.status === 'planned') {
-    const today = new Date().toISOString().split('T')[0];
-    return job.scheduled_date <= today ? 'in progress' : 'planned';
-  }
   return job.status;
 }
 
@@ -339,7 +333,7 @@ async function setQuote(jobId, amount, items, lineItemsJson) {
 async function scheduleJob(jobId, date, time) {
   await run(
     `UPDATE jobs SET scheduled_date = $1, scheduled_time = $2,
-      status = CASE WHEN status IN ('new', 'planned') THEN 'planned' ELSE status END
+      status = CASE WHEN status IN ('new', 'in progress') THEN 'in progress' ELSE status END
      WHERE id = $3`,
     [date, time || null, jobId]
   );
