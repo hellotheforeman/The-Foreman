@@ -123,6 +123,14 @@ async function init() {
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_line_items_json JSONB');
   await pool.query('ALTER TABLE invoices ADD COLUMN IF NOT EXISTS line_items_json JSONB');
+  // Legacy column from an old schema — drop the NOT NULL so our INSERT (which omits it) doesn't fail.
+  // Wrapped in a DO block so it silently skips if the column doesn't exist on fresh databases.
+  await pool.query(`
+    DO $$ BEGIN
+      ALTER TABLE conversation_state ALTER COLUMN intent DROP NOT NULL;
+    EXCEPTION WHEN undefined_column THEN NULL;
+    END $$
+  `);
   await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS focus JSONB NOT NULL DEFAULT '{}'::jsonb");
   await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS collected JSONB NOT NULL DEFAULT '{}'::jsonb");
   await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS pending JSONB");
