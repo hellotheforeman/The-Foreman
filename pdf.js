@@ -22,7 +22,20 @@ function drawRule(doc, y, color = '#dddddd') {
   doc.moveTo(50, y).lineTo(doc.page.width - 50, y).strokeColor(color).lineWidth(0.5).stroke();
 }
 
-function generatePdf({ type, docNumber, date, business, customer, description, amount, paymentDetails }) {
+// Normalise line_items_json: accepts array, JSON string, or null.
+// Falls back to a single-item array using description + amount.
+function normaliseLineItems(lineItemsJson, fallbackDescription, fallbackAmount) {
+  if (lineItemsJson) {
+    const parsed = typeof lineItemsJson === 'string' ? JSON.parse(lineItemsJson) : lineItemsJson;
+    if (Array.isArray(parsed) && parsed.length) return parsed;
+  }
+  if (fallbackDescription && fallbackAmount != null) {
+    return [{ description: fallbackDescription, amount: Number(fallbackAmount) }];
+  }
+  return [];
+}
+
+function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails }) {
   ensurePdfDir();
   const filename = `${type}-${docNumber}.pdf`;
   const filepath = path.join(PDF_DIR, filename);
@@ -33,14 +46,13 @@ function generatePdf({ type, docNumber, date, business, customer, description, a
     doc.pipe(stream);
 
     const W = doc.page.width;
-    const L = 50;   // left margin
-    const R = W - 50; // right edge
+    const L = 50;
+    const R = W - 50;
     const mid = W / 2;
 
     // ── HEADER ────────────────────────────────────────────────
     const headerTopY = 50;
 
-    // Left: business name
     const bizName = business?.name || 'My Trade Business';
     doc.font('Helvetica-Bold').fontSize(16).fillColor('#111111')
       .text(bizName, L, headerTopY, { width: mid - L - 10 });
@@ -81,7 +93,6 @@ function generatePdf({ type, docNumber, date, business, customer, description, a
       .text(date, mid, rightY, { width: R - mid, align: 'right' });
     rightY = doc.y;
 
-    // Move below whichever column is taller
     const afterHeader = Math.max(leftY, rightY) + 16;
     drawRule(doc, afterHeader);
 
@@ -110,42 +121,54 @@ function generatePdf({ type, docNumber, date, business, customer, description, a
     const tableBodyY = tableHeaderY + 18;
     drawRule(doc, tableBodyY, '#eeeeee');
 
-    // Description (left, leaving room for amount column)
-    const descWidth = R - L - 100;
-    doc.font('Helvetica').fontSize(10).fillColor('#111111')
-      .text(description, L, tableBodyY + 10, { width: descWidth });
+    const descWidth = R - L - 120;
+    let currentY = tableBodyY + 10;
 
-    const descBottom = doc.y;
+    for (let idx = 0; idx < lineItems.length; idx++) {
+      const item = lineItems[idx];
+      const rowStartY = currentY;
 
-    // Amount (right-aligned, same row)
-    doc.font('Helvetica').fontSize(10).fillColor('#111111')
-      .text(`£${Number(amount).toFixed(2)}`, L, tableBodyY + 10, { width: R - L, align: 'right' });
+      doc.font('Helvetica').fontSize(10).fillColor('#111111')
+        .text(String(item.description), L, rowStartY, { width: descWidth });
+      const afterDesc = doc.y;
+
+      doc.font('Helvetica').fontSize(10).fillColor('#111111')
+        .text(`£${Number(item.amount).toFixed(2)}`, L, rowStartY, { width: R - L, align: 'right' });
+
+      currentY = Math.max(afterDesc, doc.y) + 10;
+
+      if (idx < lineItems.length - 1) {
+        drawRule(doc, currentY, '#eeeeee');
+        currentY += 8;
+      }
+    }
 
     // ── TOTAL ──────────────────────────────────────────────────
-    const totalTopY = Math.max(descBottom, doc.y) + 12;
+    const total = lineItems.reduce((sum, i) => sum + Number(i.amount), 0);
+    const totalTopY = currentY + 6;
     drawRule(doc, totalTopY);
 
     const totalY = totalTopY + 10;
     doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111')
       .text('TOTAL', L, totalY)
-      .text(`£${Number(amount).toFixed(2)}`, L, totalY, { width: R - L, align: 'right' });
+      .text(`£${Number(total).toFixed(2)}`, L, totalY, { width: R - L, align: 'right' });
 
     // ── PAYMENT / NOTE ─────────────────────────────────────────
-    const noteY = doc.y + 24;
+    doc.moveDown(3);
     if (paymentDetails) {
       doc.font('Helvetica-Bold').fontSize(9).fillColor('#888888')
-        .text('PAYMENT DETAILS', L, noteY);
+        .text('PAYMENT DETAILS');
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
-        .text(paymentDetails, L, doc.y + 3);
+        .text(paymentDetails, { paragraphGap: 0 });
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
-        .text('Please pay within 14 days. Thank you for your business.', L, doc.y + 10);
+        .text('Please pay within 14 days. Thank you for your business.', { paragraphGap: 6 });
     } else {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
-        .text('This quote is valid for 30 days. Reply YES to accept or let us know if you have any questions.', L, noteY);
+        .text('This quote is valid for 30 days. Reply YES to accept or let us know if you have any questions.');
     }
 
     // ── FOOTER ─────────────────────────────────────────────────
-    doc.moveDown(3);
+    doc.moveDown(2);
     doc.font('Helvetica').fontSize(8).fillColor('#cccccc')
       .text('Generated by The Foreman', { align: 'center' });
 
@@ -156,28 +179,36 @@ function generatePdf({ type, docNumber, date, business, customer, description, a
 }
 
 async function generateQuotePdf(job, customer, business) {
+  const lineItems = normaliseLineItems(
+    job.quote_line_items_json,
+    job.quote_items || job.description,
+    job.quoted_amount
+  );
   return generatePdf({
     type: 'quote',
     docNumber: job.id,
     date: formatDate(new Date()),
     business,
     customer,
-    description: job.quote_items || job.description,
-    amount: job.quoted_amount,
+    lineItems,
     paymentDetails: null,
   });
 }
 
 async function generateInvoicePdf(job, invoice, customer, business) {
   const paymentDetails = business?.payment_details || config.paymentDetails;
+  const lineItems = normaliseLineItems(
+    invoice.line_items_json,
+    invoice.line_items || job.description,
+    invoice.amount
+  );
   return generatePdf({
     type: 'invoice',
     docNumber: invoice.id,
     date: formatDate(new Date(invoice.created_at || Date.now())),
     business,
     customer,
-    description: invoice.line_items || job.description,
-    amount: invoice.amount,
+    lineItems,
     paymentDetails,
   });
 }

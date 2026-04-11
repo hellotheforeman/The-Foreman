@@ -40,6 +40,69 @@ function testParseScheduleWithoutDateDoesNotAssumeToday() {
   assert.equal(result.date, null);
 }
 
+function testParseItemisedQuote() {
+  // Multi-item
+  const multi = parse('quote 14 boiler service 250 | parts 45 | callout 50');
+  assert.equal(multi.kind, 'command');
+  assert.equal(multi.intent, 'quote');
+  assert.equal(multi.jobId, 14);
+  assert.equal(multi.amount, 345);
+  assert.ok(Array.isArray(multi.lineItems));
+  assert.equal(multi.lineItems.length, 3);
+  assert.equal(multi.lineItems[0].description, 'boiler service');
+  assert.equal(multi.lineItems[0].amount, 250);
+  assert.equal(multi.lineItems[2].amount, 50);
+
+  // Single item (description before amount, no pipe)
+  const single = parse('quote 14 boiler service 250');
+  assert.equal(single.intent, 'quote');
+  assert.equal(single.jobId, 14);
+  assert.equal(single.amount, 250);
+  assert.equal(single.lineItems.length, 1);
+  assert.equal(single.lineItems[0].description, 'boiler service');
+}
+
+function testParseInvoiceVariants() {
+  // Simple (invoice from quote)
+  const simple = parse('invoice 14');
+  assert.equal(simple.kind, 'command');
+  assert.equal(simple.intent, 'send_invoice');
+  assert.equal(simple.jobId, 14);
+  assert.equal(simple.amount, undefined);
+
+  // Quick with amount
+  const quick = parse('invoice 14 350 boiler service');
+  assert.equal(quick.intent, 'send_invoice');
+  assert.equal(quick.jobId, 14);
+  assert.equal(quick.amount, 350);
+  assert.equal(quick.items, 'boiler service');
+
+  // Itemised
+  const itemised = parse('invoice 14 boiler service 250 | parts 45');
+  assert.equal(itemised.intent, 'send_invoice');
+  assert.equal(itemised.amount, 295);
+  assert.equal(itemised.lineItems.length, 2);
+}
+
+function testParseAmendInvoice() {
+  // Quick
+  const quick = parse('amend 14 450 updated service');
+  assert.equal(quick.kind, 'command');
+  assert.equal(quick.intent, 'amend_invoice');
+  assert.equal(quick.jobId, 14);
+  assert.equal(quick.amount, 450);
+  assert.equal(quick.items, 'updated service');
+
+  // Itemised
+  const itemised = parse('amend invoice 14 service 280 | parts 55');
+  assert.equal(itemised.intent, 'amend_invoice');
+  assert.equal(itemised.jobId, 14);
+  assert.equal(itemised.amount, 335);
+  assert.equal(itemised.lineItems.length, 2);
+  assert.equal(itemised.lineItems[0].description, 'service');
+  assert.equal(itemised.lineItems[1].amount, 55);
+}
+
 function testParseQueriesAndContinuations() {
   const jobs = parse('jobs');
   assert.equal(jobs.kind, 'query');
@@ -233,6 +296,9 @@ async function run() {
   testParseQuote();
   testParseSchedule();
   testParseScheduleWithoutDateDoesNotAssumeToday();
+  testParseItemisedQuote();
+  testParseInvoiceVariants();
+  testParseAmendInvoice();
   testParseQueriesAndContinuations();
   testTemplateRendering();
   await testWorkflowCancelClearsPending();

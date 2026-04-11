@@ -70,17 +70,60 @@ function parse(raw) {
   }
 
   // --- Quote ---
-  // "quote 42 85 for service" or "quote #0042 £85 boiler service and valve"
-  const quoteMatch = text.match(
-    /^quote\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.+)$/i
+  // Quick: "quote 42 85" or "quote #0042 £85 boiler service"
+  const quoteQuickMatch = text.match(
+    /^quote\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.*)$/i
   );
-  if (quoteMatch) {
+  if (quoteQuickMatch) {
+    const desc = quoteQuickMatch[3].trim();
+    const amount = parseFloat(quoteQuickMatch[2]);
+    const lineItems = desc ? [{ description: desc, amount }] : null;
     return {
       kind: 'command',
       intent: 'quote',
-      jobId: parseInt(quoteMatch[1], 10),
-      amount: parseFloat(quoteMatch[2]),
-      items: quoteMatch[3].trim(),
+      jobId: parseInt(quoteQuickMatch[1], 10),
+      amount,
+      items: desc || null,
+      lineItems,
+    };
+  }
+
+  // Itemised: "quote 14 boiler service 250 | parts 45" or "quote 14 boiler service 250"
+  const quoteItemisedMatch = text.match(/^quote\s+#?(\d+)\s+(.+)$/i);
+  if (quoteItemisedMatch) {
+    const itemsStr = quoteItemisedMatch[2].trim();
+    const lineItems = parseLineItems(itemsStr);
+    if (lineItems) {
+      return {
+        kind: 'command',
+        intent: 'quote',
+        jobId: parseInt(quoteItemisedMatch[1], 10),
+        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
+        items: itemsStr,
+        lineItems,
+      };
+    }
+    // Has job ID but no parseable amounts — workflow will prompt for amount
+    return {
+      kind: 'command',
+      intent: 'quote',
+      jobId: parseInt(quoteItemisedMatch[1], 10),
+      amount: null,
+      items: itemsStr,
+      lineItems: null,
+    };
+  }
+
+  // Name/partial reference: "quote wood" — workflow engine resolves to a job
+  const quoteNameMatch = text.match(/^quote\s+(.+)$/i);
+  if (quoteNameMatch) {
+    return {
+      kind: 'command',
+      intent: 'quote',
+      jobId: null,
+      amount: null,
+      items: quoteNameMatch[1].trim(),
+      lineItems: null,
     };
   }
 
@@ -103,18 +146,35 @@ function parse(raw) {
 
   // --- Done / complete ---
   // "done 42 service plus valve replacement total 140" or "done 42 140"
+  // Also supports itemised: "done 42 boiler service 250 | parts 45"
   const doneMatch = text.match(
     /^(?:done|complete|finished)\s+#?(\d+)\s+(.+)$/i
   );
   if (doneMatch) {
-    const { amount, notes } = parseDoneDetails(doneMatch[2]);
+    const rest = doneMatch[2].trim();
+    // Only use line-item parsing when pipe-separated — avoids misreading "total 140"
+    if (rest.includes('|')) {
+      const lineItems = parseLineItems(rest);
+      if (lineItems) {
+        return {
+          kind: 'command',
+          intent: 'done',
+          jobId: parseInt(doneMatch[1], 10),
+          amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
+          notes: rest,
+          lineItems,
+        };
+      }
+    }
+    const { amount, notes } = parseDoneDetails(rest);
     return {
       kind: 'command',
       intent: 'done',
       jobId: parseInt(doneMatch[1], 10),
       amount,
       notes,
-      raw: doneMatch[2].trim(),
+      lineItems: null,
+      raw: rest,
     };
   }
 
@@ -138,10 +198,76 @@ function parse(raw) {
   }
 
   // --- Invoice (send) ---
-  // "invoice 42" or "send invoice 42"
+  // Quick with amount: "invoice 14 450" or "invoice 14 450 boiler service"
+  const invoiceQuickMatch = text.match(/^(?:send\s+)?invoice\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
+  if (invoiceQuickMatch) {
+    const desc = invoiceQuickMatch[3].trim();
+    const amount = parseFloat(invoiceQuickMatch[2]);
+    const lineItems = desc ? [{ description: desc, amount }] : null;
+    return {
+      kind: 'command',
+      intent: 'send_invoice',
+      jobId: parseInt(invoiceQuickMatch[1], 10),
+      amount,
+      items: desc || null,
+      lineItems,
+    };
+  }
+
+  // Itemised: "invoice 14 boiler service 250 | parts 45"
+  const invoiceItemisedMatch = text.match(/^(?:send\s+)?invoice\s+#?(\d+)\s+(.+)$/i);
+  if (invoiceItemisedMatch) {
+    const itemsStr = invoiceItemisedMatch[2].trim();
+    const lineItems = parseLineItems(itemsStr);
+    if (lineItems) {
+      return {
+        kind: 'command',
+        intent: 'send_invoice',
+        jobId: parseInt(invoiceItemisedMatch[1], 10),
+        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
+        items: itemsStr,
+        lineItems,
+      };
+    }
+  }
+
+  // Simple: "invoice 42" or "send invoice 42" — creates from existing quote
   const invoiceMatch = lower.match(/^(?:send\s+)?invoice\s+#?(\d+)\s*$/);
   if (invoiceMatch) {
     return { kind: 'command', intent: 'send_invoice', jobId: parseInt(invoiceMatch[1], 10) };
+  }
+
+  // --- Amend invoice ---
+  // "amend 14 450" or "amend 14 450 boiler service" or "amend 14 service 250 | parts 45"
+  const amendQuickMatch = text.match(/^amend(?:\s+invoice)?\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
+  if (amendQuickMatch) {
+    const desc = amendQuickMatch[3].trim();
+    const amount = parseFloat(amendQuickMatch[2]);
+    const lineItems = desc ? [{ description: desc, amount }] : null;
+    return {
+      kind: 'command',
+      intent: 'amend_invoice',
+      jobId: parseInt(amendQuickMatch[1], 10),
+      amount,
+      items: desc || null,
+      lineItems,
+    };
+  }
+
+  const amendItemisedMatch = text.match(/^amend(?:\s+invoice)?\s+#?(\d+)\s+(.+)$/i);
+  if (amendItemisedMatch) {
+    const itemsStr = amendItemisedMatch[2].trim();
+    const lineItems = parseLineItems(itemsStr);
+    if (lineItems) {
+      return {
+        kind: 'command',
+        intent: 'amend_invoice',
+        jobId: parseInt(amendItemisedMatch[1], 10),
+        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
+        items: itemsStr,
+        lineItems,
+      };
+    }
   }
 
   // --- Chase ---
@@ -254,6 +380,22 @@ function parse(raw) {
 
   // --- Unknown ---
   return { kind: 'unknown', intent: 'unknown', raw: text };
+}
+
+// --- Line item parsing ---
+
+// Parses pipe-separated items: "boiler service 250 | parts 45"
+// Returns [{description, amount}] or null if any part fails to parse.
+function parseLineItems(str) {
+  const parts = str.split(/\s*\|\s*/).map((s) => s.trim()).filter(Boolean);
+  const items = [];
+  for (const part of parts) {
+    // Match: "description £?amount" — number at the end
+    const m = part.match(/^(.+?)\s+£?(\d+(?:\.\d{1,2})?)\s*$/);
+    if (!m) return null;
+    items.push({ description: m[1].trim(), amount: parseFloat(m[2]) });
+  }
+  return items.length ? items : null;
 }
 
 // --- Date/time parsing ---

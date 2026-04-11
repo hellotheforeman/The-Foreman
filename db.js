@@ -114,6 +114,8 @@ async function init() {
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
+  await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS quote_line_items_json JSONB');
+  await pool.query('ALTER TABLE invoices ADD COLUMN IF NOT EXISTS line_items_json JSONB');
 
   // Normalise job status: collapse all non-cancelled values to 'active'
   await pool.query(`
@@ -298,8 +300,11 @@ async function getJobWithCustomer(id, businessId) {
   return job;
 }
 
-async function setQuote(jobId, amount, items) {
-  await run('UPDATE jobs SET quoted_amount = $1, quote_items = $2 WHERE id = $3', [amount, items, jobId]);
+async function setQuote(jobId, amount, items, lineItemsJson) {
+  await run(
+    'UPDATE jobs SET quoted_amount = $1, quote_items = $2, quote_line_items_json = $3 WHERE id = $4',
+    [amount, items, lineItemsJson ? JSON.stringify(lineItemsJson) : null, jobId]
+  );
   return getJob(jobId);
 }
 
@@ -399,12 +404,36 @@ async function findLikelyOpenJobs(businessId, query) {
 
 // --- Invoice queries ---
 
-async function createInvoice(businessId, jobId, amount, lineItems) {
+async function createInvoice(businessId, jobId, amount, lineItems, lineItemsJson) {
   const { rows } = await pool.query(
-    'INSERT INTO invoices (business_id, job_id, amount, line_items) VALUES ($1, $2, $3, $4) RETURNING *',
-    [businessId, jobId, amount, lineItems || null]
+    'INSERT INTO invoices (business_id, job_id, amount, line_items, line_items_json) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+    [businessId, jobId, amount, lineItems || null, lineItemsJson ? JSON.stringify(lineItemsJson) : null]
   );
   return rows[0];
+}
+
+async function updateInvoice(jobId, businessId, fields) {
+  const allowed = ['amount', 'line_items', 'line_items_json'];
+  const updates = [];
+  const values = [];
+  let i = 1;
+  for (const [key, val] of Object.entries(fields)) {
+    if (!allowed.includes(key)) continue;
+    if (key === 'line_items_json') {
+      updates.push(`${key} = $${i++}`);
+      values.push(val === null ? null : JSON.stringify(val));
+    } else {
+      updates.push(`${key} = $${i++}`);
+      values.push(val);
+    }
+  }
+  if (!updates.length) return null;
+  values.push(jobId, businessId);
+  const { rows } = await pool.query(
+    `UPDATE invoices SET ${updates.join(', ')} WHERE job_id = $${i++} AND business_id = $${i} AND status != 'PAID' RETURNING *`,
+    values
+  );
+  return rows[0] || null;
 }
 
 async function getInvoiceByJob(jobId, businessId) {
@@ -596,6 +625,7 @@ module.exports = {
   findJobsByDescription,
   findLikelyOpenJobs,
   createInvoice,
+  updateInvoice,
   getInvoiceByJob,
   markInvoicePaid,
   deriveStatus,

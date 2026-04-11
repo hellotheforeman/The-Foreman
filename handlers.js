@@ -56,6 +56,7 @@ const commandHandlers = {
   done: handleDone,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
+  amend_invoice: handleAmend,
   chase: handleChase,
   review: handleReview,
   cancel_job: handleCancelJob,
@@ -132,15 +133,18 @@ async function handleQuote(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
-  await db.setQuote(job.id, intent.amount, intent.items);
+  await db.setQuote(job.id, intent.amount, intent.items, intent.lineItems || null);
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
+  job.quote_line_items_json = intent.lineItems || null;
+
+  const total = Number(intent.amount).toFixed(2);
 
   try {
     const filename = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 Quote ${db.formatJobId(job.id)} — £${Number(intent.amount).toFixed(2)} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
+      `📋 Quote ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
       pdfUrl(filename)
     );
   } catch (err) {
@@ -196,10 +200,12 @@ async function handleDone(intent, res) {
     );
   }
 
-  const lineItems = intent.notes || job.quote_items || job.description;
+  const lineItemsStr = intent.notes || job.quote_items || job.description;
+  const lineItemsJson = intent.lineItems || null;
+
   let invoice = await db.getInvoiceByJob(job.id, business.id);
   if (!invoice) {
-    invoice = await db.createInvoice(business.id, job.id, amount, lineItems);
+    invoice = await db.createInvoice(business.id, job.id, amount, lineItemsStr, lineItemsJson);
   }
 
   try {
@@ -240,10 +246,26 @@ async function handleSendInvoice(intent, res) {
 
   let invoice = await db.getInvoiceByJob(job.id, business.id);
   if (!invoice) {
-    if (!job.quoted_amount) {
-      return messenger.twimlReply(res, `❌ No amount set for job ${db.formatJobId(job.id)}. Use *done ${job.id} total [amount]* first.`);
+    let amount, lineItemsStr, lineItemsJson;
+
+    if (intent.amount != null) {
+      // Amount given explicitly in command
+      amount = intent.amount;
+      lineItemsStr = intent.items || null;
+      lineItemsJson = intent.lineItems || null;
+    } else if (job.quoted_amount) {
+      // Invoice from existing quote — copy quote data
+      amount = job.quoted_amount;
+      lineItemsStr = job.quote_items || job.description;
+      lineItemsJson = job.quote_line_items_json || null;
+    } else {
+      return messenger.twimlReply(
+        res,
+        `❌ No amount set for job ${db.formatJobId(job.id)}.\n\nUse:\n• *invoice ${job.id} 450 description*\n• *done ${job.id} total 450*`
+      );
     }
-    invoice = await db.createInvoice(business.id, job.id, job.quoted_amount, job.quote_items || job.description);
+
+    invoice = await db.createInvoice(business.id, job.id, amount, lineItemsStr, lineItemsJson);
   }
 
   try {
@@ -260,6 +282,47 @@ async function handleSendInvoice(intent, res) {
       res,
       `🧾 Invoice for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nReply *paid ${job.id}* when settled.`
     );
+  }
+}
+
+async function handleAmend(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+
+  const invoice = await db.getInvoiceByJob(job.id, business.id);
+  if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(intent.jobId)}.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ Invoice ${db.formatJobId(intent.jobId)} is already paid — can't amend it.`);
+
+  if (intent.amount == null) {
+    return messenger.twimlReply(
+      res,
+      `❌ Couldn't parse an amount. Try:\n• *amend ${intent.jobId} 450 description*\n• *amend ${intent.jobId} service 250 | parts 45*`
+    );
+  }
+
+  await db.updateInvoice(job.id, business.id, {
+    amount: intent.amount,
+    line_items: intent.items || null,
+    line_items_json: intent.lineItems || null,
+  });
+
+  // Re-fetch to get updated values with db-generated fields
+  const updatedInvoice = await db.getInvoiceByJob(job.id, business.id);
+  updatedInvoice.line_items_json = intent.lineItems || null;
+
+  try {
+    const filename = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
+    messenger.twimlReplyWithMedia(
+      res,
+      `✅ Invoice ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Reply *paid ${job.id}* when settled.`,
+      pdfUrl(filename)
+    );
+  } catch (err) {
+    console.error('Invoice PDF generation failed:', err.message);
+    messenger.twimlReply(res, `✅ Invoice ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}`);
   }
 }
 
@@ -555,12 +618,17 @@ async function handleHelp(intent, res) {
     `*note* [job#] [text] — add a note to a job\n` +
     `*cancel* [job#]\n\n` +
     `*QUOTES & SCHEDULING*\n` +
-    `*quote* [job#] [amount] [description] — generates a PDF quote\n` +
+    `*quote* [job#] [amount] [description] — quick PDF quote\n` +
+    `*quote* [job#] [desc amount | desc amount] — itemised PDF quote\n` +
     `*schedule* [job#] [day] [time]\n` +
     `*reschedule* [job#] [day] [time]\n\n` +
     `*INVOICING*\n` +
     `*done* [job#] total [amount] — marks complete and creates invoice PDF\n` +
-    `*invoice* [job#] — resend invoice PDF\n` +
+    `*done* [job#] [desc amount | desc amount] — itemised invoice\n` +
+    `*invoice* [job#] — invoice from existing quote\n` +
+    `*invoice* [job#] [amount] [desc] — quick invoice\n` +
+    `*invoice* [job#] [desc amount | desc amount] — itemised invoice\n` +
+    `*amend* [job#] [amount] or [desc amount | desc amount] — update unpaid invoice\n` +
     `*paid* [job#] — mark invoice as paid\n` +
     `*chase* [job#] — send payment reminder to customer\n\n` +
     `*SCHEDULE & REPORTING*\n` +
