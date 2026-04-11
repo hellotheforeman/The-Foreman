@@ -1,6 +1,7 @@
 const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
 const { resolveSingleJobReference } = require('./entity-resolver');
 const { normaliseConversationState } = require('./conversation-state');
+const { parseLineItems } = require('./parser');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
@@ -11,7 +12,7 @@ function workflowFromIntent(parsedIntent) {
 function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
   const merged = { ...base };
 
-  for (const key of ['name', 'phone', 'description', 'postcode', 'email', 'jobId', 'amount', 'items', 'date', 'time']) {
+  for (const key of ['name', 'phone', 'description', 'postcode', 'email', 'jobId', 'amount', 'items', 'lineItems', 'date', 'time']) {
     if (parsedIntent[key] !== undefined && parsedIntent[key] !== null && parsedIntent[key] !== '') {
       merged[key] = parsedIntent[key];
     }
@@ -29,8 +30,18 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
     merged.email = raw.trim().toLowerCase();
   }
 
-  if (base.__expecting === 'amount' && parsedIntent.amount != null) {
-    merged.amount = parsedIntent.amount;
+  if (base.__expecting === 'amount') {
+    if (parsedIntent.amount != null) {
+      merged.amount = parsedIntent.amount;
+    } else if (raw) {
+      // Accept line items as an alternative to a single price: "service 250 | parts 45"
+      const lineItems = parseLineItems(raw.trim());
+      if (lineItems) {
+        merged.amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
+        merged.items = raw.trim();
+        merged.lineItems = lineItems;
+      }
+    }
   }
 
   if (base.__expecting === 'date' && parsedIntent.date) {

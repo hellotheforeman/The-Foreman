@@ -221,7 +221,7 @@ async function testQuoteWorkflowPromptsForAmountAfterResolvingByName() {
   assert.equal(result.workflow, 'quote');
   assert.equal(result.state.collected.jobId, 5);
   assert.equal(result.state.pending.field, 'amount');
-  assert.equal(result.message, 'What price should I use?');
+  assert.ok(result.message.startsWith('What price should I use?'));
 }
 
 async function testQuoteWorkflowAmbiguousMatchPromptsForSelection() {

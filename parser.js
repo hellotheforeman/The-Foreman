@@ -114,6 +114,19 @@ function parse(raw) {
     };
   }
 
+  // Job ID only — no amount or items: "quote 14" → triggers guided workflow
+  const quoteJustIdMatch = lower.match(/^quote\s+#?(\d+)\s*$/);
+  if (quoteJustIdMatch) {
+    return {
+      kind: 'command',
+      intent: 'quote',
+      jobId: parseInt(quoteJustIdMatch[1], 10),
+      amount: null,
+      items: null,
+      lineItems: null,
+    };
+  }
+
   // Name/partial reference: "quote wood" — workflow engine resolves to a job
   const quoteNameMatch = text.match(/^quote\s+(.+)$/i);
   if (quoteNameMatch) {
@@ -482,4 +495,4 @@ function formatDateISO(d) {
   return d.toISOString().split('T')[0];
 }
 
-module.exports = { parse, normalisePhone };
+module.exports = { parse, normalisePhone, parseLineItems };

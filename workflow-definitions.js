@@ -25,7 +25,7 @@ const WORKFLOWS = {
     optionalFields: ['items'],
     prompts: {
       jobId: 'Which customer or job do you mean?',
-      amount: 'What price should I use?',
+      amount: 'What price should I use?\n\n(Or itemised: *service 250 | parts 45*)',
       items: 'What should I put on the quote?',
     },
   },
