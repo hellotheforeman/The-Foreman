@@ -1,6 +1,7 @@
 const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
+const { generateQuotePdf, generateInvoicePdf, pdfUrl } = require('./pdf');
 
 function requireBusiness(intent, res) {
   if (!intent.business) {
@@ -93,17 +94,21 @@ async function handleQuote(intent, res) {
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
 
-  const msg = templates.quoteMessage(job, job.customer, business);
-
-  messenger.twimlReply(
-    res,
-    `📋 Quote ready for ${job.customer.name} (${job.customer.phone})\n\n` +
-    `Copy and send this to them on WhatsApp:\n` +
-    `─────────────────\n` +
-    `${msg}\n` +
-    `─────────────────\n\n` +
-    `When they accept, use *schedule ${job.id} [day] [time]* to book it in.`
-  );
+  try {
+    const filename = await generateQuotePdf(job, job.customer, business);
+    messenger.twimlReplyWithMedia(
+      res,
+      `📋 Quote ${db.formatJobId(job.id)} — £${Number(intent.amount).toFixed(2)} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
+      pdfUrl(filename)
+    );
+  } catch (err) {
+    console.error('Quote PDF generation failed:', err.message);
+    const msg = templates.quoteMessage(job, job.customer, business);
+    messenger.twimlReply(
+      res,
+      `📋 Quote ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, use *schedule ${job.id} [day] [time]* to book it in.`
+    );
+  }
 }
 
 async function handleSchedule(intent, res) {
@@ -154,17 +159,22 @@ async function handleDone(intent, res) {
   if (!invoice) {
     invoice = await db.createInvoice(business.id, job.id, amount, lineItems);
   }
-  const msg = templates.invoiceMessage(job, invoice, job.customer, business);
 
-  messenger.twimlReply(
-    res,
-    `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\n` +
-    `Send this invoice to ${job.customer.name} (${job.customer.phone}):\n` +
-    `─────────────────\n` +
-    `${msg}\n` +
-    `─────────────────\n\n` +
-    `Once paid, reply *paid ${job.id}*`
-  );
+  try {
+    const filename = await generateInvoicePdf(job, invoice, job.customer, business);
+    messenger.twimlReplyWithMedia(
+      res,
+      `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\nInvoice for ${job.customer.name} attached. Forward this to them on WhatsApp.\n\nOnce paid, reply *paid ${job.id}*`,
+      pdfUrl(filename)
+    );
+  } catch (err) {
+    console.error('Invoice PDF generation failed:', err.message);
+    const msg = templates.invoiceMessage(job, invoice, job.customer, business);
+    messenger.twimlReply(
+      res,
+      `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\n${msg}\n\nOnce paid, reply *paid ${job.id}*`
+    );
+  }
 }
 
 async function handlePaid(intent, res) {
@@ -194,16 +204,21 @@ async function handleSendInvoice(intent, res) {
     invoice = await db.createInvoice(business.id, job.id, job.quoted_amount, job.quote_items || job.description);
   }
 
-  const msg = templates.invoiceMessage(job, invoice, job.customer, business);
-
-  messenger.twimlReply(
-    res,
-    `🧾 Invoice for ${job.customer.name} (${job.customer.phone}):\n` +
-    `─────────────────\n` +
-    `${msg}\n` +
-    `─────────────────\n\n` +
-    `Copy and send this on WhatsApp. Reply *paid ${job.id}* when settled.`
-  );
+  try {
+    const filename = await generateInvoicePdf(job, invoice, job.customer, business);
+    messenger.twimlReplyWithMedia(
+      res,
+      `🧾 Invoice for ${job.customer.name} — £${Number(invoice.amount).toFixed(2)}\n\nForward this PDF to them on WhatsApp. Reply *paid ${job.id}* when settled.`,
+      pdfUrl(filename)
+    );
+  } catch (err) {
+    console.error('Invoice PDF generation failed:', err.message);
+    const msg = templates.invoiceMessage(job, invoice, job.customer, business);
+    messenger.twimlReply(
+      res,
+      `🧾 Invoice for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nReply *paid ${job.id}* when settled.`
+    );
+  }
 }
 
 async function handleChase(intent, res) {

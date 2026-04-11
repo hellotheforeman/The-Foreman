@@ -36,7 +36,16 @@ function twimlReply(res, body) {
   res.type('text/xml').send(twiml.toString());
 }
 
+function twimlReplyWithMedia(res, body, mediaUrl) {
+  const twiml = new twilio.twiml.MessagingResponse();
+  const msg = twiml.message();
+  msg.body(body);
+  msg.media(mediaUrl);
+  res.type('text/xml').send(twiml.toString());
+}
+
 module.exports = {
   sendToForeman,
   twimlReply,
+  twimlReplyWithMedia,
 };

@@ -10,6 +10,7 @@ const config = {
   adminSecret: process.env.ADMIN_SECRET,
   businessName: process.env.BUSINESS_NAME || 'My Trade Business',
   paymentDetails: process.env.BUSINESS_PAYMENT_DETAILS || 'Please contact us for payment details.',
+  publicUrl: (process.env.PUBLIC_URL || 'http://localhost:3000').replace(/\/$/, ''),
   port: parseInt(process.env.PORT, 10) || 3000,
 };
 

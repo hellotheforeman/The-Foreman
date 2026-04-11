@@ -11,10 +11,12 @@ const { registerSignupRoutes } = require('./signup');
 const workflowEngine = require('./workflow-engine');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
 
+const path = require('path');
 const app = express();
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
+app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
 
 registerSignupRoutes(app);
 registerAdminRoutes(app);
