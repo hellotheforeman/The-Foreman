@@ -118,7 +118,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_details TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS business_name TEXT');
-  await pool.query('UPDATE businesses SET business_name = name WHERE business_name IS NULL');
+  await pool.query('UPDATE businesses SET business_name = "name" WHERE business_name IS NULL');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS email TEXT');
   await pool.query('ALTER TABLE customers ADD COLUMN IF NOT EXISTS address TEXT');
   await pool.query('ALTER TABLE jobs ADD COLUMN IF NOT EXISTS notes TEXT');
