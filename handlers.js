@@ -544,17 +544,19 @@ async function handleFind(intent, res) {
   const results = [];
   for (const c of customers.slice(0, 5)) {
     const jobs = await db.getAll(
-      `SELECT j.*, COALESCE(i.amount, j.quoted_amount) AS latest_amount
+      `SELECT j.*, COALESCE(i.amount, j.quoted_amount) AS latest_amount,
+              COALESCE(j.scheduled_date, j.created_at::date) AS sort_date
        FROM jobs j
        LEFT JOIN invoices i ON i.job_id = j.id
        WHERE j.business_id = $1 AND j.customer_id = $2
-       ORDER BY j.created_at DESC LIMIT 5`,
+       ORDER BY COALESCE(j.scheduled_date, j.created_at::date) DESC LIMIT 5`,
       [business.id, c.id]
     );
     const jobLines = jobs.map((j) => {
       const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
-      return `  - ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
+      const date = formatShortDate(j.sort_date);
+      return `  - ${date} ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
     });
     const contactParts = [c.phone, c.email, c.address || c.postcode].filter(Boolean);
     results.push(
@@ -599,6 +601,15 @@ async function handleCancel(intent, res) {
 
 async function handleUnknown(intent, res) {
   messenger.twimlReply(res, `🤔 Didn't catch that. Reply *help* for commands.`);
+}
+
+function formatShortDate(dateStr) {
+  if (!dateStr) return '??-???-??';
+  const d = new Date(dateStr);
+  const day = String(d.getUTCDate()).padStart(2, '0');
+  const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
+  const year = String(d.getUTCFullYear()).slice(2);
+  return `${day}-${month}-${year}`;
 }
 
 module.exports = { dispatch, SETTINGS_FIELDS, buildSettingsMenu };
