@@ -143,13 +143,16 @@ async function init() {
   await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS options JSONB NOT NULL DEFAULT '[]'::jsonb");
   await pool.query("ALTER TABLE conversation_state ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()");
 
-  // Normalise job status: collapse all non-cancelled values to 'active'
+  // Migrate job status to the full set of meaningful values.
+  // Only touches rows that are still on the old 'active' value.
   await pool.query(`
     UPDATE jobs SET status = CASE
-      WHEN LOWER(status) = 'cancelled' THEN 'cancelled'
-      ELSE 'active'
+      WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.job_id = jobs.id AND i.status = 'PAID') THEN 'complete'
+      WHEN EXISTS (SELECT 1 FROM invoices i WHERE i.job_id = jobs.id) THEN 'outstanding'
+      WHEN scheduled_date IS NOT NULL THEN 'planned'
+      ELSE 'new'
     END
-    WHERE status NOT IN ('active', 'cancelled')
+    WHERE status = 'active'
   `);
 
   await pool.query(`
@@ -293,21 +296,20 @@ async function getCustomer(id, businessId) {
 
 // --- Job queries ---
 
-// Derives the display status from job data and its invoice (if any).
-// Status is never stored manually — it's always computed from position in the funnel.
-function deriveStatus(job, invoice = null) {
-  if (job.status === 'cancelled') return 'cancelled';
-  if (invoice?.status === 'PAID') return 'complete';
-  if (invoice) return 'outstanding';
-  if (!job.scheduled_date) return 'new';
-  const today = new Date().toISOString().split('T')[0];
-  return job.scheduled_date > today ? 'planned' : 'in progress';
+// Status is stored directly on the job. The only exception is 'in progress',
+// which is derived from 'planned' + date since it's time-sensitive.
+function deriveStatus(job) {
+  if (job.status === 'planned') {
+    const today = new Date().toISOString().split('T')[0];
+    return job.scheduled_date <= today ? 'in progress' : 'planned';
+  }
+  return job.status;
 }
 
 async function createJob(businessId, customerId, description, postcode) {
   const { rows } = await pool.query(
     'INSERT INTO jobs (business_id, customer_id, description, postcode, status) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [businessId, customerId, description, postcode || null, 'active']
+    [businessId, customerId, description, postcode || null, 'new']
   );
   return rows[0];
 }
@@ -335,12 +337,12 @@ async function setQuote(jobId, amount, items, lineItemsJson) {
 }
 
 async function scheduleJob(jobId, date, time) {
-  await run('UPDATE jobs SET scheduled_date = $1, scheduled_time = $2 WHERE id = $3', [date, time || null, jobId]);
-  return getJob(jobId);
-}
-
-async function completeJob(jobId, notes) {
-  await run('UPDATE jobs SET completion_notes = $1, completed_at = NOW() WHERE id = $2', [notes || null, jobId]);
+  await run(
+    `UPDATE jobs SET scheduled_date = $1, scheduled_time = $2,
+      status = CASE WHEN status IN ('new', 'planned') THEN 'planned' ELSE status END
+     WHERE id = $3`,
+    [date, time || null, jobId]
+  );
   return getJob(jobId);
 }
 
@@ -370,16 +372,12 @@ async function getScheduleRange(startDate, endDate, businessId) {
 }
 
 async function getOpenJobs(businessId) {
-  // Open = not cancelled, and no paid invoice
   return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone,
-            i.id AS invoice_id, i.status AS invoice_status
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j
      JOIN customers c ON j.customer_id = c.id
-     LEFT JOIN invoices i ON i.job_id = j.id
      WHERE j.business_id = $1
-       AND j.status != 'cancelled'
-       AND (i.id IS NULL OR i.status != 'PAID')
+       AND j.status NOT IN ('cancelled', 'complete')
      ORDER BY j.created_at DESC`,
     [businessId]
   );
@@ -389,9 +387,7 @@ async function findOpenJobsByCustomerName(businessId, query) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
-     LEFT JOIN invoices i ON i.job_id = j.id
-     WHERE j.business_id = $1 AND j.status != 'cancelled'
-       AND (i.id IS NULL OR i.status != 'PAID')
+     WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'complete')
        AND LOWER(c.name) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
@@ -402,9 +398,7 @@ async function findJobsByDescription(businessId, query) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
-     LEFT JOIN invoices i ON i.job_id = j.id
-     WHERE j.business_id = $1 AND j.status != 'cancelled'
-       AND (i.id IS NULL OR i.status != 'PAID')
+     WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'complete')
        AND LOWER(j.description) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
@@ -435,6 +429,7 @@ async function createInvoice(businessId, jobId, amount, lineItems, lineItemsJson
     'INSERT INTO invoices (business_id, job_id, amount, line_items, line_items_json) VALUES ($1, $2, $3, $4, $5) RETURNING *',
     [businessId, jobId, amount, lineItems || null, lineItemsJson ? JSON.stringify(lineItemsJson) : null]
   );
+  await run("UPDATE jobs SET status = 'outstanding' WHERE id = $1 AND status != 'cancelled'", [jobId]);
   return rows[0];
 }
 
@@ -471,6 +466,7 @@ async function getInvoiceByJob(jobId, businessId) {
 
 async function markInvoicePaid(invoiceId) {
   await run("UPDATE invoices SET status = 'PAID', paid_at = NOW() WHERE id = $1", [invoiceId]);
+  await run("UPDATE jobs SET status = 'complete' WHERE id = (SELECT job_id FROM invoices WHERE id = $1)", [invoiceId]);
   return getOne('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
 }
 
@@ -643,7 +639,6 @@ module.exports = {
   getJobWithCustomer,
   setQuote,
   scheduleJob,
-  completeJob,
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
