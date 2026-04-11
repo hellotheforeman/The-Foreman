@@ -131,10 +131,12 @@ function formatDate(dateStr) {
 function formatScheduleDay(jobs, dateStr) {
   if (!jobs.length) return 'Nothing scheduled.';
   const lines = jobs.map((j) => {
-    const time = j.scheduled_time || j.start_time || 'TBC';
+    const rawTime = j.scheduled_time || j.start_time || null;
+    const isMultiDay = j.duration_unit === 'days' && j.duration;
+    const timePrefix = rawTime ? `${rawTime} — ` : isMultiDay ? '' : 'TBC — ';
     const postcode = j.postcode ? `, ${j.postcode}` : '';
     const durationStr = j.duration ? ` (${j.duration} ${j.duration_unit || 'hrs'})` : '';
-    return `• ${time} — ${j.customer_name}, ${j.description}${postcode}${durationStr}`;
+    return `• ${timePrefix}${j.customer_name}, ${j.description}${postcode}${durationStr}`;
   });
   return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
 }
