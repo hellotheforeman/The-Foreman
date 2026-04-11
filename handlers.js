@@ -53,7 +53,6 @@ const commandHandlers = {
   quote: handleQuote,
   schedule: handleSchedule,
   reschedule: handleReschedule,
-  done: handleDone,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   amend_invoice: handleAmend,
@@ -182,49 +181,6 @@ async function handleSchedule(intent, res) {
   );
 }
 
-async function handleDone(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
-
-  await db.completeJob(job.id, intent.notes);
-
-  const amount = intent.amount != null ? Number(intent.amount) : (job.quoted_amount != null ? Number(job.quoted_amount) : null);
-  if (amount == null || Number.isNaN(amount)) {
-    return messenger.twimlReply(
-      res,
-      `✅ Job ${db.formatJobId(job.id)} marked complete.\n\n` +
-      `No amount set — use *invoice ${job.id} [amount]* to generate the invoice.`
-    );
-  }
-
-  const lineItemsStr = intent.notes || job.quote_items || job.description;
-  const lineItemsJson = intent.lineItems || null;
-
-  let invoice = await db.getInvoiceByJob(job.id, business.id);
-  if (!invoice) {
-    invoice = await db.createInvoice(business.id, job.id, amount, lineItemsStr, lineItemsJson);
-  }
-
-  try {
-    const filename = await generateInvoicePdf(job, invoice, job.customer, business);
-    messenger.twimlReplyWithMedia(
-      res,
-      `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\nInvoice for ${job.customer.name} attached. Forward this to them on WhatsApp.\n\nOnce paid, reply *paid ${job.id}*`,
-      pdfUrl(filename)
-    );
-  } catch (err) {
-    console.error('Invoice PDF generation failed:', err.message);
-    const msg = templates.invoiceMessage(job, invoice, job.customer, business);
-    messenger.twimlReply(
-      res,
-      `✅ Job ${db.formatJobId(job.id)} complete — £${amount.toFixed(2)}\n\n${msg}\n\nOnce paid, reply *paid ${job.id}*`
-    );
-  }
-}
-
 async function handlePaid(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
@@ -261,7 +217,7 @@ async function handleSendInvoice(intent, res) {
     } else {
       return messenger.twimlReply(
         res,
-        `❌ No amount set for job ${db.formatJobId(job.id)}.\n\nUse:\n• *invoice ${job.id} 450 description*\n• *done ${job.id} total 450*`
+        `❌ No amount set for job ${db.formatJobId(job.id)}.\n\nUse: *invoice ${job.id} 450 description*`
       );
     }
 
@@ -610,27 +566,27 @@ async function handleHelp(intent, res) {
     res,
     `🔨 *The Foreman — Commands*\n\n` +
     `*CUSTOMERS*\n` +
-    `*new customer* [name] [phone]\n` +
+    `*new customer* [name] [phone] [postcode] — add a customer\n` +
     `*find* [name] — look up a customer and their jobs\n` +
     `*update* [name] [phone/email/address] [value]\n\n` +
     `*JOBS*\n` +
     `*new job* [name] [phone] [description] [postcode]\n` +
     `*note* [job#] [text] — add a note to a job\n` +
-    `*cancel* [job#]\n\n` +
-    `*QUOTES & SCHEDULING*\n` +
-    `*quote* [job#] [amount] [description] — quick PDF quote\n` +
-    `*quote* [job#] [desc amount, desc amount] — itemised PDF quote\n` +
+    `*cancel job* [job#]\n\n` +
+    `*QUOTES*\n` +
+    `*quote* [job#] — guided (quick or itemised)\n` +
+    `*quote* [job#] [amount] — quick quote\n` +
+    `*quote* [job#] [desc amount, desc amount] — itemised quote\n` +
     `*schedule* [job#] [day] [time]\n` +
     `*reschedule* [job#] [day] [time]\n\n` +
     `*INVOICING*\n` +
-    `*done* [job#] total [amount] — marks complete and creates invoice PDF\n` +
-    `*done* [job#] [desc amount, desc amount] — itemised invoice\n` +
-    `*invoice* [job#] — invoice from existing quote\n` +
+    `*invoice* [job#] — guided flow (uses quote if one exists)\n` +
     `*invoice* [job#] [amount] [desc] — quick invoice\n` +
     `*invoice* [job#] [desc amount, desc amount] — itemised invoice\n` +
-    `*amend* [job#] [amount] or [desc amount, desc amount] — update unpaid invoice\n` +
+    `*amend* [job#] [amount] — update unpaid invoice\n` +
+    `*amend* [job#] [desc amount, desc amount] — itemised amend\n` +
     `*paid* [job#] — mark invoice as paid\n` +
-    `*chase* [job#] — send payment reminder to customer\n\n` +
+    `*chase* [job#] — send payment reminder\n\n` +
     `*SCHEDULE & REPORTING*\n` +
     `*today* / *tomorrow* / *this week* / *next week*\n` +
     `*what's on [day]* — specific date\n` +

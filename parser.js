@@ -157,52 +157,6 @@ function parse(raw) {
     };
   }
 
-  // --- Done / complete ---
-  // "done 42 service plus valve replacement total 140" or "done 42 140"
-  // Also supports itemised: "done 42 boiler service 250 | parts 45"
-  const doneMatch = text.match(
-    /^(?:done|complete|finished)\s+#?(\d+)\s+(.+)$/i
-  );
-  if (doneMatch) {
-    const rest = doneMatch[2].trim();
-    // Only use line-item parsing when comma-separated — avoids misreading "total 140"
-    if (rest.includes(',')) {
-      const lineItems = parseLineItems(rest);
-      if (lineItems) {
-        return {
-          kind: 'command',
-          intent: 'done',
-          jobId: parseInt(doneMatch[1], 10),
-          amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
-          notes: rest,
-          lineItems,
-        };
-      }
-    }
-    const { amount, notes } = parseDoneDetails(rest);
-    return {
-      kind: 'command',
-      intent: 'done',
-      jobId: parseInt(doneMatch[1], 10),
-      amount,
-      notes,
-      lineItems: null,
-      raw: rest,
-    };
-  }
-
-  // Simple "done 42"
-  const doneSimpleMatch = lower.match(/^(?:done|complete|finished)\s+#?(\d+)\s*$/);
-  if (doneSimpleMatch) {
-    return {
-      kind: 'command',
-      intent: 'done',
-      jobId: parseInt(doneSimpleMatch[1], 10),
-      amount: null,
-      notes: null,
-    };
-  }
-
   // --- Paid ---
   // "paid 42" or "paid #0042"
   const paidMatch = lower.match(/^paid\s+#?(\d+)\s*$/);
@@ -456,27 +410,6 @@ function parseDatetime(str) {
   }
 
   return { date, time };
-}
-
-function parseDoneDetails(str) {
-  // Try to find amount: "total 140", "£140", just "140" at end
-  let amount = null;
-  let notes = str;
-
-  const totalMatch = str.match(/(?:total|£)\s*(\d+(?:\.\d{1,2})?)/i);
-  if (totalMatch) {
-    amount = parseFloat(totalMatch[1]);
-    notes = str.replace(totalMatch[0], '').trim();
-  } else {
-    // Check if the whole thing is just a number
-    const justNumber = str.match(/^(\d+(?:\.\d{1,2})?)\s*$/);
-    if (justNumber) {
-      amount = parseFloat(justNumber[1]);
-      notes = null;
-    }
-  }
-
-  return { amount, notes: notes || null };
 }
 
 function normalisePhone(phone) {
