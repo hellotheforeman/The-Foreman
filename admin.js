@@ -97,10 +97,8 @@ function renderBusinessCard(business) {
         <div><dt>Phone</dt><dd>${escapeHtml(business.phone)}</dd></div>
         <div><dt>Email</dt><dd>${escapeHtml(business.email || '—')}</dd></div>
         <div><dt>Contact</dt><dd>${escapeHtml(business.contact_name || '—')}</dd></div>
-        <div><dt>Postcode</dt><dd>${escapeHtml(business.postcode || '—')}</dd></div>
         <div><dt>Created</dt><dd>${escapeHtml(new Date(business.created_at).toLocaleString('en-GB'))}</dd></div>
       </dl>
-      ${business.notes ? `<p class="notes">${escapeHtml(business.notes)}</p>` : ''}
       <div class="actions">${actions.join('')}</div>
     </article>
   `;

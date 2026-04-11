@@ -17,10 +17,8 @@ async function init() {
       contact_name TEXT,
       email TEXT,
       phone TEXT NOT NULL UNIQUE,
-      postcode TEXT,
       address TEXT,
       payment_details TEXT,
-      notes TEXT,
       status TEXT NOT NULL DEFAULT 'pending',
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
@@ -113,8 +111,8 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS trade TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS contact_name TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS email TEXT');
-  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS postcode TEXT');
-  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS notes TEXT');
+  await pool.query('ALTER TABLE businesses DROP COLUMN IF EXISTS postcode');
+  await pool.query('ALTER TABLE businesses DROP COLUMN IF EXISTS notes');
   await pool.query("ALTER TABLE businesses ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'pending'");
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT NOW()');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS address TEXT');
@@ -216,17 +214,17 @@ function parseJobId(str) {
 
 // --- Customer queries ---
 
-async function createBusiness({ name, trade, contact_name, email, phone, postcode, notes }) {
+async function createBusiness({ name, trade, contact_name, email, phone }) {
   const existing = await getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
   if (existing) {
     return existing;
   }
 
   const { rows } = await pool.query(
-    `INSERT INTO businesses (name, business_name, trade, contact_name, email, phone, postcode, notes, status)
-     VALUES ($1, $1, $2, $3, $4, $5, $6, $7, 'pending')
+    `INSERT INTO businesses (name, business_name, trade, contact_name, email, phone, status)
+     VALUES ($1, $1, $2, $3, $4, $5, 'pending')
      RETURNING *`,
-    [name, trade || null, contact_name || null, email || null, phone, postcode || null, notes || null]
+    [name, trade || null, contact_name || null, email || null, phone]
   );
 
   return rows[0];

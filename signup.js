@@ -105,19 +105,9 @@ function renderSignupPage(error = '', values = {}) {
           <input type="email" name="email" value="${escapeHtml(values.email || '')}" />
         </label>
       </div>
-      <div class="grid">
-        <label>
-          WhatsApp number
-          <input name="phone" required placeholder="07800 900123" value="${escapeHtml(values.phone || '')}" />
-        </label>
-        <label>
-          Postcode
-          <input name="postcode" value="${escapeHtml(values.postcode || '')}" />
-        </label>
-      </div>
       <label>
-        Notes
-        <textarea name="notes" placeholder="Anything useful about the business, service area, or setup">${escapeHtml(values.notes || '')}</textarea>
+        WhatsApp number
+        <input name="phone" required placeholder="07800 900123" value="${escapeHtml(values.phone || '')}" />
       </label>
       <button type="submit">Request access</button>
     </form>
@@ -138,8 +128,6 @@ function registerSignupRoutes(app) {
       contact_name: (req.body.contact_name || '').trim(),
       email: (req.body.email || '').trim(),
       phone: (req.body.phone || '').trim(),
-      postcode: (req.body.postcode || '').trim(),
-      notes: (req.body.notes || '').trim(),
     };
 
     const phone = normalisePhone(values.phone);
