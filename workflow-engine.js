@@ -5,7 +5,7 @@ const { parseLineItems } = require('./parser');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
-  const supported = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'add_block']);
+  const supported = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block']);
   return supported.has(parsedIntent.intent) ? parsedIntent.intent : null;
 }
 
@@ -247,7 +247,7 @@ async function handlePendingField({ business, currentState, parsedIntent, raw, r
 }
 
 async function resolveJobIfNeeded({ business, workflow, parsedIntent, raw, currentState, collected, resolveJobReference = resolveSingleJobReference }) {
-  if (!['quote', 'schedule', 'add_block'].includes(workflow)) {
+  if (!['quote', 'schedule', 'reschedule', 'add_block'].includes(workflow)) {
     return { status: 'not_needed', collected };
   }
 

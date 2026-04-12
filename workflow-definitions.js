@@ -38,6 +38,15 @@ const WORKFLOWS = {
       time: 'What time should I put down?',
     },
   },
+  reschedule: {
+    requiredFields: ['jobId', 'date'],
+    optionalFields: ['time', 'duration', 'durationUnit'],
+    prompts: {
+      jobId: 'Which job do you want to reschedule?',
+      date: 'What day should I move it to?',
+      time: 'What time?',
+    },
+  },
   add_block: {
     requiredFields: ['jobId', 'date'],
     optionalFields: ['time', 'duration', 'durationUnit'],
