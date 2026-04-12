@@ -309,6 +309,21 @@ async function handleMessage({ business, raw, parsedIntent, currentState, resolv
     };
   }
 
+  // Any other query or non-workflow command while mid-flow clears the pending
+  // state and runs the new intent normally. This also handles abandoned flows:
+  // the next message the tradesperson sends will clear the stale state.
+  if (normalised && (
+    parsedIntent?.kind === 'query' ||
+    (parsedIntent?.kind === 'command' && !workflowFromIntent(parsedIntent))
+  )) {
+    return {
+      type: 'action',
+      intent: parsedIntent,
+      state: null,
+      workflow: null,
+    };
+  }
+
   if (normalised && isExplicitNewCommand(parsedIntent)) {
     // Explicit new command overrides stale pending flow.
   } else {

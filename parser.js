@@ -320,12 +320,25 @@ function parse(raw) {
   }
 
   // --- Schedule view ---
-  if (/^(today|tomorrow|this week|next week|schedule|diary|what'?s on)\s*(today|tomorrow)?\s*$/i.test(lower)) {
+  if (/^(today|tomorrow|this week|next week|week after next|schedule|diary|what'?s on)\s*(today|tomorrow)?\s*$/i.test(lower)) {
     let period = 'today';
     if (lower.includes('tomorrow')) period = 'tomorrow';
+    else if (lower.includes('week after next')) period = 'week_after_next';
     else if (lower.includes('next week')) period = 'next_week';
     else if (lower.includes('this week') || lower.includes('week')) period = 'week';
     return { kind: 'query', intent: 'view_schedule', period };
+  }
+
+  // Week of a specific date: "week of 27th April", "week starting 27 April", "w/c 27th"
+  const weekOfMatch = lower.match(/^(?:week\s+(?:of|starting|commencing|from)|w\/c)\s+(.+)$/);
+  if (weekOfMatch) {
+    const { date } = parseDatetime(weekOfMatch[1].trim());
+    if (date) {
+      const d = new Date(date);
+      const day = d.getDay();
+      d.setDate(d.getDate() + (day === 0 ? -6 : 1 - day)); // rewind to Monday
+      return { kind: 'query', intent: 'view_schedule', period: 'week_of', date: d.toISOString().split('T')[0] };
+    }
   }
 
   // Specific date: "what's on friday", "what have I got on thursday", "schedule tuesday"

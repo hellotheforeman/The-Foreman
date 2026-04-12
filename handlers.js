@@ -447,18 +447,25 @@ async function handleViewSchedule(intent, res) {
     return messenger.twimlReply(res, `*This week:*\n\n${lines}`);
   }
 
-  if (intent.period === 'next_week') {
-    // Advance to next Monday
-    const daysUntilNextMonday = ((1 - now.getDay() + 7) % 7) || 7;
-    const start = new Date(now);
-    start.setDate(start.getDate() + daysUntilNextMonday);
+  if (intent.period === 'next_week' || intent.period === 'week_after_next' || intent.period === 'week_of') {
+    let start;
+    let label;
+    if (intent.period === 'week_of') {
+      start = new Date(intent.date);
+      label = `Week of ${templates.formatDate(intent.date)}`;
+    } else {
+      const daysUntilNextMonday = ((1 - now.getDay() + 7) % 7) || 7;
+      start = new Date(now);
+      start.setDate(start.getDate() + daysUntilNextMonday + (intent.period === 'week_after_next' ? 7 : 0));
+      label = intent.period === 'week_after_next' ? 'Week after next' : 'Next week';
+    }
     const startStr = start.toISOString().split('T')[0];
     const end = new Date(start);
     end.setDate(end.getDate() + 6);
     const endStr = end.toISOString().split('T')[0];
     const jobs = await db.getScheduleRange(startStr, endStr, business.id);
 
-    if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled next week. 📭`);
+    if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled that week. 📭`);
 
     const byDate = {};
     for (const j of jobs) {
@@ -469,7 +476,7 @@ async function handleViewSchedule(intent, res) {
       .map(([d, js]) => templates.formatScheduleDay(js, d))
       .join('\n\n');
 
-    return messenger.twimlReply(res, `*Next week:*\n\n${lines}`);
+    return messenger.twimlReply(res, `*${label}:*\n\n${lines}`);
   }
 
   if (intent.period === 'date') {

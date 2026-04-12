@@ -147,6 +147,11 @@ app.post('/webhook', async (req, res) => {
         return twimlReply(res, 'Quote cancelled.');
       }
 
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
       if (currentState.pending?.field === 'quote_type') {
         const n = parseInt(trimmed, 10);
         if (n !== 1 && n !== 2) {
@@ -250,6 +255,11 @@ app.post('/webhook', async (req, res) => {
       if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         return twimlReply(res, 'Invoice flow cancelled.');
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
       }
 
       // Has a quote — mode selection
@@ -426,6 +436,12 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
   if (quoteItems) return quoteItems;
   if (quotedAmount) return String(quotedAmount);
   return '';
+}
+
+const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block', 'settings']);
+
+function isWorkflowInterrupt(intent) {
+  return intent?.kind === 'query' || (intent?.kind === 'command' && !WORKFLOW_INTENTS.has(intent.intent));
 }
 
 function normalisePhone(phone) {
