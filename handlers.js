@@ -653,7 +653,11 @@ async function handleViewJob(intent, res) {
   lines.push('');
   if (invoice) {
     const invStatus = invoice.status === 'PAID' ? 'Paid ✅' : invoice.status === 'OVERDUE' ? 'Overdue ⚠️' : 'Sent, awaiting payment';
-    lines.push(`🧾 Invoice: £${Number(invoice.amount).toFixed(2)} — ${invStatus}`);
+    lines.push(`🧾 *Invoice — ${invStatus}*`);
+    if (invoice.line_items) {
+      lines.push(invoice.line_items);
+    }
+    lines.push(`Total: £${Number(invoice.amount).toFixed(2)}`);
   } else {
     lines.push('🧾 Invoice: Not sent');
   }
