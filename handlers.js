@@ -146,18 +146,21 @@ async function handleQuote(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
 
+  const isReQuote = !!job.quoted_amount;
+
   await db.setQuote(job.id, intent.amount, intent.items, intent.lineItems || null);
   job.quoted_amount = intent.amount;
   job.quote_items = intent.items;
   job.quote_line_items_json = intent.lineItems || null;
 
   const total = Number(intent.amount).toFixed(2);
+  const label = isReQuote ? 'Re-quoted' : 'Quote';
 
   try {
     const filename = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 Quote ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
+      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
       pdfUrl(filename)
     );
   } catch (err) {
@@ -165,7 +168,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 Quote ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, use *schedule ${job.id} [day] [time]* to book it in.`
+      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, use *schedule ${job.id} [day] [time]* to book it in.`
     );
   }
 }

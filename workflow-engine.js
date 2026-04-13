@@ -12,7 +12,7 @@ function workflowFromIntent(parsedIntent) {
 function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
   const merged = { ...base };
 
-  for (const key of ['name', 'phone', 'description', 'postcode', 'email', 'jobId', 'amount', 'items', 'lineItems', 'date', 'time', 'duration', 'durationUnit']) {
+  for (const key of ['name', 'phone', 'description', 'email', 'jobId', 'amount', 'items', 'lineItems', 'date', 'time', 'duration', 'durationUnit']) {
     if (parsedIntent[key] !== undefined && parsedIntent[key] !== null && parsedIntent[key] !== '') {
       merged[key] = parsedIntent[key];
     }
@@ -20,10 +20,6 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
 
   if (base.__expecting === 'description' && raw && !parsedIntent.intent) {
     merged.description = raw.trim();
-  }
-
-  if (base.__expecting === 'postcode' && raw && !parsedIntent.intent) {
-    merged.postcode = raw.trim().toUpperCase();
   }
 
   if (base.__expecting === 'email' && raw && !parsedIntent.intent) {
@@ -50,6 +46,24 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
 
   if (base.__expecting === 'time' && parsedIntent.time) {
     merged.time = parsedIntent.time;
+  }
+
+  // --- Validation ---
+  // Amount: must be a positive number; clear if invalid so the workflow re-prompts
+  if (merged.amount != null) {
+    const n = Number(merged.amount);
+    if (isNaN(n) || n <= 0) delete merged.amount;
+  }
+
+  // Date: must be a real calendar date; clear if invalid
+  if (merged.date != null) {
+    const d = new Date(merged.date + 'T00:00:00');
+    if (isNaN(d.getTime())) delete merged.date;
+  }
+
+  // items/lineItems: ensure both are always paired
+  if (merged.lineItems && !merged.items) {
+    merged.items = merged.lineItems.map((i) => `${i.description} ${i.amount}`).join(', ');
   }
 
   delete merged.__expecting;

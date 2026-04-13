@@ -83,9 +83,12 @@ function parse(raw) {
     };
   }
 
-  // --- Quote ---
+  // --- Quote (and re-quote aliases) ---
+  // Normalise "requote", "re-quote", "update quote" → treated identically to "quote"
+  const normalisedForQuote = text.replace(/^(?:re-?quote|update\s+quote)\s+/i, 'quote ');
+
   // Quick: "quote 42 85" or "quote #0042 £85 boiler service"
-  const quoteQuickMatch = text.match(
+  const quoteQuickMatch = normalisedForQuote.match(
     /^quote\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.*)$/i
   );
   if (quoteQuickMatch) {
@@ -103,7 +106,7 @@ function parse(raw) {
   }
 
   // Itemised: "quote 14 boiler service 250 | parts 45" or "quote 14 boiler service 250"
-  const quoteItemisedMatch = text.match(/^quote\s+#?(\d+)\s+(.+)$/i);
+  const quoteItemisedMatch = normalisedForQuote.match(/^quote\s+#?(\d+)\s+(.+)$/i);
   if (quoteItemisedMatch) {
     const itemsStr = quoteItemisedMatch[2].trim();
     const lineItems = parseLineItems(itemsStr);
@@ -129,7 +132,7 @@ function parse(raw) {
   }
 
   // Job ID only — no amount or items: "quote 14" → triggers guided workflow
-  const quoteJustIdMatch = lower.match(/^quote\s+#?(\d+)\s*$/);
+  const quoteJustIdMatch = normalisedForQuote.toLowerCase().match(/^quote\s+#?(\d+)\s*$/);
   if (quoteJustIdMatch) {
     return {
       kind: 'command',
@@ -142,7 +145,7 @@ function parse(raw) {
   }
 
   // Name/partial reference: "quote wood" — workflow engine resolves to a job
-  const quoteNameMatch = text.match(/^quote\s+(.+)$/i);
+  const quoteNameMatch = normalisedForQuote.match(/^quote\s+(.+)$/i);
   if (quoteNameMatch) {
     return {
       kind: 'command',
