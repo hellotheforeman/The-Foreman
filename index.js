@@ -133,19 +133,23 @@ app.post('/webhook', async (req, res) => {
         await setConversationState(business.id, {
           workflow: 'settings',
           focus: {},
-          collected: { settingKey: setting.key, settingLabel: setting.label },
+          collected: { settingKey: setting.key, settingLabel: setting.label, settingType: setting.type || 'text' },
           pending: { type: 'field', field: 'value' },
           options: [],
         });
-        return twimlReply(res, `What should I change *${setting.label}* to?\n\n(Reply *cancel* to go back)`);
+        const hint = setting.hint || '(Reply *cancel* to go back)';
+        return twimlReply(res, `What should I change *${setting.label}* to?\n\n${hint}`);
       }
 
       if (currentState.pending?.field === 'value') {
-        const { settingKey, settingLabel } = currentState.collected || {};
+        const { settingKey, settingLabel, settingType } = currentState.collected || {};
         if (settingKey) {
-          await db.updateBusiness(business.id, { [settingKey]: trimmed });
+          const isBoolean = settingType === 'boolean';
+          const value = isBoolean ? /^(yes|y|true|1)$/i.test(trimmed) : trimmed;
+          const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;
+          await db.updateBusiness(business.id, { [settingKey]: value });
           await clearConversationState(business.id);
-          return twimlReply(res, `✅ *${settingLabel}* updated to: ${trimmed}`);
+          return twimlReply(res, `✅ *${settingLabel}* updated to: ${displayValue}`);
         }
       }
 

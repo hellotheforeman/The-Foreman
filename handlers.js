@@ -11,13 +11,22 @@ const SETTINGS_FIELDS = [
   { key: 'email',          label: 'Email' },
   { key: 'address',        label: 'Address' },
   { key: 'payment_details', label: 'Payment details' },
+  { key: 'vat_registered', label: 'VAT registered', type: 'boolean', hint: 'Reply *yes* or *no*' },
+  { key: 'vat_number',     label: 'VAT number' },
 ];
 
 function buildSettingsMenu(business) {
   const lines = ['⚙️ *Business Settings*\n', 'Reply with a number to update:\n'];
   SETTINGS_FIELDS.forEach((s, i) => {
     const val = business[s.key];
-    const display = val ? (val.length > 45 ? val.slice(0, 45) + '…' : val) : '_not set_';
+    let display;
+    if (val === null || val === undefined || val === '') {
+      display = '_not set_';
+    } else if (s.type === 'boolean') {
+      display = val ? 'Yes' : 'No';
+    } else {
+      display = String(val).length > 45 ? String(val).slice(0, 45) + '…' : String(val);
+    }
     lines.push(`${i + 1}. ${s.label}: ${display}`);
   });
   lines.push('\nReply *cancel* to dismiss.');
@@ -68,6 +77,8 @@ const queryHandlers = {
   view_schedule: handleViewSchedule,
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
+  jobs_by_status: handleJobsByStatus,
+  view_job: handleViewJob,
   find: handleFind,
   earnings: handleEarnings,
   settings: handleSettings,
@@ -600,6 +611,74 @@ async function handleFind(intent, res) {
   messenger.twimlReply(res, results.join('\n\n'));
 }
 
+async function handleViewJob(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+
+  const [blocks, invoice] = await Promise.all([
+    db.getBookingBlocksForJob(intent.jobId, business.id),
+    db.getInvoiceByJob(intent.jobId, business.id),
+  ]);
+
+  const c = job.customer;
+  const lines = [`*${db.formatJobId(job.id)} — ${job.description}*`];
+
+  const contactParts = [c.phone, c.email, c.address || c.postcode].filter(Boolean);
+  lines.push(`${c.name}${contactParts.length ? ' · ' + contactParts.join(' · ') : ''}`);
+  lines.push('');
+  lines.push(`Status: ${db.deriveStatus(job)}`);
+
+  if (job.quoted_amount) {
+    const items = job.quote_items ? ` (${job.quote_items})` : '';
+    lines.push(`Quoted: £${Number(job.quoted_amount).toFixed(2)}${items}`);
+  }
+
+  if (blocks.length) {
+    lines.push('');
+    lines.push('📅 *Booked:*');
+    for (const b of blocks) {
+      const isMultiDay = b.duration_unit === 'days' && b.duration > 1;
+      const dateStr = isMultiDay
+        ? `${templates.formatDate(b.start_date)} – ${templates.formatDate(b.end_date)}`
+        : templates.formatDate(b.start_date);
+      const time = b.start_time ? ` at ${b.start_time}` : '';
+      const dur = isMultiDay ? ` (${b.duration} days)` : (b.duration ? ` (${b.duration} ${b.duration_unit})` : '');
+      lines.push(`• ${dateStr}${time}${dur}`);
+    }
+  }
+
+  lines.push('');
+  if (invoice) {
+    const invStatus = invoice.status === 'PAID' ? 'Paid ✅' : invoice.status === 'OVERDUE' ? 'Overdue ⚠️' : 'Sent, awaiting payment';
+    lines.push(`🧾 Invoice: £${Number(invoice.amount).toFixed(2)} — ${invStatus}`);
+  } else {
+    lines.push('🧾 Invoice: Not sent');
+  }
+
+  if (job.notes) {
+    lines.push('');
+    lines.push(`📝 ${job.notes}`);
+  }
+
+  messenger.twimlReply(res, lines.join('\n'));
+}
+
+async function handleJobsByStatus(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const jobs = await db.getJobsByStatus(business.id, intent.status);
+  const label = intent.status.charAt(0).toUpperCase() + intent.status.slice(1);
+
+  if (!jobs.length) return messenger.twimlReply(res, `No ${intent.status} jobs. 📭`);
+
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description}`);
+  messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}`);
+}
+
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
@@ -615,6 +694,8 @@ async function handleHelp(intent, res) {
     `*chase* [job#] — send payment reminder\n\n` +
     `*today* / *this week* — view schedule\n` +
     `*jobs* — open jobs\n` +
+    `*job* [#] — full job detail\n` +
+    `*new jobs* / *in progress* / *completed jobs* — jobs by status\n` +
     `*unpaid* — outstanding invoices\n` +
     `*earnings* — income summary\n\n` +
     `*review* [job#] — request a review\n` +

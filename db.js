@@ -229,6 +229,9 @@ async function init() {
       )
   `);
 
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
+
   console.log('📦 Database ready');
 }
 
@@ -535,6 +538,17 @@ async function getOpenJobs(businessId) {
   );
 }
 
+async function getJobsByStatus(businessId, status) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1 AND j.status = $2
+     ORDER BY j.created_at DESC`,
+    [businessId, status]
+  );
+}
+
 async function findOpenJobsByCustomerName(businessId, query) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
@@ -797,6 +811,7 @@ module.exports = {
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
+  getJobsByStatus,
   findOpenJobsByCustomerName,
   findJobsByDescription,
   findLikelyOpenJobs,

@@ -35,7 +35,7 @@ function normaliseLineItems(lineItemsJson, fallbackDescription, fallbackAmount) 
   return [];
 }
 
-function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails }) {
+function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails, vat }) {
   ensurePdfDir();
   const filename = `${type}-${docNumber}.pdf`;
   const filepath = path.join(PDF_DIR, filename);
@@ -75,6 +75,12 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     if (business?.address) {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
         .text(business.address, L, leftY, { width: mid - L - 10 });
+      leftY = doc.y;
+    }
+
+    if (vat?.number) {
+      doc.font('Helvetica').fontSize(9).fillColor('#888888')
+        .text(`VAT No: ${vat.number}`, L, leftY, { width: mid - L - 10 });
       leftY = doc.y;
     }
 
@@ -144,14 +150,37 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     }
 
     // ── TOTAL ──────────────────────────────────────────────────
-    const total = lineItems.reduce((sum, i) => sum + Number(i.amount), 0);
+    const subtotal = lineItems.reduce((sum, i) => sum + Number(i.amount), 0);
     const totalTopY = currentY + 6;
     drawRule(doc, totalTopY);
 
-    const totalY = totalTopY + 10;
-    doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111')
-      .text('TOTAL', L, totalY)
-      .text(`£${Number(total).toFixed(2)}`, L, totalY, { width: R - L, align: 'right' });
+    if (vat) {
+      const vatAmount = subtotal * vat.rate;
+      const grandTotal = subtotal + vatAmount;
+      let ty = totalTopY + 10;
+
+      doc.font('Helvetica').fontSize(10).fillColor('#555555')
+        .text('SUBTOTAL', L, ty)
+        .text(`£${subtotal.toFixed(2)}`, L, ty, { width: R - L, align: 'right' });
+      ty += 20;
+
+      doc.font('Helvetica').fontSize(10).fillColor('#555555')
+        .text(`VAT (${Math.round(vat.rate * 100)}%)`, L, ty)
+        .text(`£${vatAmount.toFixed(2)}`, L, ty, { width: R - L, align: 'right' });
+      ty += 8;
+
+      drawRule(doc, ty);
+      ty += 10;
+
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111')
+        .text('TOTAL', L, ty)
+        .text(`£${grandTotal.toFixed(2)}`, L, ty, { width: R - L, align: 'right' });
+    } else {
+      const totalY = totalTopY + 10;
+      doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111')
+        .text('TOTAL', L, totalY)
+        .text(`£${subtotal.toFixed(2)}`, L, totalY, { width: R - L, align: 'right' });
+    }
 
     // ── PAYMENT / NOTE ─────────────────────────────────────────
     doc.moveDown(3);
@@ -184,6 +213,7 @@ async function generateQuotePdf(job, customer, business) {
     job.quote_items || job.description,
     job.quoted_amount
   );
+  const vat = business?.vat_registered ? { rate: 0.20, number: business.vat_number || null } : null;
   return generatePdf({
     type: 'quote',
     docNumber: job.id,
@@ -192,6 +222,7 @@ async function generateQuotePdf(job, customer, business) {
     customer,
     lineItems,
     paymentDetails: null,
+    vat,
   });
 }
 
@@ -202,6 +233,7 @@ async function generateInvoicePdf(job, invoice, customer, business) {
     invoice.line_items || job.description,
     invoice.amount
   );
+  const vat = business?.vat_registered ? { rate: 0.20, number: business.vat_number || null } : null;
   return generatePdf({
     type: 'invoice',
     docNumber: invoice.id,
@@ -210,6 +242,7 @@ async function generateInvoicePdf(job, invoice, customer, business) {
     customer,
     lineItems,
     paymentDetails,
+    vat,
   });
 }
 

@@ -26,6 +26,10 @@ function customerGreetingName(customer) {
 function quoteMessage(job, customer, business) {
   const items = job.quote_items || job.description;
   const name = businessName(business);
+  const net = Number(job.quoted_amount);
+  const vatLines = business?.vat_registered
+    ? [`Subtotal: £${net.toFixed(2)}`, `VAT (20%): £${(net * 0.20).toFixed(2)}`, `💰 *Total: £${(net * 1.20).toFixed(2)}*`]
+    : [`💰 *Total: £${net.toFixed(2)}*`];
   return [
     `Hi ${customerGreetingName(customer)}! 👋`,
     '',
@@ -34,7 +38,7 @@ function quoteMessage(job, customer, business) {
     `📋 *Quote ${formatJobId(job.id)}*`,
     items,
     '',
-    `💰 *Total: £${Number(job.quoted_amount).toFixed(2)}*`,
+    ...vatLines,
     '',
     'This quote is valid for 30 days.',
     '',
@@ -68,6 +72,10 @@ function invoiceMessage(job, invoice, customer, business) {
   const items = invoice.line_items || job.description;
   const name = businessName(business);
   const payment = paymentDetails(business);
+  const net = Number(invoice.amount);
+  const vatLines = business?.vat_registered
+    ? [`Subtotal: £${net.toFixed(2)}`, `VAT (20%): £${(net * 0.20).toFixed(2)}`, `💰 *Total: £${(net * 1.20).toFixed(2)}*`]
+    : [`💰 *Total: £${net.toFixed(2)}*`];
   return [
     `Hi ${customerGreetingName(customer)},`,
     '',
@@ -76,7 +84,7 @@ function invoiceMessage(job, invoice, customer, business) {
     `🧾 *Invoice ${formatJobId(job.id)}*`,
     items,
     '',
-    `💰 *Total: £${Number(invoice.amount).toFixed(2)}*`,
+    ...vatLines,
     '',
     `💳 *Payment details:*`,
     payment,

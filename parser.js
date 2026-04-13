@@ -369,6 +369,19 @@ function parse(raw) {
     return { kind: 'query', intent: 'open_jobs' };
   }
 
+  // --- View job detail ---
+  const jobDetailMatch = text.match(/^job\s+#?(\d+)$/i);
+  if (jobDetailMatch) {
+    return { kind: 'query', intent: 'view_job', jobId: parseInt(jobDetailMatch[1], 10) };
+  }
+
+  // --- Jobs by status ---
+  if (/^new\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'new' };
+  if (/^(in[\s-]progress(\s+jobs?)?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'in progress' };
+  if (/^(complete[d]?\s+jobs?|jobs?\s+complete[d]?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'complete' };
+  if (/^(cancelled?\s+jobs?|jobs?\s+cancelled?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'cancelled' };
+  if (/^outstanding\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'outstanding' };
+
   // --- Find customer ---
   const findMatch = text.match(/^find\s+(.+)$/i);
   if (findMatch) {
