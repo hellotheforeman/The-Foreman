@@ -632,7 +632,7 @@ async function handleViewJob(intent, res) {
   lines.push(`Status: ${db.deriveStatus(job)}`);
 
   if (job.quoted_amount) {
-    const items = job.quote_items ? ` (${job.quote_items})` : '';
+    const items = job.quote_items ? ` (${formatLineItemsText(job.quote_items)})` : '';
     lines.push(`Quoted: £${Number(job.quoted_amount).toFixed(2)}${items}`);
   }
 
@@ -655,7 +655,7 @@ async function handleViewJob(intent, res) {
     const invStatus = invoice.status === 'PAID' ? 'Paid ✅' : invoice.status === 'OVERDUE' ? 'Overdue ⚠️' : 'Sent, awaiting payment';
     lines.push(`🧾 *Invoice — ${invStatus}*`);
     if (invoice.line_items) {
-      lines.push(invoice.line_items);
+      lines.push(formatLineItemsText(invoice.line_items));
     }
     lines.push(`Total: £${Number(invoice.amount).toFixed(2)}`);
   } else {
@@ -718,6 +718,16 @@ async function handleCancel(intent, res) {
 
 async function handleUnknown(intent, res) {
   messenger.twimlReply(res, `🤔 Didn't catch that. Reply *help* for commands.`);
+}
+
+// Normalises stored line item strings for display: splits on | or ,, adds £ before amounts.
+// "Labour 50 | parts 60" → "Labour £50, parts £60"
+function formatLineItemsText(str) {
+  if (!str) return str;
+  return str
+    .split(/\s*[|,]\s*/)
+    .map(item => item.replace(/(\d+(?:\.\d{1,2})?)$/, '£$1').trim())
+    .join(', ');
 }
 
 function formatShortDate(dateStr) {
