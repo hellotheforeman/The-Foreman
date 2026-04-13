@@ -178,12 +178,12 @@ async function handleSchedule(intent, res) {
 
   await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
 
-  const timeStr = intent.time || 'TBC';
+  const timePart = intent.time ? ` at ${intent.time}` : '';
   const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
 
   messenger.twimlReply(
     res,
-    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
+    `📅 Booked: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
     `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
   );
 }
@@ -362,12 +362,12 @@ async function handleReschedule(intent, res) {
   await db.clearBookingBlocks(job.id, business.id);
   await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
 
-  const timeStr = intent.time || 'TBC';
+  const timePart = intent.time ? ` at ${intent.time}` : '';
   const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
 
   messenger.twimlReply(
     res,
-    `📅 Rescheduled: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
+    `📅 Rescheduled: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
     `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
   );
 }
