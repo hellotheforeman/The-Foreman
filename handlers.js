@@ -180,16 +180,11 @@ async function handleSchedule(intent, res) {
 
   const timeStr = intent.time || 'TBC';
   const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
-  const jobForTemplate = { ...job, scheduled_date: intent.date, scheduled_time: intent.time, duration: intent.duration, duration_unit: intent.durationUnit };
-  const msg = templates.scheduleConfirmation(jobForTemplate, job.customer, business);
 
   messenger.twimlReply(
     res,
-    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n\n` +
-    `Send this confirmation to ${job.customer.name} (${job.customer.phone}):\n` +
-    `─────────────────\n` +
-    `${msg}\n` +
-    `─────────────────`
+    `📅 Booked: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
+    `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
   );
 }
 
@@ -369,14 +364,11 @@ async function handleReschedule(intent, res) {
 
   const timeStr = intent.time || 'TBC';
   const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
-  const jobForTemplate = { ...job, scheduled_date: intent.date, scheduled_time: intent.time, duration: intent.duration, duration_unit: intent.durationUnit };
-  const msg = templates.scheduleConfirmation(jobForTemplate, job.customer, business);
 
   messenger.twimlReply(
     res,
-    `📅 Rescheduled: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n\n` +
-    `Send this update to ${job.customer.name} (${job.customer.phone}):\n` +
-    `─────────────────\n${msg}\n─────────────────`
+    `📅 Rescheduled: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
+    `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
   );
 }
 
