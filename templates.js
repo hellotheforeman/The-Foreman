@@ -128,14 +128,33 @@ function formatDate(dateStr) {
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
 }
 
+function workingDayNumber(startDateStr, currentDateStr) {
+  const d = new Date(startDateStr + 'T12:00:00Z');
+  const target = new Date(currentDateStr + 'T12:00:00Z');
+  let count = 1;
+  while (d < target) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dow = d.getUTCDay();
+    if (dow !== 0 && dow !== 6) count++;
+  }
+  return count;
+}
+
 function formatScheduleDay(jobs, dateStr) {
   if (!jobs.length) return 'Nothing scheduled.';
   const lines = jobs.map((j) => {
     const rawTime = j.scheduled_time || j.start_time || null;
-    const isMultiDay = j.duration_unit === 'days' && j.duration;
+    const isMultiDay = j.duration_unit === 'days' && j.duration > 1;
     const timePrefix = rawTime ? `${rawTime} — ` : isMultiDay ? '' : 'TBC — ';
     const postcode = j.postcode ? `, ${j.postcode}` : '';
-    const durationStr = j.duration ? ` (${j.duration} ${j.duration_unit || 'hrs'})` : '';
+    let durationStr = '';
+    if (isMultiDay) {
+      const blockStart = j.start_date || j.scheduled_date;
+      const dayNum = workingDayNumber(blockStart, dateStr);
+      durationStr = ` (day ${dayNum} of ${j.duration})`;
+    } else if (j.duration) {
+      durationStr = ` (${j.duration} ${j.duration_unit || 'hrs'})`;
+    }
     return `• ${timePrefix}${j.customer_name}, ${j.description}${postcode}${durationStr}`;
   });
   return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
