@@ -9,6 +9,20 @@ function normalise(text) {
   return text.trim().replace(/\s+/g, ' ');
 }
 
+// Splits free text into a job reference and a datetime string.
+// Finds where recognised date/time language starts; everything before it is the job ref.
+// e.g. "Mrs Patel thursday 9am" → { jobRef: "Mrs Patel", datetimeText: "thursday 9am" }
+// e.g. "thursday 9am"           → { jobRef: "",           datetimeText: "thursday 9am" }
+const DATE_ANCHOR_RE = /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|wed|thu|fri|sat|sun|today|tomorrow|next|following|this\s+week|week\s+after|\d{1,2}(?:st|nd|rd|th)?\b|\d{4}-\d{2}-\d{2})/i;
+
+function splitJobRefAndDate(text) {
+  const match = text.match(DATE_ANCHOR_RE);
+  if (!match) return { jobRef: text.trim(), datetimeText: '' };
+  const jobRef = text.slice(0, match.index).trim().replace(/\s+(?:to|for|on|at)\s*$/i, '').trim();
+  const datetimeText = text.slice(match.index).trim();
+  return { jobRef, datetimeText };
+}
+
 function parse(raw) {
   const text = normalise(raw);
   const lower = text.toLowerCase();
@@ -159,6 +173,26 @@ function parse(raw) {
     };
   }
 
+  // "schedule thursday 9am", "schedule Mrs Patel thursday", "book boiler service friday 2pm"
+  const scheduleNoIdMatch = text.match(/^(?:book(?:\s+job)?|schedule)\s+(.+)$/i);
+  if (scheduleNoIdMatch) {
+    const { jobRef, datetimeText } = splitJobRefAndDate(scheduleNoIdMatch[1].trim());
+    const { date, time, duration, durationUnit } = parseDatetime(datetimeText || scheduleNoIdMatch[1].trim());
+    if (date || duration) {
+      return {
+        kind: 'command',
+        intent: 'schedule',
+        jobId: null,
+        jobRef: jobRef || null,
+        date,
+        time,
+        duration: duration || null,
+        durationUnit: durationUnit || null,
+        raw: scheduleNoIdMatch[1].trim(),
+      };
+    }
+  }
+
   // --- Follow-up block ---
   // "and then 3 days from following monday", "also friday at 9"
   const addBlockMatch = text.match(/^(?:and\s+then|also|followed\s+by|then)\s+(.+)$/i);
@@ -285,6 +319,26 @@ function parse(raw) {
       durationUnit: durationUnit || null,
       raw: rescheduleMatch[2].trim(),
     };
+  }
+
+  // "reschedule Mrs Patel to friday", "move boiler service thursday 9am"
+  const rescheduleNoIdMatch = text.match(/^(?:reschedule|rebook|move)\s+(?:job\s+)?(.+)$/i);
+  if (rescheduleNoIdMatch) {
+    const { jobRef, datetimeText } = splitJobRefAndDate(rescheduleNoIdMatch[1].trim());
+    const { date, time, duration, durationUnit } = parseDatetime(datetimeText || rescheduleNoIdMatch[1].trim());
+    if (date || duration) {
+      return {
+        kind: 'command',
+        intent: 'reschedule',
+        jobId: null,
+        jobRef: jobRef || null,
+        date,
+        time,
+        duration: duration || null,
+        durationUnit: durationUnit || null,
+        raw: rescheduleNoIdMatch[1].trim(),
+      };
+    }
   }
 
   // --- Add note to job ---
