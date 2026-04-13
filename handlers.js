@@ -111,8 +111,8 @@ async function handleNewCustomer(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode || null, intent.email || null);
-  const details = [customer.phone, customer.postcode, customer.email].filter(Boolean).join(' · ');
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.email || null);
+  const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
     `👤 Customer saved\n\n` +
@@ -125,9 +125,9 @@ async function handleNewJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.postcode, intent.email || null);
+  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.email || null);
   const job = await db.createJob(business.id, customer.id, intent.description, intent.postcode);
-  const details = [customer.phone, intent.postcode, customer.email].filter(Boolean).join(' · ');
+  const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
     `✅ Job ${db.formatJobId(job.id)} created\n` +
@@ -601,7 +601,7 @@ async function handleFind(intent, res) {
       const date = formatShortDate(j.sort_date);
       return `  - ${date} ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
     });
-    const contactParts = [c.phone, c.email, c.address || c.postcode].filter(Boolean);
+    const contactParts = [c.phone, c.email, c.address].filter(Boolean);
     results.push(
       `👤 *${c.name}* — ${contactParts.join(' · ')}\n` +
       (jobLines.length ? jobLines.join('\n') : '  No jobs yet')
@@ -626,7 +626,7 @@ async function handleViewJob(intent, res) {
   const c = job.customer;
   const lines = [`*${db.formatJobId(job.id)} — ${job.description}*`];
 
-  const contactParts = [c.phone, c.email, c.address || c.postcode].filter(Boolean);
+  const contactParts = [c.phone, c.email, c.address].filter(Boolean);
   lines.push(`${c.name}${contactParts.length ? ' · ' + contactParts.join(' · ') : ''}`);
   lines.push('');
   lines.push(`Status: ${db.deriveStatus(job)}`);

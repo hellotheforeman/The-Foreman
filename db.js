@@ -31,7 +31,6 @@ async function init() {
       business_id INTEGER REFERENCES businesses(id),
       name TEXT NOT NULL,
       phone TEXT NOT NULL,
-      postcode TEXT,
       email TEXT,
       address TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
@@ -231,6 +230,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
+  await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
 
   console.log('📦 Database ready');
 }
@@ -289,22 +289,17 @@ async function updateBusinessStatus(id, status) {
   return rows[0] || null;
 }
 
-async function findOrCreateCustomer(businessId, name, phone, postcode, email) {
+async function findOrCreateCustomer(businessId, name, phone, email) {
   let customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
   if (!customer) {
     const { rows } = await pool.query(
-      'INSERT INTO customers (business_id, name, phone, postcode, email) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-      [businessId, name, phone, postcode || null, email || null]
+      'INSERT INTO customers (business_id, name, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
+      [businessId, name, phone, email || null]
     );
     customer = rows[0];
   } else {
     const updates = [];
     const vals = [];
-    if (postcode && !customer.postcode) {
-      updates.push(`postcode = $${vals.length + 1}`);
-      vals.push(postcode);
-      customer.postcode = postcode;
-    }
     if (email && !customer.email) {
       updates.push(`email = $${vals.length + 1}`);
       vals.push(email);
@@ -694,7 +689,7 @@ async function appendJobNote(id, businessId, note) {
 }
 
 async function updateCustomer(id, businessId, fields) {
-  const allowed = ['name', 'phone', 'email', 'address', 'postcode'];
+  const allowed = ['name', 'phone', 'email', 'address'];
   const updates = [];
   const values = [];
   let i = 1;
