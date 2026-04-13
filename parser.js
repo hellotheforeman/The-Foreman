@@ -306,10 +306,9 @@ function parse(raw) {
 
   // --- Update customer ---
   // "update Dave Smith email dave@example.com"
-  const updateCustomerMatch = text.match(/^update\s+(?:customer\s+)?(.+?)\s+(phone|email|address|notes?)\s+(.+)$/i);
+  const updateCustomerMatch = text.match(/^update\s+(?:customer\s+)?(.+?)\s+(name|phone|email|address|postcode)\s+(.+)$/i);
   if (updateCustomerMatch) {
-    const fieldRaw = updateCustomerMatch[2].toLowerCase();
-    const field = fieldRaw === 'note' ? 'notes' : fieldRaw;
+    const field = updateCustomerMatch[2].toLowerCase();
     return {
       kind: 'command',
       intent: 'update_customer',

@@ -34,7 +34,6 @@ async function init() {
       postcode TEXT,
       email TEXT,
       address TEXT,
-      notes TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW()
     )
   `);
@@ -231,6 +230,7 @@ async function init() {
 
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
+  await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
 
   console.log('📦 Database ready');
 }
@@ -694,7 +694,7 @@ async function appendJobNote(id, businessId, note) {
 }
 
 async function updateCustomer(id, businessId, fields) {
-  const allowed = ['name', 'phone', 'email', 'address', 'notes'];
+  const allowed = ['name', 'phone', 'email', 'address', 'postcode'];
   const updates = [];
   const values = [];
   let i = 1;
