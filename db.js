@@ -412,6 +412,26 @@ async function addBookingBlock(jobId, businessId, startDate, startTime, duration
   return rows[0];
 }
 
+async function getBookingOverlaps(businessId, startDate, endDate, excludeJobId) {
+  const { rows } = await pool.query(
+    `SELECT DISTINCT ON (bb.job_id)
+       bb.start_date, bb.end_date,
+       j.id AS job_id, j.description,
+       c.name AS customer_name
+     FROM booking_blocks bb
+     JOIN jobs j ON bb.job_id = j.id
+     JOIN customers c ON j.customer_id = c.id
+     WHERE bb.business_id = $1
+       AND bb.job_id != $2
+       AND bb.start_date <= $4
+       AND bb.end_date >= $3
+       AND j.status NOT IN ('cancelled', 'complete')
+     ORDER BY bb.job_id, bb.start_date`,
+    [businessId, excludeJobId || 0, startDate, endDate]
+  );
+  return rows;
+}
+
 async function clearBookingBlocks(jobId, businessId) {
   await run('DELETE FROM booking_blocks WHERE job_id = $1 AND business_id = $2', [jobId, businessId]);
 }
@@ -787,7 +807,9 @@ module.exports = {
   setQuote,
   scheduleJob,
   addBookingBlock,
+  getBookingOverlaps,
   clearBookingBlocks,
+  addWorkingDays,
   getBookingBlocksForJob,
   getScheduleForDate,
   getScheduleRange,

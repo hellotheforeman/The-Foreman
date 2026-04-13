@@ -9,6 +9,7 @@ const db = require('./db');
 const { registerAdminRoutes } = require('./admin');
 const { registerSignupRoutes } = require('./signup');
 const workflowEngine = require('./workflow-engine');
+const templates = require('./templates');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
 
 const path = require('path');
@@ -63,7 +64,44 @@ app.post('/webhook', async (req, res) => {
     intent.business = business;
     console.log(`📥 ${business.business_name || business.name}: "${body}" → ${intent.intent}`);
 
-    const currentState = await getConversationState(business.id);
+    // Checks for booking overlaps before dispatching schedule/reschedule/add_block.
+    // Sets overlap_confirm state and warns if clashes found; otherwise dispatches normally.
+    async function scheduleOrDispatch(finalIntent) {
+      const isScheduling = ['schedule', 'reschedule', 'add_block'].includes(finalIntent.intent);
+      if (!isScheduling || !finalIntent.date) return dispatch(finalIntent, res);
+
+      const endDate = (finalIntent.durationUnit === 'days' && finalIntent.duration > 1)
+        ? db.addWorkingDays(finalIntent.date, finalIntent.duration)
+        : finalIntent.date;
+
+      const overlaps = await db.getBookingOverlaps(business.id, finalIntent.date, endDate, finalIntent.jobId);
+      if (!overlaps.length) {
+        // No clash — proceed and set add_block follow-up context as before
+        if (['schedule', 'add_block'].includes(finalIntent.intent) && finalIntent.jobId) {
+          await setConversationState(business.id, {
+            workflow: 'add_block',
+            focus: { jobId: finalIntent.jobId },
+            collected: { jobId: finalIntent.jobId },
+            pending: null,
+            options: [],
+          });
+        }
+        return dispatch(finalIntent, res);
+      }
+
+      // Clash found — store pending action and warn
+      const { business: _b, ...intentWithoutBusiness } = finalIntent;
+      await setConversationState(business.id, {
+        workflow: 'overlap_confirm',
+        focus: { jobId: finalIntent.jobId },
+        collected: { pendingIntent: intentWithoutBusiness, overlaps },
+        pending: { type: 'choice', field: 'confirm' },
+        options: [],
+      });
+      return twimlReply(res, buildOverlapWarning(overlaps));
+    }
+
+    let currentState = await getConversationState(business.id);
 
     // --- Settings workflow (menu-driven, handled outside the generic workflow engine) ---
     if (intent.intent === 'settings') {
@@ -352,6 +390,44 @@ app.post('/webhook', async (req, res) => {
     }
     // --- End invoice guided workflow ---
 
+    // --- Overlap confirmation ---
+    // Entered when a scheduling action was blocked pending the tradesperson's confirmation.
+    if (currentState?.workflow === 'overlap_confirm') {
+      const trimmed = body.trim();
+      const pendingIntent = currentState.collected?.pendingIntent;
+      const overlaps = currentState.collected?.overlaps || [];
+
+      if (/^(no|nope|cancel|forget it|never mind)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Got it — not booked.');
+      }
+
+      if (/^(yes|yeah|yep|go ahead|do it|ok|okay|sure|confirm|proceed)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        // Restore add_block follow-up context so "and then X" still works
+        if (['schedule', 'add_block'].includes(pendingIntent?.intent) && pendingIntent?.jobId) {
+          await setConversationState(business.id, {
+            workflow: 'add_block',
+            focus: { jobId: pendingIntent.jobId },
+            collected: { jobId: pendingIntent.jobId },
+            pending: null,
+            options: [],
+          });
+        }
+        return dispatch({ ...pendingIntent, business }, res);
+      }
+
+      if (intent.kind === 'query') {
+        // Show whatever they asked for, but keep the pending confirmation alive
+        return dispatch({ ...intent, business }, res);
+      }
+
+      // Any other command: clear pending and re-process as a new intent
+      await clearConversationState(business.id);
+      currentState = null;
+    }
+    // --- End overlap confirmation ---
+
     // Inject jobId from follow-up context for add_block when user sent "and then X"
     // after a successful schedule/add_block action
     let resolvedIntent = intent;
@@ -392,23 +468,11 @@ app.post('/webhook', async (req, res) => {
         await clearConversationState(business.id);
       }
 
-      // After scheduling or adding a block, save follow-up context so the next
-      // "and then X" message knows which job to add another block to.
-      if (['schedule', 'add_block'].includes(completedIntent?.intent) && completedIntent?.jobId) {
-        await setConversationState(business.id, {
-          workflow: 'add_block',
-          focus: { jobId: completedIntent.jobId },
-          collected: { jobId: completedIntent.jobId },
-          pending: null,
-          options: [],
-        });
-      }
-
       const nextIntent = { ...completedIntent, business };
-      return dispatch(nextIntent, res);
+      return scheduleOrDispatch(nextIntent);
     }
 
-    await dispatch(intent, res);
+    await scheduleOrDispatch(intent);
 
   } catch (err) {
     console.error('Webhook error:', err);
@@ -436,6 +500,16 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
   if (quoteItems) return quoteItems;
   if (quotedAmount) return String(quotedAmount);
   return '';
+}
+
+function buildOverlapWarning(overlaps) {
+  const lines = overlaps.map((o) => {
+    const dateRange = o.start_date === o.end_date
+      ? templates.formatDate(o.start_date)
+      : `${templates.formatDate(o.start_date)} – ${templates.formatDate(o.end_date)}`;
+    return `• ${dateRange} — ${o.description} (${o.customer_name})`;
+  }).join('\n');
+  return `⚠️ Already booked on those dates:\n${lines}\n\nBook anyway? Reply *yes* or *cancel*.`;
 }
 
 const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block', 'settings']);
