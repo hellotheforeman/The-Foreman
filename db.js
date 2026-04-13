@@ -409,6 +409,7 @@ async function getBookingOverlaps(businessId, startDate, endDate, excludeJobId) 
        AND bb.start_date <= $4
        AND bb.end_date >= $3
        AND j.status NOT IN ('cancelled', 'complete')
+       AND NOT (bb.start_date = bb.end_date AND $3 = $4)
      ORDER BY bb.job_id, bb.start_date`,
     [businessId, excludeJobId || 0, startDate, endDate]
   );
@@ -428,6 +429,14 @@ async function getBookingBlocksForJob(jobId, businessId) {
 
 async function cancelJob(jobId, businessId) {
   await run("UPDATE jobs SET status = 'cancelled' WHERE id = $1 AND business_id = $2", [jobId, businessId]);
+  return getJob(jobId, businessId);
+}
+
+async function markJobComplete(jobId, businessId) {
+  await run(
+    "UPDATE jobs SET status = 'complete', completed_at = NOW() WHERE id = $1 AND business_id = $2",
+    [jobId, businessId]
+  );
   return getJob(jobId, businessId);
 }
 
@@ -528,6 +537,19 @@ async function getOpenJobs(businessId) {
      JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1
        AND j.status NOT IN ('cancelled', 'complete')
+     ORDER BY j.created_at DESC`,
+    [businessId]
+  );
+}
+
+async function getUnscheduledJobs(businessId) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.status NOT IN ('cancelled', 'complete')
+       AND NOT EXISTS (SELECT 1 FROM booking_blocks bb WHERE bb.job_id = j.id)
      ORDER BY j.created_at DESC`,
     [businessId]
   );
@@ -806,6 +828,7 @@ module.exports = {
   getScheduleForDate,
   getScheduleRange,
   getOpenJobs,
+  getUnscheduledJobs,
   getJobsByStatus,
   findOpenJobsByCustomerName,
   findJobsByDescription,
@@ -816,6 +839,7 @@ module.exports = {
   markInvoicePaid,
   deriveStatus,
   cancelJob,
+  markJobComplete,
   getUnpaidInvoices,
   getEarningsSummary,
   updateBusiness,

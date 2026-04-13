@@ -61,7 +61,7 @@ function start() {
           const total = unpaid.reduce((s, i) => s + Number(i.amount), 0);
           parts.push(`\n💷 *${unpaid.length} unpaid invoices (£${total.toFixed(2)})*`);
         }
-        const quotedJobs = open.filter((j) => j.status === 'QUOTED');
+        const quotedJobs = open.filter((j) => j.status === 'new' && j.quoted_amount);
         if (quotedJobs.length) {
           parts.push(`\n📋 *${quotedJobs.length} quotes awaiting response*`);
         }

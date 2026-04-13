@@ -347,7 +347,15 @@ function parse(raw) {
     return { kind: 'command', intent: 'add_note', jobId: parseInt(noteMatch[1], 10), note: noteMatch[2].trim() };
   }
 
-  // --- Cancel job (the only manual status action — can't be inferred from data) ---
+  // --- Mark job complete ---
+  // "complete 14", "done 14", "finish 14", "mark 14 complete", "mark 14 done"
+  const markCompleteMatch = lower.match(/^(?:complete|done|finish(?:ed)?|mark\s+#?(\d+)\s+(?:complete|done))\s*#?(\d+)?\s*$/);
+  if (markCompleteMatch) {
+    const jobId = parseInt(markCompleteMatch[1] || markCompleteMatch[2], 10);
+    if (jobId) return { kind: 'command', intent: 'mark_complete', jobId };
+  }
+
+  // --- Cancel job ---
   const cancelJobMatch = lower.match(/^cancel(?:\s+job)?\s+#?(\d+)\s*$/);
   if (cancelJobMatch) {
     return { kind: 'command', intent: 'cancel_job', jobId: parseInt(cancelJobMatch[1], 10) };
@@ -426,6 +434,11 @@ function parse(raw) {
   const jobDetailMatch = text.match(/^job\s+#?(\d+)$/i);
   if (jobDetailMatch) {
     return { kind: 'query', intent: 'view_job', jobId: parseInt(jobDetailMatch[1], 10) };
+  }
+
+  // --- Unscheduled jobs ---
+  if (/^unscheduled(\s+jobs?)?$|^not\s+booked(\s+in)?$|^unbooked(\s+jobs?)?$/i.test(lower)) {
+    return { kind: 'query', intent: 'unscheduled_jobs' };
   }
 
   // --- Jobs by status ---
@@ -577,7 +590,7 @@ function parseDatetime(str) {
     let year = now.getFullYear();
     let month = now.getMonth();
     // If the day of month has already passed this month, use next month
-    if (day <= now.getDate()) {
+    if (day < now.getDate()) {
       month++;
       if (month > 11) { month = 0; year++; }
     }

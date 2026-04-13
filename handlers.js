@@ -69,6 +69,7 @@ const commandHandlers = {
   chase: handleChase,
   review: handleReview,
   cancel_job: handleCancelJob,
+  mark_complete: handleMarkComplete,
   add_note: handleAddNote,
   update_customer: handleUpdateCustomer,
 };
@@ -77,6 +78,7 @@ const queryHandlers = {
   view_schedule: handleViewSchedule,
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
+  unscheduled_jobs: handleUnscheduledJobs,
   jobs_by_status: handleJobsByStatus,
   view_job: handleViewJob,
   find: handleFind,
@@ -675,6 +677,34 @@ async function handleJobsByStatus(intent, res) {
   messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}`);
 }
 
+async function handleMarkComplete(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (job.status === 'complete') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already marked complete.`);
+  if (job.status === 'cancelled') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is cancelled.`);
+
+  await db.markJobComplete(intent.jobId, business.id);
+  messenger.twimlReply(
+    res,
+    `✅ ${db.formatJobId(job.id)} marked complete — ${job.customer.name}, ${job.description}.\n\n` +
+    `Reply *invoice ${job.id}* to send an invoice, or *review ${job.id}* to request a review.`
+  );
+}
+
+async function handleUnscheduledJobs(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const jobs = await db.getUnscheduledJobs(business.id);
+  if (!jobs.length) return messenger.twimlReply(res, `No unscheduled jobs. 📭`);
+
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${db.deriveStatus(j)}]`);
+  messenger.twimlReply(res, `📋 *${jobs.length} unscheduled jobs*\n\n${lines.join('\n')}`);
+}
+
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
@@ -690,10 +720,12 @@ async function handleHelp(intent, res) {
     `*chase* [job#] — send payment reminder\n\n` +
     `*today* / *this week* — view schedule\n` +
     `*jobs* — open jobs\n` +
+    `*unscheduled jobs* — jobs not yet booked in\n` +
     `*job* [#] — full job detail\n` +
     `*new jobs* / *in progress* / *completed jobs* — jobs by status\n` +
     `*unpaid* — outstanding invoices\n` +
     `*earnings* — income summary\n\n` +
+    `*complete* [job#] — mark job as done\n` +
     `*review* [job#] — request a review\n` +
     `*settings* — business settings\n` +
     `*help* — this message`
