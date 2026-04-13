@@ -252,11 +252,6 @@ function formatJobId(id) {
   return `#${String(id).padStart(4, '0')}`;
 }
 
-function parseJobId(str) {
-  const match = str.match(/#?(\d+)/);
-  return match ? parseInt(match[1], 10) : null;
-}
-
 // --- Customer queries ---
 
 async function createBusiness({ name, trade, contact_name, email, phone }) {
@@ -363,16 +358,6 @@ async function setQuote(jobId, amount, items, lineItemsJson) {
   await run(
     'UPDATE jobs SET quoted_amount = $1, quote_items = $2, quote_line_items_json = $3 WHERE id = $4',
     [amount, items, lineItemsJson ? JSON.stringify(lineItemsJson) : null, jobId]
-  );
-  return getJob(jobId);
-}
-
-async function scheduleJob(jobId, date, time) {
-  await run(
-    `UPDATE jobs SET scheduled_date = $1, scheduled_time = $2,
-      status = CASE WHEN status IN ('new', 'in progress') THEN 'in progress' ELSE status END
-     WHERE id = $3`,
-    [date, time || null, jobId]
   );
   return getJob(jobId);
 }
@@ -793,7 +778,6 @@ async function logMessage(direction, participant, body, { businessId, customerId
 module.exports = {
   init,
   formatJobId,
-  parseJobId,
   createBusiness,
   findBusinessByPhone,
   listBusinesses,
@@ -805,7 +789,6 @@ module.exports = {
   getJob,
   getJobWithCustomer,
   setQuote,
-  scheduleJob,
   addBookingBlock,
   getBookingOverlaps,
   clearBookingBlocks,

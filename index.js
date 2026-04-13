@@ -405,7 +405,7 @@ app.post('/webhook', async (req, res) => {
       if (/^(yes|yeah|yep|go ahead|do it|ok|okay|sure|confirm|proceed)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         // Restore add_block follow-up context so "and then X" still works
-        if (['schedule', 'add_block'].includes(pendingIntent?.intent) && pendingIntent?.jobId) {
+        if (['schedule', 'reschedule', 'add_block'].includes(pendingIntent?.intent) && pendingIntent?.jobId) {
           await setConversationState(business.id, {
             workflow: 'add_block',
             focus: { jobId: pendingIntent.jobId },
