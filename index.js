@@ -11,6 +11,7 @@ const { registerSignupRoutes } = require('./signup');
 const workflowEngine = require('./workflow-engine');
 const templates = require('./templates');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
+const { parseWithAI } = require('./ai-parser');
 
 const path = require('path');
 const app = express();
@@ -60,7 +61,11 @@ app.post('/webhook', async (req, res) => {
       return twimlReply(res, `Your Foreman account is ${business.status}. We'll be in touch once it's active.`);
     }
 
-    const intent = parse(body);
+    let intent = parse(body);
+    if (intent.intent === 'unknown') {
+      const aiIntent = await parseWithAI(body);
+      if (aiIntent) intent = aiIntent;
+    }
     intent.business = business;
     console.log(`📥 ${business.business_name || business.name}: "${body}" → ${intent.intent}`);
 
