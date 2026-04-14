@@ -715,7 +715,7 @@ async function handleGreeting(intent, res) {
 }
 
 async function handleThanks(intent, res) {
-  messenger.twimlReply(res, `No problem. Anything else?`);
+  messenger.twimlReply(res, `No problem. 👍`);
 }
 
 async function handleHelp(intent, res) {
