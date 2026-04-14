@@ -37,7 +37,9 @@ function normaliseLineItems(lineItemsJson, fallbackDescription, fallbackAmount) 
 
 function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails, vat }) {
   ensurePdfDir();
-  const filename = `${type}-${docNumber}.pdf`;
+  const safeName = (customer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+  const dateStr = new Date().toISOString().split('T')[0];
+  const filename = `${type}-${safeName}-${dateStr}.pdf`;
   const filepath = path.join(PDF_DIR, filename);
 
   return new Promise((resolve, reject) => {
