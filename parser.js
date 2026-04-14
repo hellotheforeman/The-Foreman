@@ -27,6 +27,14 @@ function parse(raw) {
   const text = normalise(raw);
   const lower = text.toLowerCase();
 
+  // --- Pleasantries ---
+  if (/^(hi+|hello|hey|morning|afternoon|evening|alright|aight|yo|sup|howdy|hiya)[\s!?.]*$/i.test(lower)) {
+    return { kind: 'query', intent: 'greeting' };
+  }
+  if (/^(thanks?|ta|cheers|thank you|nice one|legend|perfect|brilliant|great|fab|lovely|sweet|sorted|no worries|no problem|appreciate it|sound)[\s!?.]*$/i.test(lower)) {
+    return { kind: 'query', intent: 'thanks' };
+  }
+
   // --- Confirmation (yes/send/go/confirm) ---
   if (/^(yes|yep|yeah|y|send|go|confirm|ok|do it|sure|approved?)$/i.test(lower)) {
     return { kind: 'continuation', intent: 'confirm' };

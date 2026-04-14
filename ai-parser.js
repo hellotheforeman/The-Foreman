@@ -36,6 +36,7 @@ const DISPATCH_TOOL = {
             // Queries
             'view_schedule', 'unpaid', 'open_jobs', 'unscheduled_jobs',
             'jobs_by_status', 'view_job', 'find', 'earnings', 'settings', 'help',
+            'greeting', 'thanks',
           ],
           description: 'The specific intent identified from the message.',
         },

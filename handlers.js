@@ -85,6 +85,8 @@ const queryHandlers = {
   earnings: handleEarnings,
   settings: handleSettings,
   help: handleHelp,
+  greeting: handleGreeting,
+  thanks: handleThanks,
 };
 
 const continuationHandlers = {
@@ -706,6 +708,14 @@ async function handleUnscheduledJobs(intent, res) {
 
   const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${db.deriveStatus(j)}]`);
   messenger.twimlReply(res, `📋 *${jobs.length} unscheduled jobs*\n\n${lines.join('\n')}`);
+}
+
+async function handleGreeting(intent, res) {
+  messenger.twimlReply(res, `Alright 👍 What do you need?`);
+}
+
+async function handleThanks(intent, res) {
+  messenger.twimlReply(res, `No problem. Anything else?`);
 }
 
 async function handleHelp(intent, res) {
