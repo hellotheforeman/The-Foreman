@@ -434,7 +434,7 @@ async function handleViewSchedule(intent, res) {
     return messenger.twimlReply(res, `*Tomorrow:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
   }
 
-  if (intent.period === 'week') {
+  if (intent.period === 'week' || intent.period === 'this_week') {
     const start = now.toISOString().split('T')[0];
     const end = new Date(now);
     end.setDate(end.getDate() + 7);
@@ -508,7 +508,7 @@ async function handleEarnings(intent, res) {
     start = new Date(now); start.setHours(0, 0, 0, 0);
     end = new Date(now); end.setHours(23, 59, 59, 999);
     label = 'Today';
-  } else if (intent.period === 'week') {
+  } else if (intent.period === 'week' || intent.period === 'this_week') {
     const daysToMonday = (now.getDay() + 6) % 7;
     start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
     end = new Date(now); end.setHours(23, 59, 59, 999);

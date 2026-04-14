@@ -384,12 +384,22 @@ function parse(raw) {
   }
 
   // --- Schedule view ---
-  if (/^(today|tomorrow|this week|next week|week after next|schedule|diary|what'?s on)\s*(today|tomorrow)?\s*$/i.test(lower)) {
+  // Bare period words or schedule/diary triggers
+  if (/^(today|tomorrow|schedule|diary|this week|next week|week after next|what'?s on)\s*(today|tomorrow)?\s*$/i.test(lower)) {
     let period = 'today';
-    if (lower.includes('tomorrow')) period = 'tomorrow';
-    else if (lower.includes('week after next')) period = 'week_after_next';
-    else if (lower.includes('next week')) period = 'next_week';
-    else if (lower.includes('this week') || lower.includes('week')) period = 'week';
+    if (/\btomorrow\b/i.test(lower)) period = 'tomorrow';
+    else if (/\bweek after next\b/i.test(lower)) period = 'week_after_next';
+    else if (/\bnext week\b/i.test(lower)) period = 'next_week';
+    else if (/\bthis week\b/i.test(lower)) period = 'week';
+    return { kind: 'query', intent: 'view_schedule', period };
+  }
+  // "what's scheduled/on (for) this week/next week/today/tomorrow"
+  if (/^what'?s\s+(scheduled(\s+for)?|on(\s+for)?)\s+(this week|next week|week after next|today|tomorrow)\??$/i.test(lower)) {
+    let period = 'today';
+    if (/\btomorrow\b/i.test(lower)) period = 'tomorrow';
+    else if (/\bweek after next\b/i.test(lower)) period = 'week_after_next';
+    else if (/\bnext week\b/i.test(lower)) period = 'next_week';
+    else if (/\bthis week\b/i.test(lower)) period = 'week';
     return { kind: 'query', intent: 'view_schedule', period };
   }
 
