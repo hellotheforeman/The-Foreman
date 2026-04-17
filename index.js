@@ -13,12 +13,55 @@ const templates = require('./templates');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
 const { parseWithAI } = require('./ai-parser');
 
+const twilio = require('twilio');
 const path = require('path');
+const fs = require('fs');
+const https = require('https');
 const app = express();
+
+// Trust proxy headers so Express reconstructs the correct HTTPS URL behind
+// Railway / Heroku / Render — required for Twilio signature validation to work.
+app.enable('trust proxy');
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
 app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
+app.use('/logos', express.static(path.join(__dirname, 'public', 'logos')));
+
+const LOGO_DIR = path.join(__dirname, 'public', 'logos');
+
+function ensureLogoDir() {
+  fs.mkdirSync(LOGO_DIR, { recursive: true });
+}
+
+function downloadLogo(mediaUrl, destPath) {
+  return new Promise((resolve, reject) => {
+    const url = new URL(mediaUrl);
+    const options = {
+      hostname: url.hostname,
+      path: url.pathname + url.search,
+      auth: `${config.twilio.accountSid}:${config.twilio.authToken}`,
+    };
+    const file = fs.createWriteStream(destPath);
+    https.get(options, (response) => {
+      response.pipe(file);
+      file.on('finish', () => { file.close(); resolve(); });
+    }).on('error', (err) => {
+      fs.unlink(destPath, () => {});
+      reject(err);
+    });
+  });
+}
+
+// Twilio webhook signature validation middleware.
+// Skipped automatically in local dev (localhost) so manual testing still works.
+const isLocalDev = config.publicUrl.includes('localhost');
+const validateTwilioSignature = config.twilio.authToken && !isLocalDev
+  ? twilio.webhook(config.twilio.authToken, { url: config.publicUrl + '/webhook' })
+  : (req, res, next) => {
+      if (!isLocalDev) console.warn('⚠️  Twilio signature validation skipped — TWILIO_AUTH_TOKEN not set');
+      next();
+    };
 
 registerSignupRoutes(app);
 registerAdminRoutes(app);
@@ -35,13 +78,16 @@ app.get('/', (req, res) => {
  * The bot never messages customers — it drafts messages for the
  * tradesperson to copy and send from their own WhatsApp.
  */
-app.post('/webhook', async (req, res) => {
+app.post('/webhook', validateTwilioSignature, async (req, res) => {
   try {
     const from = (req.body.From || '').replace('whatsapp:', '');
     const body = (req.body.Body || '').trim();
     const messageSid = req.body.MessageSid || null;
+    const numMedia = parseInt(req.body.NumMedia || '0', 10);
+    const mediaUrl = numMedia > 0 ? (req.body.MediaUrl0 || null) : null;
+    const mediaContentType = numMedia > 0 ? (req.body.MediaContentType0 || '') : '';
 
-    if (!from || !body) {
+    if (!from || (!body && !mediaUrl)) {
       return res.status(400).send('Missing From or Body');
     }
 
@@ -149,6 +195,25 @@ app.post('/webhook', async (req, res) => {
       if (currentState.pending?.field === 'value') {
         const { settingKey, settingLabel, settingType } = currentState.collected || {};
         if (settingKey) {
+          if (settingType === 'image') {
+            if (!mediaUrl) {
+              return twimlReply(res, `Please send your logo as an image. (Reply *cancel* to go back)`);
+            }
+            const ext = mediaContentType.includes('png') ? 'png' : 'jpg';
+            ensureLogoDir();
+            const filename = `${business.id}.${ext}`;
+            const destPath = path.join(LOGO_DIR, filename);
+            try {
+              await downloadLogo(mediaUrl, destPath);
+              await db.updateBusiness(business.id, { logo_path: destPath });
+              await clearConversationState(business.id);
+              return twimlReply(res, `✅ Logo saved — it'll appear on all your quotes and invoices.`);
+            } catch (err) {
+              console.error('Logo download failed:', err);
+              return twimlReply(res, `❌ Couldn't save that image. Please try again.`);
+            }
+          }
+
           const isBoolean = settingType === 'boolean';
           const value = isBoolean ? /^(yes|y|true|1)$/i.test(trimmed) : trimmed;
           const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;

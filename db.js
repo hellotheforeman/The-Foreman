@@ -1,5 +1,9 @@
 const { Pool } = require('pg');
 
+if (!process.env.DATABASE_URL) {
+  throw new Error('DATABASE_URL environment variable is required — check your .env file');
+}
+
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
@@ -229,6 +233,7 @@ async function init() {
 
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
 
@@ -409,7 +414,6 @@ async function getBookingOverlaps(businessId, startDate, endDate, excludeJobId) 
        AND bb.start_date <= $4
        AND bb.end_date >= $3
        AND j.status NOT IN ('cancelled', 'complete')
-       AND NOT (bb.start_date = bb.end_date AND $3 = $4)
      ORDER BY bb.job_id, bb.start_date`,
     [businessId, excludeJobId || 0, startDate, endDate]
   );
@@ -663,7 +667,7 @@ async function getUnpaidInvoices(businessId) {
 // --- Update helpers ---
 
 async function updateBusiness(id, fields) {
-  const allowed = ['name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name'];
+  const allowed = ['name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path'];
   const updates = [];
   const values = [];
   let i = 1;

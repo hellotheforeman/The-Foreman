@@ -13,6 +13,7 @@ const SETTINGS_FIELDS = [
   { key: 'payment_details', label: 'Payment details' },
   { key: 'vat_registered', label: 'VAT registered', type: 'boolean', hint: 'Reply *yes* or *no*' },
   { key: 'vat_number',     label: 'VAT number' },
+  { key: 'logo_path',      label: 'Logo', type: 'image', hint: 'Send your logo as an image (PNG or JPG). It will appear on all quotes and invoices.' },
 ];
 
 function buildSettingsMenu(business) {
@@ -24,6 +25,8 @@ function buildSettingsMenu(business) {
       display = '_not set_';
     } else if (s.type === 'boolean') {
       display = val ? 'Yes' : 'No';
+    } else if (s.type === 'image') {
+      display = '✅ uploaded';
     } else {
       display = String(val).length > 45 ? String(val).slice(0, 45) + '…' : String(val);
     }

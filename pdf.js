@@ -53,7 +53,20 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     const mid = W / 2;
 
     // ── HEADER ────────────────────────────────────────────────
-    const headerTopY = 50;
+    let headerTopY = 50;
+
+    // Logo — rendered above business name if present
+    const logoPath = business?.logo_path;
+    if (logoPath && fs.existsSync(logoPath)) {
+      try {
+        const MAX_LOGO_HEIGHT = 50;
+        const MAX_LOGO_WIDTH = mid - L - 20;
+        doc.image(logoPath, L, headerTopY, { fit: [MAX_LOGO_WIDTH, MAX_LOGO_HEIGHT], align: 'left' });
+        headerTopY += MAX_LOGO_HEIGHT + 8;
+      } catch (e) {
+        // Logo render failed — continue without it
+      }
+    }
 
     const bizName = business?.name || 'My Trade Business';
     doc.font('Helvetica-Bold').fontSize(16).fillColor('#111111')
