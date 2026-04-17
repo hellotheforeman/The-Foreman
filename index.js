@@ -197,7 +197,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (settingKey) {
           if (settingType === 'image') {
             if (!mediaUrl) {
-              return twimlReply(res, `Please send your logo as an image. (Reply *cancel* to go back)`);
+              return twimlReply(res, `Please send your logo as a photo or image. (Reply *cancel* to go back)`);
             }
             const ext = mediaContentType.includes('png') ? 'png' : 'jpg';
             ensureLogoDir();
