@@ -53,6 +53,16 @@ function downloadLogo(mediaUrl, destPath) {
   });
 }
 
+function detectImageExt(filePath) {
+  const buf = Buffer.alloc(4);
+  const fd = fs.openSync(filePath, 'r');
+  fs.readSync(fd, buf, 0, 4, 0);
+  fs.closeSync(fd);
+  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
+  if (buf[0] === 0xFF && buf[1] === 0xD8) return 'jpg';
+  return null;
+}
+
 // Twilio webhook signature validation middleware.
 // Skipped automatically in local dev (localhost) so manual testing still works.
 const isLocalDev = config.publicUrl.includes('localhost');
@@ -204,17 +214,28 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             if (!mediaUrl) {
               return twimlReply(res, `Please send your logo as a photo or image. (Reply *cancel* to go back)`);
             }
-            const ext = mediaContentType.includes('png') ? 'png' : 'jpg';
             ensureLogoDir();
-            const filename = `${business.id}.${ext}`;
-            const destPath = path.join(LOGO_DIR, filename);
+            const tmpPath = path.join(LOGO_DIR, `${business.id}.tmp`);
             try {
-              await downloadLogo(mediaUrl, destPath);
-              await db.updateBusiness(business.id, { logo_path: destPath });
+              await downloadLogo(mediaUrl, tmpPath);
+              const ext = detectImageExt(tmpPath);
+              if (!ext) {
+                fs.unlink(tmpPath, () => {});
+                return twimlReply(res, `❌ That file type isn't supported. Please send a PNG or JPEG image.`);
+              }
+              // Remove any previous logo with a different extension
+              for (const old of ['png', 'jpg']) {
+                const oldPath = path.join(LOGO_DIR, `${business.id}.${old}`);
+                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+              }
+              const finalPath = path.join(LOGO_DIR, `${business.id}.${ext}`);
+              fs.renameSync(tmpPath, finalPath);
+              await db.updateBusiness(business.id, { logo_path: finalPath });
               await clearConversationState(business.id);
               return twimlReply(res, `✅ Logo saved — it'll appear on all your quotes and invoices.`);
             } catch (err) {
               console.error('Logo download failed:', err);
+              fs.unlink(tmpPath, () => {});
               return twimlReply(res, `❌ Couldn't save that image. Please try again.`);
             }
           }
