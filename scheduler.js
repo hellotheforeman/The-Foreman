@@ -4,6 +4,8 @@ const messenger = require('./messenger');
 const templates = require('./templates');
 const config = require('./config');
 
+const TZ = { timezone: 'Europe/London' };
+
 function start() {
   // These reminders currently target the single configured foreman.
   // Skip quietly if there is no active business for that number yet.
@@ -28,7 +30,7 @@ function start() {
     } catch (err) {
       console.error('Evening reminder failed:', err.message);
     }
-  });
+  }, TZ);
 
   // Monday morning summary: 8am every Monday
   cron.schedule('0 8 * * 1', async () => {
@@ -74,7 +76,7 @@ function start() {
     } catch (err) {
       console.error('Weekly summary failed:', err.message);
     }
-  });
+  }, TZ);
 
   // Check for overdue invoices: 10am daily
   cron.schedule('0 10 * * *', async () => {
@@ -93,7 +95,7 @@ function start() {
         for (const inv of overdue) {
           const days = Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000);
           await messenger.sendToForeman(
-            `⚠️ Invoice ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${days} days overdue.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
+            `⚠️ ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${days} days overdue.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
             { businessId: business.id, businessPhone: business.phone }
           );
         }
@@ -101,7 +103,7 @@ function start() {
     } catch (err) {
       console.error('Overdue check failed:', err.message);
     }
-  });
+  }, TZ);
 
   console.log('⏰ Scheduler started (evening reminders, weekly summary, overdue checks)');
 }

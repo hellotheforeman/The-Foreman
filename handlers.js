@@ -142,7 +142,7 @@ async function handleNewJob(intent, res) {
   const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
-    `✅ Job ${db.formatJobId(job.id)} created\n` +
+    `✅ ${db.formatJobId(job.id)} created\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${job.description}\n\n` +
     `Ready to quote? Say *quote ${job.id}* and I'll walk you through it.`
@@ -154,7 +154,7 @@ async function handleQuote(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   const isReQuote = !!job.quoted_amount;
 
@@ -188,7 +188,7 @@ async function handleSchedule(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date from "${intent.raw}". Try: *schedule ${intent.jobId} thursday 9am*`);
 
   await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
@@ -208,7 +208,7 @@ async function handleAddBlock(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *and then friday at 9*`);
 
   await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
@@ -232,7 +232,7 @@ async function handlePaid(intent, res) {
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ Already marked as paid.`);
 
   await db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `💰 Job ${db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
+  messenger.twimlReply(res, `💰 ${db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
 }
 
 async function handleSendInvoice(intent, res) {
@@ -240,7 +240,7 @@ async function handleSendInvoice(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   let invoice = await db.getInvoiceByJob(job.id, business.id);
   if (!invoice) {
@@ -259,7 +259,7 @@ async function handleSendInvoice(intent, res) {
     } else {
       return messenger.twimlReply(
         res,
-        `❌ No amount set for job ${db.formatJobId(job.id)}.\n\nUse: *invoice ${job.id} 450 description*`
+        `❌ No amount set for ${db.formatJobId(job.id)}.\n\nUse: *invoice ${job.id} 450 description*`
       );
     }
 
@@ -288,11 +288,11 @@ async function handleAmend(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
-  if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(intent.jobId)}.`);
-  if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ Invoice ${db.formatJobId(intent.jobId)} is already paid — can't amend it.`);
+  if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for ${db.formatJobId(intent.jobId)}.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is already paid — can't amend it.`);
 
   if (intent.amount == null) {
     return messenger.twimlReply(
@@ -315,12 +315,12 @@ async function handleAmend(intent, res) {
     const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `✅ Invoice ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Reply *paid ${job.id}* when settled.`,
+      `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Reply *paid ${job.id}* when settled.`,
       pdfUrl
     );
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message);
-    messenger.twimlReply(res, `✅ Invoice ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}`);
+    messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}`);
   }
 }
 
@@ -329,10 +329,10 @@ async function handleChase(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job #${intent.jobId} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
-  if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for job ${db.formatJobId(job.id)}.`);
+  if (!invoice) return messenger.twimlReply(res, `❌ No invoice found for ${db.formatJobId(job.id)}.`);
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
   const msg = templates.paymentReminder(job, invoice, job.customer, business);
@@ -352,7 +352,7 @@ async function handleReview(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   const msg = templates.reviewRequestMessage(job, job.customer, business);
 
@@ -371,7 +371,7 @@ async function handleReschedule(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
   if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *reschedule ${intent.jobId} thursday 9am*`);
 
   await db.clearBookingBlocks(job.id, business.id);
@@ -392,11 +392,11 @@ async function handleCancelJob(intent, res) {
   if (!business) return;
 
   const job = await db.getJob(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
-  if (job.status === 'cancelled') return messenger.twimlReply(res, `Job ${db.formatJobId(intent.jobId)} is already cancelled.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+  if (job.status === 'cancelled') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already cancelled.`);
 
   await db.cancelJob(intent.jobId, business.id);
-  messenger.twimlReply(res, `🚫 Job ${db.formatJobId(intent.jobId)} cancelled.`);
+  messenger.twimlReply(res, `🚫 ${db.formatJobId(intent.jobId)} cancelled.`);
 }
 
 async function handleAddNote(intent, res) {
@@ -404,7 +404,7 @@ async function handleAddNote(intent, res) {
   if (!business) return;
 
   const job = await db.appendJobNote(intent.jobId, business.id, intent.note);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   messenger.twimlReply(res, `📝 Note added to ${db.formatJobId(intent.jobId)}.`);
 }
@@ -623,7 +623,7 @@ async function handleViewJob(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
   const [blocks, invoice] = await Promise.all([
     db.getBookingBlocksForJob(intent.jobId, business.id),
@@ -695,7 +695,7 @@ async function handleMarkComplete(intent, res) {
   if (!business) return;
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+  if (!job) return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
   if (job.status === 'complete') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already marked complete.`);
   if (job.status === 'cancelled') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is cancelled.`);
 

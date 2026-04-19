@@ -267,7 +267,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Guides the user through quick vs itemised, then dispatches to handleQuote.
     if (!currentState && intent.intent === 'quote' && intent.jobId && intent.amount == null) {
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
       await setConversationState(business.id, {
         workflow: 'quote_guided',
@@ -347,7 +347,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Checks for existing quote and guides accordingly.
     if (!currentState && intent.intent === 'send_invoice' && intent.amount == null) {
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ Job ${db.formatJobId(intent.jobId)} not found.`);
+      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
       // If invoice already exists, just resend it — no need to guide
       const existingInvoice = await db.getInvoiceByJob(job.id, business.id);
