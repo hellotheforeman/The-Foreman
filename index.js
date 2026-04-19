@@ -269,6 +269,30 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
       if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
+      if (job.quoted_amount) {
+        const quotedStr = `£${Number(job.quoted_amount).toFixed(2)}`;
+        await setConversationState(business.id, {
+          workflow: 'quote_guided',
+          focus: { jobId: job.id },
+          collected: {
+            jobId: job.id,
+            quoted_amount: Number(job.quoted_amount),
+            quote_items: job.quote_items || null,
+            quote_line_items_json: job.quote_line_items_json || null,
+          },
+          pending: { type: 'choice', field: 'quote_mode' },
+          options: [],
+        });
+        return twimlReply(res,
+          `📋 *${job.description}* — ${job.customer.name}\n\n` +
+          `There's already a quote for *${quotedStr}*. What would you like to do?\n\n` +
+          `1. Resend existing quote\n` +
+          `2. Amend the quote\n` +
+          `3. Start from scratch\n\n` +
+          `Reply *1*, *2*, or *3*, or *cancel* to dismiss.`
+        );
+      }
+
       await setConversationState(business.id, {
         workflow: 'quote_guided',
         focus: { jobId: job.id },
@@ -296,6 +320,70 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
+      }
+
+      if (currentState.pending?.field === 'quote_mode') {
+        const n = parseInt(trimmed, 10);
+        if (!n || n < 1 || n > 3) {
+          return twimlReply(res, 'Reply *1*, *2*, or *3*, or *cancel* to dismiss.');
+        }
+        if (n === 1) {
+          // Resend existing quote as-is
+          await clearConversationState(business.id);
+          return dispatch({
+            kind: 'command', intent: 'quote',
+            jobId: currentState.focus.jobId,
+            amount: currentState.collected.quoted_amount,
+            items: currentState.collected.quote_items || null,
+            lineItems: currentState.collected.quote_line_items_json || null,
+            business,
+          }, res);
+        }
+        if (n === 2) {
+          // Amend — show existing items for easy editing
+          const currentItemsStr = formatItemsForCopy(
+            currentState.collected.quote_line_items_json,
+            currentState.collected.quote_items,
+            currentState.collected.quoted_amount
+          );
+          await setConversationState(business.id, {
+            ...currentState,
+            pending: { type: 'field', field: 'amend_items' },
+          });
+          return twimlReplyPair(
+            res,
+            `What should the quote show instead? Currently:`,
+            currentItemsStr
+          );
+        }
+        // Option 3 — start fresh
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { jobId: currentState.focus.jobId },
+          pending: { type: 'choice', field: 'quote_type' },
+        });
+        return twimlReply(res,
+          `How do you want to quote this?\n\n` +
+          `1. Quick — one price\n` +
+          `2. Itemised — list of line items\n\n` +
+          `Reply *1* or *2*, or *cancel* to dismiss.`
+        );
+      }
+
+      if (currentState.pending?.field === 'amend_items') {
+        const lineItems = parseLineItems(trimmed);
+        if (lineItems) {
+          const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
+          await clearConversationState(business.id);
+          return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: trimmed, lineItems, business }, res);
+        }
+        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*(.*)$/);
+        if (!m) return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
+        const amount = parseFloat(m[1]);
+        const desc = m[2].trim() || null;
+        const li = desc ? [{ description: desc, amount }] : null;
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: desc, lineItems: li, business }, res);
       }
 
       if (currentState.pending?.field === 'quote_type') {
