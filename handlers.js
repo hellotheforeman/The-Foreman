@@ -1,7 +1,7 @@
 const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
-const { generateQuotePdf, generateInvoicePdf, pdfUrl } = require('./pdf');
+const { generateQuotePdf, generateInvoicePdf } = require('./pdf');
 
 // --- Settings helpers (menu shown by handleSettings; flow processed in index.js) ---
 
@@ -167,11 +167,11 @@ async function handleQuote(intent, res) {
   const label = isReQuote ? 'Re-quoted' : 'Quote';
 
   try {
-    const filename = await generateQuotePdf(job, job.customer, business);
+    const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
       `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
-      pdfUrl(filename)
+      pdfUrl
     );
   } catch (err) {
     console.error('Quote PDF generation failed:', err.message);
@@ -267,11 +267,11 @@ async function handleSendInvoice(intent, res) {
   }
 
   try {
-    const filename = await generateInvoicePdf(job, invoice, job.customer, business);
+    const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
       `🧾 Invoice for ${job.customer.name} — £${Number(invoice.amount).toFixed(2)}\n\nForward this PDF to them on WhatsApp. Reply *paid ${job.id}* when settled.`,
-      pdfUrl(filename)
+      pdfUrl
     );
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message);
@@ -312,11 +312,11 @@ async function handleAmend(intent, res) {
   updatedInvoice.line_items_json = intent.lineItems || null;
 
   try {
-    const filename = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
+    const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
       `✅ Invoice ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Reply *paid ${job.id}* when settled.`,
-      pdfUrl(filename)
+      pdfUrl
     );
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message);

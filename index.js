@@ -14,9 +14,8 @@ const { getConversationState, setConversationState, clearConversationState } = r
 const { parseWithAI } = require('./ai-parser');
 
 const twilio = require('twilio');
-const path = require('path');
-const fs = require('fs');
 const https = require('https');
+const { uploadLogo } = require('./storage');
 const app = express();
 
 // Trust proxy headers so Express reconstructs the correct HTTPS URL behind
@@ -25,24 +24,14 @@ app.enable('trust proxy');
 
 app.use(express.urlencoded({ extended: false }));
 app.use(express.json());
-app.use('/pdfs', express.static(path.join(__dirname, 'public', 'pdfs')));
-app.use('/logos', express.static(path.join(__dirname, 'public', 'logos')));
 
-const LOGO_DIR = path.join(__dirname, 'public', 'logos');
-
-function ensureLogoDir() {
-  fs.mkdirSync(LOGO_DIR, { recursive: true });
-}
-
-function downloadLogo(mediaUrl, destPath) {
+// Downloads a Twilio media URL to a Buffer, following redirects.
+// Only sends Twilio Basic auth on twilio.com domains.
+function downloadToBuffer(mediaUrl) {
   return new Promise((resolve, reject) => {
     function doRequest(urlStr) {
       const url = new URL(urlStr);
-      const options = {
-        hostname: url.hostname,
-        path: url.pathname + url.search,
-      };
-      // Only send Twilio auth on Twilio's own domain — not on CDN redirects
+      const options = { hostname: url.hostname, path: url.pathname + url.search };
       if (url.hostname.includes('twilio.com')) {
         options.auth = `${config.twilio.accountSid}:${config.twilio.authToken}`;
       }
@@ -50,26 +39,19 @@ function downloadLogo(mediaUrl, destPath) {
         if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
           return doRequest(response.headers.location);
         }
-        const file = fs.createWriteStream(destPath);
-        response.pipe(file);
-        file.on('finish', () => { file.close(); resolve(); });
-        file.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
-      }).on('error', (err) => {
-        fs.unlink(destPath, () => {});
-        reject(err);
-      });
+        const chunks = [];
+        response.on('data', chunk => chunks.push(chunk));
+        response.on('end', () => resolve(Buffer.concat(chunks)));
+        response.on('error', reject);
+      }).on('error', reject);
     }
     doRequest(mediaUrl);
   });
 }
 
-function detectImageExt(filePath) {
-  const buf = Buffer.alloc(4);
-  const fd = fs.openSync(filePath, 'r');
-  fs.readSync(fd, buf, 0, 4, 0);
-  fs.closeSync(fd);
-  if (buf[0] === 0x89 && buf[1] === 0x50 && buf[2] === 0x4E && buf[3] === 0x47) return 'png';
-  if (buf[0] === 0xFF && buf[1] === 0xD8) return 'jpg';
+function detectImageExt(buffer) {
+  if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'png';
+  if (buffer[0] === 0xFF && buffer[1] === 0xD8) return 'jpg';
   return null;
 }
 
@@ -224,28 +206,18 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             if (!mediaUrl) {
               return twimlReply(res, `Please send your logo as a photo or image. (Reply *cancel* to go back)`);
             }
-            ensureLogoDir();
-            const tmpPath = path.join(LOGO_DIR, `${business.id}.tmp`);
             try {
-              await downloadLogo(mediaUrl, tmpPath);
-              const ext = detectImageExt(tmpPath);
+              const buffer = await downloadToBuffer(mediaUrl);
+              const ext = detectImageExt(buffer);
               if (!ext) {
-                fs.unlink(tmpPath, () => {});
-                return twimlReply(res, `❌ That file type isn't supported. Please send a PNG or JPEG image.`);
+                return twimlReply(res, `❌ That file type isn't supported. Please send a photo or image.`);
               }
-              // Remove any previous logo with a different extension
-              for (const old of ['png', 'jpg']) {
-                const oldPath = path.join(LOGO_DIR, `${business.id}.${old}`);
-                if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
-              }
-              const finalPath = path.join(LOGO_DIR, `${business.id}.${ext}`);
-              fs.renameSync(tmpPath, finalPath);
-              await db.updateBusiness(business.id, { logo_path: finalPath });
+              const logoUrl = await uploadLogo(business.id, buffer, ext);
+              await db.updateBusiness(business.id, { logo_path: logoUrl });
               await clearConversationState(business.id);
               return twimlReply(res, `✅ Logo saved — it'll appear on all your quotes and invoices.`);
             } catch (err) {
-              console.error('Logo download failed:', err);
-              fs.unlink(tmpPath, () => {});
+              console.error('Logo upload failed:', err);
               return twimlReply(res, `❌ Couldn't save that image. Please try again.`);
             }
           }

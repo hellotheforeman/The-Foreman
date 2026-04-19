@@ -6,6 +6,10 @@ const config = {
     authToken: process.env.TWILIO_AUTH_TOKEN,
     whatsappNumber: process.env.TWILIO_WHATSAPP_NUMBER,
   },
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    serviceKey: process.env.SUPABASE_SERVICE_KEY,
+  },
   foremanPhone: process.env.FOREMAN_PHONE,
   adminSecret: process.env.ADMIN_SECRET,
   businessName: process.env.BUSINESS_NAME || 'My Trade Business',
