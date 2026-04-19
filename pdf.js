@@ -28,7 +28,7 @@ function normaliseLineItems(lineItemsJson, fallbackDescription, fallbackAmount) 
 function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails, vat, logoBuffer }) {
   const safeName = (customer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const dateStr = new Date().toISOString().split('T')[0];
-  const filename = `${type}-${safeName}-${dateStr}.pdf`;
+  const filename = `${type}-${docNumber}-${safeName}-${dateStr}.pdf`;
 
   return new Promise((resolve, reject) => {
     const doc = new PDFDocument({ margin: 50, size: 'A4' });
