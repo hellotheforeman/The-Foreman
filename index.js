@@ -685,16 +685,20 @@ app.post('/status', (req, res) => {
   res.sendStatus(200);
 });
 
+function toTitleCase(str) {
+  return str.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
   let items = lineItemsJson;
   if (typeof items === 'string') {
     try { items = JSON.parse(items); } catch { items = null; }
   }
   if (Array.isArray(items) && items.length) {
-    return items.map((i) => `${i.description} ${i.amount}`).join(', ');
+    return items.map((i) => `${toTitleCase(String(i.description))} £${Number(i.amount).toFixed(2)}`).join(', ');
   }
   if (quoteItems) return quoteItems;
-  if (quotedAmount) return String(quotedAmount);
+  if (quotedAmount) return `Total £${Number(quotedAmount).toFixed(2)}`;
   return '';
 }
 
