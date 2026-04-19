@@ -68,7 +68,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
         doc.image(logoPath, L, headerTopY, { fit: [MAX_LOGO_WIDTH, MAX_LOGO_HEIGHT], align: 'left' });
         headerTopY += MAX_LOGO_HEIGHT + 8;
       } catch (e) {
-        // Logo render failed — continue without it
+        console.error('🖼️  Logo render failed:', e.message);
       }
     }
 
