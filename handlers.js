@@ -129,7 +129,7 @@ async function handleNewCustomer(intent, res) {
     res,
     `👤 Customer saved\n\n` +
     `*${customer.name}*\n${details}\n\n` +
-    `To add a job: *new job ${customer.name} ${customer.phone} [description]*`
+    `To log a job for them, say: *new job ${customer.name} ${customer.phone} boiler service*`
   );
 }
 
@@ -145,7 +145,7 @@ async function handleNewJob(intent, res) {
     `✅ Job ${db.formatJobId(job.id)} created\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${job.description}\n\n` +
-    `Next: *quote ${job.id} [amount] [description]*`
+    `Ready to quote? Say *quote ${job.id}* and I'll walk you through it.`
   );
 }
 
@@ -170,7 +170,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, use *schedule ${job.id} [day] [time]* to book it in.`,
+      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, say *schedule ${job.id} thursday 9am* to book it in.`,
       pdfUrl
     );
   } catch (err) {
@@ -178,7 +178,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, use *schedule ${job.id} [day] [time]* to book it in.`
+      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, say *schedule ${job.id} thursday 9am* to book it in.`
     );
   }
 }
@@ -579,7 +579,7 @@ async function handleOpenJobs(intent, res) {
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
   const lines = jobs.map((j) => {
-    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${db.deriveStatus(j)}]`;
+    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} (${db.deriveStatus(j)})`;
   });
   messenger.twimlReply(res, `📋 *${jobs.length} open jobs*\n\n${lines.join('\n')}`);
 }
@@ -606,7 +606,7 @@ async function handleFind(intent, res) {
       const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
       const date = formatShortDate(j.sort_date);
-      return `  - ${date} ${db.formatJobId(j.id)}: ${j.description}${amount} [${status}]`;
+      return `  - ${date} ${db.formatJobId(j.id)}: ${j.description}${amount} (${status})`;
     });
     const contactParts = [c.phone, c.email, c.address].filter(Boolean);
     results.push(
@@ -714,7 +714,7 @@ async function handleUnscheduledJobs(intent, res) {
   const jobs = await db.getUnscheduledJobs(business.id);
   if (!jobs.length) return messenger.twimlReply(res, `No unscheduled jobs. 📭`);
 
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} [${db.deriveStatus(j)}]`);
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} (${db.deriveStatus(j)})`);
   messenger.twimlReply(res, `📋 *${jobs.length} unscheduled jobs*\n\n${lines.join('\n')}`);
 }
 
@@ -732,22 +732,22 @@ async function handleHelp(intent, res) {
     `🔨 *The Foreman*\n\n` +
     `*new customer* — add a customer\n` +
     `*new job* — add a job\n` +
-    `*find* [name] — look up a customer\n\n` +
-    `*quote* [job#] — send a quote\n` +
-    `*schedule* [job#] [day] [time] — book a job\n` +
-    `*invoice* [job#] — send an invoice\n` +
-    `*amend* [job#] — update an unpaid invoice\n` +
-    `*paid* [job#] — mark invoice as paid\n` +
-    `*chase* [job#] — send payment reminder\n\n` +
-    `*today* / *this week* — view schedule\n` +
+    `*find patel* — look up a customer\n\n` +
+    `*quote 4* — send a quote\n` +
+    `*schedule 4 thursday 9am* — book a job in\n` +
+    `*invoice 4* — send an invoice\n` +
+    `*amend 4* — update an unpaid invoice\n` +
+    `*paid 4* — mark invoice as paid\n` +
+    `*chase 4* — send a payment reminder\n\n` +
+    `*today* / *this week* — view your schedule\n` +
     `*jobs* — open jobs\n` +
     `*unscheduled jobs* — jobs not yet booked in\n` +
-    `*job* [#] — full job detail\n` +
+    `*job 4* — full job details\n` +
     `*new jobs* / *in progress* / *completed jobs* — jobs by status\n` +
     `*unpaid* — outstanding invoices\n` +
     `*earnings* — income summary\n\n` +
-    `*complete* [job#] — mark job as done\n` +
-    `*review* [job#] — request a review\n` +
+    `*complete 4* — mark a job as done\n` +
+    `*review 4* — request a review\n` +
     `*settings* — business settings\n` +
     `*help* — this message`
   );
