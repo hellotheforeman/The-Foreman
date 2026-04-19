@@ -172,7 +172,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       const trimmed = body.trim();
 
       // Allow cancelling out of settings
-      if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         return twimlReply(res, 'Settings closed.');
       }
@@ -190,6 +190,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           pending: { type: 'field', field: 'value' },
           options: [],
         });
+        if (setting.type === 'vat') {
+          return twimlReply(res, `Are you VAT registered?\n\nReply *yes* or *no*. (Reply *cancel* to go back)`);
+        }
         const hint = setting.hint || '(Reply *cancel* to go back)';
         return twimlReply(res, `What should I change *${setting.label}* to?\n\n${hint}`);
       }
@@ -216,6 +219,26 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             }
           }
 
+          if (settingType === 'vat') {
+            const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
+            const isNo = /^(no|n|nope|nah)$/i.test(trimmed);
+            if (!isYes && !isNo) {
+              return twimlReply(res, `Reply *yes* if you're VAT registered, or *no* if not.`);
+            }
+            if (isNo) {
+              await db.updateBusiness(business.id, { vat_registered: false, vat_number: null });
+              await clearConversationState(business.id);
+              return twimlReply(res, `✅ VAT updated — not registered.`);
+            }
+            // Yes — ask for the number
+            await db.updateBusiness(business.id, { vat_registered: true });
+            await setConversationState(business.id, {
+              ...currentState,
+              pending: { type: 'field', field: 'vat_number' },
+            });
+            return twimlReply(res, `What's your VAT number?`);
+          }
+
           const isBoolean = settingType === 'boolean';
           const value = isBoolean ? /^(yes|y|true|1)$/i.test(trimmed) : trimmed;
           const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;
@@ -223,6 +246,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           await clearConversationState(business.id);
           return twimlReply(res, `✅ *${settingLabel}* updated to: ${displayValue}`);
         }
+      }
+
+      if (currentState.pending?.field === 'vat_number') {
+        await db.updateBusiness(business.id, { vat_number: trimmed });
+        await clearConversationState(business.id);
+        return twimlReply(res, `✅ VAT updated — registered, ${trimmed}.`);
       }
 
       // Fallback — show menu again

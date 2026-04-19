@@ -11,24 +11,29 @@ const SETTINGS_FIELDS = [
   { key: 'email',          label: 'Email' },
   { key: 'address',        label: 'Address' },
   { key: 'payment_details', label: 'Payment details' },
-  { key: 'vat_registered', label: 'VAT registered', type: 'boolean', hint: 'Reply *yes* or *no*' },
-  { key: 'vat_number',     label: 'VAT number' },
+  { key: 'vat', label: 'VAT', type: 'vat' },
   { key: 'logo_path',      label: 'Logo', type: 'image', hint: 'Send your logo as a photo or image. It will appear on all your quotes and invoices.' },
 ];
 
 function buildSettingsMenu(business) {
   const lines = ['⚙️ *Business Settings*\n', 'Reply with a number to update:\n'];
   SETTINGS_FIELDS.forEach((s, i) => {
-    const val = business[s.key];
     let display;
-    if (val === null || val === undefined || val === '') {
-      display = '_not set_';
-    } else if (s.type === 'boolean') {
-      display = val ? 'Yes' : 'No';
+    if (s.type === 'vat') {
+      if (business.vat_registered) {
+        display = business.vat_number ? `Registered — ${business.vat_number}` : 'Registered';
+      } else {
+        display = 'Not registered';
+      }
     } else if (s.type === 'image') {
-      display = '✅ uploaded';
+      display = business.logo_path ? '✅ uploaded' : '_not set_';
     } else {
-      display = String(val).length > 45 ? String(val).slice(0, 45) + '…' : String(val);
+      const val = business[s.key];
+      if (val === null || val === undefined || val === '') {
+        display = '_not set_';
+      } else {
+        display = String(val).length > 45 ? String(val).slice(0, 45) + '…' : String(val);
+      }
     }
     lines.push(`${i + 1}. ${s.label}: ${display}`);
   });
