@@ -107,8 +107,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Your Foreman account is ${business.status}. We'll be in touch once it's active.`);
     }
 
+    // Fetch conversation state before parsing so we can skip the AI parser when
+    // mid-workflow — structured replies (numbers, amounts) must not be misread as commands.
+    let currentState = await getConversationState(business.id);
+
     let intent = parse(body);
-    if (intent.intent === 'unknown') {
+    if (intent.intent === 'unknown' && !currentState) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
@@ -151,8 +155,6 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       });
       return twimlReply(res, buildOverlapWarning(overlaps));
     }
-
-    let currentState = await getConversationState(business.id);
 
     // --- Settings workflow (menu-driven, handled outside the generic workflow engine) ---
     if (intent.intent === 'settings') {
