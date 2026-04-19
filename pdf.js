@@ -57,6 +57,10 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
 
     // Logo — rendered above business name if present
     const logoPath = business?.logo_path;
+    if (logoPath) {
+      const exists = fs.existsSync(logoPath);
+      console.log(`🖼️  Logo path: ${logoPath} — exists: ${exists}`);
+    }
     if (logoPath && fs.existsSync(logoPath)) {
       try {
         const MAX_LOGO_HEIGHT = 50;
