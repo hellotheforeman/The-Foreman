@@ -304,7 +304,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         `📋 *${job.description}* — ${job.customer.name}\n\n` +
         `How do you want to quote this?\n\n` +
         `1. Quick — one price\n` +
-        `2. Itemised — list of line items\n\n` +
+        `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
         `Reply *1* or *2*, or *cancel* to dismiss.`
       );
     }
@@ -365,7 +365,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res,
           `How do you want to quote this?\n\n` +
           `1. Quick — one price\n` +
-          `2. Itemised — list of line items\n\n` +
+          `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
           `Reply *1* or *2*, or *cancel* to dismiss.`
         );
       }
@@ -397,7 +397,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'quote_type') {
         const n = parseInt(trimmed, 10);
         if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply *1* for a quick quote or *2* for itemised, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply *1* for a quick quote or *2* for a detailed breakdown, or *cancel* to dismiss.');
         }
         if (n === 1) {
           await setConversationState(business.id, {
@@ -412,7 +412,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             collected: { ...currentState.collected, quote_type: 'itemised' },
             pending: { type: 'field', field: 'items' },
           });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*\n\nFormat: description amount, separated by commas');
+          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*\n\nSeparate each item with a comma.');
         }
       }
 
@@ -485,7 +485,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           `🧾 *${job.description}* — ${job.customer.name}\n\n` +
           `No quote on file. How would you like to invoice?\n\n` +
           `1. Quick — one amount\n` +
-          `2. Itemised — list of line items\n\n` +
+          `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
           `Reply *1* or *2*, or *cancel* to dismiss.`
         );
       }
@@ -544,7 +544,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'invoice_mode_new') {
         const n = parseInt(trimmed, 10);
         if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply *1* for quick or *2* for itemised, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply *1* for quick or *2* for a detailed breakdown, or *cancel* to dismiss.');
         }
         if (n === 1) {
           await setConversationState(business.id, {
@@ -724,7 +724,7 @@ function buildOverlapWarning(overlaps) {
       : `${templates.formatDate(o.start_date)} – ${templates.formatDate(o.end_date)}`;
     return `• ${dateRange} — ${o.description} (${o.customer_name})`;
   }).join('\n');
-  return `⚠️ Already booked on those dates:\n${lines}\n\nBook anyway? Reply *yes* or *cancel*.`;
+  return `⚠️ You've already got jobs on those dates:\n\n${lines}\n\nBook it in anyway? (Could be a different site, or a follow-up block.) Reply *yes* to confirm, or *cancel* if it's a mistake.`;
 }
 
 const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block', 'settings']);

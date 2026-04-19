@@ -543,11 +543,13 @@ async function handleEarnings(intent, res) {
 
   let msg =
     `💰 *${label}*\n\n` +
-    `Invoiced: £${invoiced}\n` +
-    `Paid:     £${paid}\n` +
-    `Unpaid:   £${unpaid}`;
+    `In the bank:    £${paid}\n` +
+    `Waiting for:    £${unpaid}\n` +
+    `Total invoiced: £${invoiced}`;
 
-  if (overdue > 0) msg += `\nOverdue:  £${overdue.toFixed(2)}`;
+  if (overdue > 0) {
+    msg += `\n\n⚠️ £${overdue.toFixed(2)} is overdue (over 14 days). Say *unpaid* to see who owes you.`;
+  }
 
   messenger.twimlReply(res, msg);
 }
@@ -729,27 +731,25 @@ async function handleThanks(intent, res) {
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
-    `🔨 *The Foreman*\n\n` +
-    `*new customer* — add a customer\n` +
-    `*new job* — add a job\n` +
-    `*find patel* — look up a customer\n\n` +
-    `*quote 4* — send a quote\n` +
-    `*schedule 4 thursday 9am* — book a job in\n` +
-    `*invoice 4* — send an invoice\n` +
-    `*amend 4* — update an unpaid invoice\n` +
-    `*paid 4* — mark invoice as paid\n` +
-    `*chase 4* — send a payment reminder\n\n` +
-    `*today* / *this week* — view your schedule\n` +
-    `*jobs* — open jobs\n` +
-    `*unscheduled jobs* — jobs not yet booked in\n` +
-    `*job 4* — full job details\n` +
-    `*new jobs* / *in progress* / *completed jobs* — jobs by status\n` +
-    `*unpaid* — outstanding invoices\n` +
-    `*earnings* — income summary\n\n` +
-    `*complete 4* — mark a job as done\n` +
-    `*review 4* — request a review\n` +
-    `*settings* — business settings\n` +
-    `*help* — this message`
+    `🔨 *The Foreman — here's what I can do:*\n\n` +
+
+    `*Customers & jobs*\n` +
+    `Add a new job with *new job*, or just a customer with *new customer*. Look someone up with *find patel*. Full job detail with *job 4*.\n\n` +
+
+    `*Quotes*\n` +
+    `Ready to quote? Say *quote 4* and I'll walk you through it — one price or a full breakdown. Need to tweak it? Just say *quote 4* again.\n\n` +
+
+    `*Scheduling*\n` +
+    `Book a job in with *schedule 4 thursday 9am*. Multi-day? Add *and then friday*. Shift it with *reschedule 4 monday*. See what's on with *today*, *tomorrow*, or *this week*.\n\n` +
+
+    `*Invoicing & payments*\n` +
+    `Send an invoice with *invoice 4*. Update it before paying with *amend 4*. Mark it paid with *paid 4*, or send a nudge with *chase 4*.\n\n` +
+
+    `*Pipeline*\n` +
+    `*jobs* — everything open. *unscheduled* — not yet booked. *unpaid* — waiting to be paid. *earnings* — how you're doing this month.\n\n` +
+
+    `*Finishing up*\n` +
+    `Mark a job done with *complete 4*, request a review with *review 4*, update your business details with *settings*.`
   );
 }
 
@@ -762,7 +762,7 @@ async function handleCancel(intent, res) {
 }
 
 async function handleUnknown(intent, res) {
-  messenger.twimlReply(res, `🤔 Didn't catch that. Reply *help* for commands.`);
+  messenger.twimlReply(res, `Didn't quite catch that — try rephrasing.`);
 }
 
 // Normalises stored line item strings for display: splits on | or ,, adds £ before amounts.
