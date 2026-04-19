@@ -38,7 +38,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     doc.on('end', async () => {
       try {
         const buffer = Buffer.concat(chunks);
-        const url = await uploadPdf(business.id, filename, buffer);
+        const url = await uploadPdf(business.id, type, filename, buffer);
         resolve(url);
       } catch (err) {
         reject(err);

@@ -15,8 +15,8 @@ async function uploadLogo(businessId, buffer, ext) {
   return data.publicUrl;
 }
 
-async function uploadPdf(businessId, filename, buffer) {
-  const filePath = `${businessId}/${filename}`;
+async function uploadPdf(businessId, type, filename, buffer) {
+  const filePath = `${businessId}/${type}s/${filename}`;
   const { error } = await supabase.storage
     .from('pdfs')
     .upload(filePath, buffer, { contentType: 'application/pdf', upsert: true });
