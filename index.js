@@ -36,20 +36,30 @@ function ensureLogoDir() {
 
 function downloadLogo(mediaUrl, destPath) {
   return new Promise((resolve, reject) => {
-    const url = new URL(mediaUrl);
-    const options = {
-      hostname: url.hostname,
-      path: url.pathname + url.search,
-      auth: `${config.twilio.accountSid}:${config.twilio.authToken}`,
-    };
-    const file = fs.createWriteStream(destPath);
-    https.get(options, (response) => {
-      response.pipe(file);
-      file.on('finish', () => { file.close(); resolve(); });
-    }).on('error', (err) => {
-      fs.unlink(destPath, () => {});
-      reject(err);
-    });
+    function doRequest(urlStr) {
+      const url = new URL(urlStr);
+      const options = {
+        hostname: url.hostname,
+        path: url.pathname + url.search,
+      };
+      // Only send Twilio auth on Twilio's own domain — not on CDN redirects
+      if (url.hostname.includes('twilio.com')) {
+        options.auth = `${config.twilio.accountSid}:${config.twilio.authToken}`;
+      }
+      https.get(options, (response) => {
+        if ([301, 302, 303, 307, 308].includes(response.statusCode)) {
+          return doRequest(response.headers.location);
+        }
+        const file = fs.createWriteStream(destPath);
+        response.pipe(file);
+        file.on('finish', () => { file.close(); resolve(); });
+        file.on('error', (err) => { fs.unlink(destPath, () => {}); reject(err); });
+      }).on('error', (err) => {
+        fs.unlink(destPath, () => {});
+        reject(err);
+      });
+    }
+    doRequest(mediaUrl);
   });
 }
 
