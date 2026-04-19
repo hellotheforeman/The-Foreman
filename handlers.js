@@ -170,7 +170,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nForward this PDF to them on WhatsApp. When they accept, say *schedule ${job.id} thursday 9am* to book it in.`,
+      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nGive me a shout when you want to get this booked in the calendar.`,
       pdfUrl
     );
   } catch (err) {
@@ -178,7 +178,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nWhen they accept, say *schedule ${job.id} thursday 9am* to book it in.`
+      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nGive me a shout when you want to get this booked in the calendar.`
     );
   }
 }
@@ -270,7 +270,7 @@ async function handleSendInvoice(intent, res) {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 Invoice for ${job.customer.name} — £${Number(invoice.amount).toFixed(2)}\n\nForward this PDF to them on WhatsApp. Reply *paid ${job.id}* when settled.`,
+      `🧾 Invoice ${db.formatJobId(job.id)} — £${Number(invoice.amount).toFixed(2)} for ${job.customer.name}\n\nLet me know when they've paid up — say *paid ${job.id}*.`,
       pdfUrl
     );
   } catch (err) {
@@ -278,7 +278,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 Invoice for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nReply *paid ${job.id}* when settled.`
+      `🧾 Invoice ${db.formatJobId(job.id)} — £${Number(invoice.amount).toFixed(2)} for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nLet me know when they've paid up — say *paid ${job.id}*.`
     );
   }
 }
