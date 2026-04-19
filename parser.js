@@ -95,9 +95,9 @@ function parse(raw) {
   // Normalise "requote", "re-quote", "update quote" → treated identically to "quote"
   const normalisedForQuote = text.replace(/^(?:re-?quote|update\s+quote)\s+/i, 'quote ');
 
-  // Quick: "quote 42 85" or "quote #0042 £85 boiler service"
+  // Quick: "quote 42 85" or "quote job 42 £85 boiler service"
   const quoteQuickMatch = normalisedForQuote.match(
-    /^quote\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.*)$/i
+    /^quote\s+(?:job\s+)?#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.*)$/i
   );
   if (quoteQuickMatch) {
     const desc = quoteQuickMatch[3].trim();
@@ -113,8 +113,8 @@ function parse(raw) {
     };
   }
 
-  // Itemised: "quote 14 boiler service 250 | parts 45" or "quote 14 boiler service 250"
-  const quoteItemisedMatch = normalisedForQuote.match(/^quote\s+#?(\d+)\s+(.+)$/i);
+  // Itemised: "quote 14 boiler service 250 | parts 45" or "quote job 14 service 250"
+  const quoteItemisedMatch = normalisedForQuote.match(/^quote\s+(?:job\s+)?#?(\d+)\s+(.+)$/i);
   if (quoteItemisedMatch) {
     const itemsStr = quoteItemisedMatch[2].trim();
     const lineItems = parseLineItems(itemsStr);
@@ -139,8 +139,8 @@ function parse(raw) {
     };
   }
 
-  // Job ID only — no amount or items: "quote 14" → triggers guided workflow
-  const quoteJustIdMatch = normalisedForQuote.toLowerCase().match(/^quote\s+#?(\d+)\s*$/);
+  // Job ID only — no amount or items: "quote 14" or "quote job 14" → triggers guided workflow
+  const quoteJustIdMatch = normalisedForQuote.toLowerCase().match(/^quote\s+(?:job\s+)?#?(\d+)\s*$/);
   if (quoteJustIdMatch) {
     return {
       kind: 'command',
