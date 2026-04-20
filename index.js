@@ -613,7 +613,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, 'Got it — not booked.');
       }
 
-      if (/^(yes|yeah|yep|go ahead|do it|ok|okay|sure|confirm|proceed)$/i.test(trimmed)) {
+      if (/^(yes|yeah|yep|go ahead|do it|book it|book it in|ok|okay|sure|confirm|proceed)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         // Restore add_block follow-up context so "and then X" still works
         if (['schedule', 'reschedule', 'add_block'].includes(pendingIntent?.intent) && pendingIntent?.jobId) {
@@ -722,9 +722,9 @@ function buildOverlapWarning(overlaps) {
     const dateRange = o.start_date === o.end_date
       ? templates.formatDate(o.start_date)
       : `${templates.formatDate(o.start_date)} – ${templates.formatDate(o.end_date)}`;
-    return `• ${dateRange} — ${o.description} (${o.customer_name})`;
+    return `• ${dateRange} — ${toTitleCase(o.description)} (${o.customer_name})`;
   }).join('\n');
-  return `⚠️ You've already got jobs on those dates:\n\n${lines}\n\nBook it in anyway? (Could be a different site, or a follow-up block.) Reply *yes* to confirm, or *cancel* if it's a mistake.`;
+  return `⚠️ You've already got jobs on those dates:\n\n${lines}\n\nBook it in anyway? Reply *yes* to confirm or *cancel* if it's a mistake.`;
 }
 
 const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block', 'settings']);
