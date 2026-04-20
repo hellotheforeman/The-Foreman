@@ -32,8 +32,8 @@ function start() {
     }
   }, TZ);
 
-  // Monday morning summary: 8am every Monday
-  cron.schedule('0 8 * * 1', async () => {
+  // Monday morning summary: 7am every Monday
+  cron.schedule('0 7 * * 1', async () => {
     try {
       const businesses = await db.listBusinesses();
       const now = new Date();
