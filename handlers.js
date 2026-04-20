@@ -203,7 +203,7 @@ async function handleSchedule(intent, res) {
   messenger.twimlReply(
     res,
     `📅 Booked: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
+    `${db.formatJobId(job.id).replace(/^j/, 'J')} — ${job.customer.name}, ${toTitleCase(job.description)}.`
   );
 }
 
@@ -417,7 +417,7 @@ async function handleReschedule(intent, res) {
   messenger.twimlReply(
     res,
     `📅 Rescheduled: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id)} — ${job.customer.name}, ${job.description}.`
+    `${db.formatJobId(job.id).replace(/^j/, 'J')} — ${job.customer.name}, ${toTitleCase(job.description)}.`
   );
 }
 
