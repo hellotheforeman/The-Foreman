@@ -29,7 +29,7 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
   if (base.__expecting === 'phone' && raw) {
     // Strip spaces and common separators, then normalise to +44 format
     const stripped = raw.trim().replace(/[\s\-().]/g, '');
-    if (/^(\+44|0044|44)?7\d{9}$/.test(stripped)) {
+    if (/^(\+44|0044|44|0)7\d{9}$/.test(stripped)) {
       merged.phone = normalisePhone(stripped);
     }
   }
