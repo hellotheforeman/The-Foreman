@@ -574,7 +574,8 @@ async function findOpenJobsByCustomerName(businessId, query) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'complete')
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND (j.scheduled_date IS NULL OR j.scheduled_date >= CURRENT_DATE - INTERVAL '30 days')
        AND LOWER(c.name) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
@@ -585,7 +586,8 @@ async function findJobsByDescription(businessId, query) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'complete')
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND (j.scheduled_date IS NULL OR j.scheduled_date >= CURRENT_DATE - INTERVAL '30 days')
        AND LOWER(j.description) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]

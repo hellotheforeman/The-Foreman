@@ -48,11 +48,6 @@ async function resolveSingleJobReference({ businessId, parsedIntent, raw, state 
     if (job) return { status: 'resolved', job };
   }
 
-  const openJobs = await db.getOpenJobs(businessId);
-  if (openJobs.length === 1) {
-    return { status: 'resolved', job: openJobs[0] };
-  }
-
   const query = extractReferenceText({ parsedIntent, raw, state });
   const candidates = await findCandidateJobs({ businessId, query });
 
