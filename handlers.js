@@ -3,6 +3,10 @@ const templates = require('./templates');
 const messenger = require('./messenger');
 const { generateQuotePdf, generateInvoicePdf } = require('./pdf');
 
+function toTitleCase(str) {
+  return String(str).replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 // --- Settings helpers (menu shown by handleSettings; flow processed in index.js) ---
 
 const SETTINGS_FIELDS = [
