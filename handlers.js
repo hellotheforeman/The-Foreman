@@ -765,25 +765,13 @@ async function handleThanks(intent, res) {
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
-    `🔨 *The Foreman — here's what I can do:*\n\n` +
-
-    `*Customers & jobs*\n` +
-    `Add a new job with *new job*, or just a customer with *new customer*. Look someone up with *find patel*. Full job detail with *job 4*.\n\n` +
-
-    `*Quotes*\n` +
-    `Ready to quote? Say *quote 4* and I'll walk you through it — one price or a full breakdown. Need to tweak it? Just say *quote 4* again.\n\n` +
-
-    `*Scheduling*\n` +
-    `Book a job in with *schedule 4 thursday 9am*. Multi-day? Add *and then friday*. Shift it with *reschedule 4 monday*. See what's on with *today*, *tomorrow*, or *this week*.\n\n` +
-
-    `*Invoicing & payments*\n` +
-    `Send an invoice with *invoice 4*. Update it before paying with *amend 4*. Mark it paid with *paid 4*, or send a nudge with *chase 4*.\n\n` +
-
-    `*Pipeline*\n` +
-    `*jobs* — everything open. *unscheduled* — not yet booked. *unpaid* — waiting to be paid. *earnings* — how you're doing this month.\n\n` +
-
-    `*Finishing up*\n` +
-    `Mark a job done with *complete 4*, request a review with *review 4*, update your business details with *settings*.`
+    `🔨 *The Foreman — run your business from your phone*\n\n` +
+    `Keep all your customers and jobs in one place.\n` +
+    `Book work in and don't double up.\n` +
+    `Send PDF quotes and invoices in minutes.\n` +
+    `Know what you're owed and chase it.\n` +
+    `Check your week at a glance.\n` +
+    `Track your earnings and drive more reviews.`
   );
 }
 
