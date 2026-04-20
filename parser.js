@@ -433,11 +433,12 @@ function parse(raw) {
   }
 
   // --- Earnings / income summary ---
-  if (/\b(earnings?|income|revenue|how much (have i |i've )?made|profit|summary|takings?)\b/i.test(lower)) {
+  if (/\b(earnings?|earned|income|revenue|how much (have i |i've )?made|profit|summary|takings?)\b/i.test(lower)) {
     let period = 'month';
     if (/\btoday\b/.test(lower)) period = 'today';
-    else if (/\bthis week\b/.test(lower)) period = 'week';
-    else if (/\bthis year\b/.test(lower)) period = 'year';
+    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
+    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
+    else if (/\bthis month\b|\bmonth\b/.test(lower)) period = 'month';
     return { kind: 'query', intent: 'earnings', period };
   }
 
