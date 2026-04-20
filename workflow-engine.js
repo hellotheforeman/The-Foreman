@@ -85,7 +85,8 @@ function buildPrompt(workflowName, field) {
 }
 
 function formatOptions(jobs) {
-  return jobs.slice(0, 5).map((job, index) => `${index + 1}. ${job.customer_name} — ${job.description}`).join('\n');
+  const toTitleCase = (str) => (str || '').replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  return jobs.slice(0, 5).map((job, index) => `${index + 1}. ${job.customer_name} — ${toTitleCase(job.description)}`).join('\n');
 }
 
 function parseSelection(raw) {

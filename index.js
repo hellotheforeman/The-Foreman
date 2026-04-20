@@ -724,7 +724,7 @@ function buildOverlapWarning(overlaps) {
       : `${templates.formatDate(o.start_date)} – ${templates.formatDate(o.end_date)}`;
     return `• ${dateRange} — ${toTitleCase(o.description)} (${o.customer_name})`;
   }).join('\n');
-  return `⚠️ You've already got jobs on those dates:\n\n${lines}\n\nBook it in anyway? Reply *yes* to confirm or *cancel* if it's a mistake.`;
+  return `⚠️ You've already got jobs on those dates:\n\n${lines}\n\nBook it in anyway?`;
 }
 
 const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block', 'settings']);
