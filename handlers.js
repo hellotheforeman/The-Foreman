@@ -145,7 +145,7 @@ async function handleNewJob(intent, res) {
     `✅ ${db.formatJobId(job.id).replace(/^j/, 'J')} created\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${toTitleCase(job.description)}\n\n` +
-    `Just say the word when you're ready to put a quote together.`
+    `Let me know when your ready to put a quote together.`
   );
 }
 
