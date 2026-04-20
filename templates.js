@@ -50,7 +50,7 @@ function quoteMessage(job, customer, business) {
 
 function scheduleConfirmation(job, customer, business) {
   const date = formatDate(job.scheduled_date);
-  const time = job.scheduled_time || 'TBC';
+  const timePart = job.scheduled_time ? ` at ${job.scheduled_time}` : '';
   const postcode = job.postcode ? ` (${job.postcode})` : '';
   const name = businessName(business);
   const durationSuffix = job.duration ? ` for ${job.duration} ${job.duration_unit || 'hours'}` : '';
@@ -59,7 +59,7 @@ function scheduleConfirmation(job, customer, business) {
     '',
     `Your job is confirmed:`,
     '',
-    `📅 *${date} at ${time}${durationSuffix}*`,
+    `📅 *${date}${timePart}${durationSuffix}*`,
     `🔧 ${job.description}${postcode}`,
     '',
     `We'll see you then! If you need to reschedule, just reply to this message.`,
@@ -153,7 +153,7 @@ function formatScheduleDay(jobs, dateStr) {
   const lines = jobs.map((j) => {
     const rawTime = j.scheduled_time || j.start_time || null;
     const isMultiDay = j.duration_unit === 'days' && j.duration > 1;
-    const timePrefix = rawTime ? `${rawTime} — ` : isMultiDay ? '' : 'TBC — ';
+    const timePrefix = rawTime ? `${rawTime} — ` : '';
     const postcode = j.postcode ? `, ${j.postcode}` : '';
     let durationStr = '';
     if (isMultiDay) {
