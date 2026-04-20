@@ -1,7 +1,7 @@
 const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
 const { resolveSingleJobReference } = require('./entity-resolver');
 const { normaliseConversationState } = require('./conversation-state');
-const { parseLineItems } = require('./parser');
+const { parseLineItems, normalisePhone } = require('./parser');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
@@ -24,6 +24,14 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
 
   if (base.__expecting === 'email' && raw && !parsedIntent.intent) {
     merged.email = raw.trim().toLowerCase();
+  }
+
+  if (base.__expecting === 'phone' && raw) {
+    // Strip spaces and common separators, then normalise to +44 format
+    const stripped = raw.trim().replace(/[\s\-().]/g, '');
+    if (/^(\+44|0044|44)?7\d{9}$/.test(stripped)) {
+      merged.phone = normalisePhone(stripped);
+    }
   }
 
   if (base.__expecting === 'amount') {
