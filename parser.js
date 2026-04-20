@@ -402,7 +402,7 @@ function parse(raw) {
     return { kind: 'query', intent: 'view_schedule', period };
   }
   // "what's scheduled/on (for) this week/next week/today/tomorrow"
-  if (/^what'?s\s+(scheduled(\s+for)?|on(\s+for)?)\s+(this week|next week|week after next|today|tomorrow)\??$/i.test(lower)) {
+  if (/^what'?s\s+(scheduled(\s+for)?|on(\s+for)?|going\s+on(\s+for)?)\s+(this week|next week|week after next|today|tomorrow)\??$/i.test(lower)) {
     let period = 'today';
     if (/\btomorrow\b/i.test(lower)) period = 'tomorrow';
     else if (/\bweek after next\b/i.test(lower)) period = 'week_after_next';

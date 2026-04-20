@@ -148,6 +148,10 @@ function workingDayNumber(startDateStr, currentDateStr) {
   return count;
 }
 
+function toTitleCase(str) {
+  return (str || '').replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 function formatScheduleDay(jobs, dateStr) {
   if (!jobs.length) return 'Nothing scheduled.';
   const lines = jobs.map((j) => {
@@ -163,7 +167,7 @@ function formatScheduleDay(jobs, dateStr) {
     } else if (j.duration) {
       durationStr = ` (${j.duration} ${j.duration_unit || 'hrs'})`;
     }
-    return `• ${timePrefix}${j.customer_name}, ${j.description}${postcode}${durationStr}`;
+    return `• ${timePrefix}${j.customer_name}, ${toTitleCase(j.description)}${postcode}${durationStr}`;
   });
   return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
 }
