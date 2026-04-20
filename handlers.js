@@ -142,10 +142,10 @@ async function handleNewJob(intent, res) {
   const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id)} created\n` +
+    `✅ ${db.formatJobId(job.id).replace(/^j/, 'J')} created\n` +
     `👤 ${customer.name} — ${details}\n` +
-    `🔧 ${job.description}\n\n` +
-    `Ready to quote? Say *quote ${job.id}* and I'll walk you through it.`
+    `🔧 ${toTitleCase(job.description)}\n\n` +
+    `Just say the word when you're ready to put a quote together.`
   );
 }
 
