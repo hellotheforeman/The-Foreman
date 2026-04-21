@@ -257,7 +257,7 @@ async function run(sql, params = []) {
 }
 
 function formatJobId(id) {
-  return `job ${id}`;
+  return `Job ${id}`;
 }
 
 // --- Customer queries ---

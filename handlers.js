@@ -146,7 +146,7 @@ async function handleNewJob(intent, res) {
   const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id).replace(/^j/, 'J')} created\n` +
+    `✅ ${db.formatJobId(job.id)} created\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${toTitleCase(job.description)}\n\n` +
     `Let me know when your ready to put a quote together.`
@@ -203,7 +203,7 @@ async function handleSchedule(intent, res) {
   messenger.twimlReply(
     res,
     `📅 Booked: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id).replace(/^j/, 'J')} — ${job.customer.name}, ${toTitleCase(job.description)}.`
+    `${db.formatJobId(job.id)} — ${job.customer.name}, ${toTitleCase(job.description)}.`
   );
 }
 
@@ -235,8 +235,8 @@ async function handlePaid(intent, res) {
     const suggestion = await unpaidSuggestion(business.id);
     return messenger.twimlReply(res,
       suggestion
-        ? `Which job got paid? Your unpaid invoices:\n\n${suggestion}\n\nSay *paid 4* to mark one off.`
-        : `Which job got paid? Say *paid 4* with the job number.`
+        ? `Which Job got paid? Your unpaid invoices:\n\n${suggestion}\n\nSay *paid 4* to mark one off.`
+        : `Which Job got paid? Say *paid 4* with the Job number.`
     );
   }
 
@@ -417,7 +417,7 @@ async function handleReschedule(intent, res) {
   messenger.twimlReply(
     res,
     `📅 Rescheduled: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id).replace(/^j/, 'J')} — ${job.customer.name}, ${toTitleCase(job.description)}.`
+    `${db.formatJobId(job.id)} — ${job.customer.name}, ${toTitleCase(job.description)}.`
   );
 }
 
@@ -615,7 +615,7 @@ async function handleOpenJobs(intent, res) {
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
   const lines = jobs.map((j) => {
-    return `• ${db.formatJobId(j.id).replace(/^j/, 'J')} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`;
+    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`;
   });
   messenger.twimlReply(res, `📋 *${jobs.length} Open Jobs*\n\n${lines.join('\n')}`);
 }
