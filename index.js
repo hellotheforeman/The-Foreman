@@ -113,6 +113,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Your Foreman account is ${business.status}. We'll be in touch once it's active.`);
     }
 
+    // --- Onboarding ---
+    if (!business.onboarded) {
+      return handleOnboarding({ business, body, mediaUrl, res });
+    }
+    // --- End onboarding ---
+
     // Fetch conversation state before parsing so we can skip the AI parser when
     // mid-workflow — structured replies (numbers, amounts) must not be misread as commands.
     let currentState = await getConversationState(business.id);
@@ -741,6 +747,129 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
   if (quotedAmount) return `Total £${Number(quotedAmount).toFixed(2)}`;
   return '';
 }
+
+// ---------------------------------------------------------------------------
+// Onboarding flow
+// ---------------------------------------------------------------------------
+
+const ONBOARDING_STEPS = [
+  { key: 'business_name',   label: 'Business name',   required: true,  prompt: `First up — what's your business name?` },
+  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade? (e.g. Plumber, Electrician, Builder)\n\nReply *skip* to do this later.` },
+  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email address?\n\nReply *skip* to do this later.` },
+  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address?\n\nReply *skip* to do this later.` },
+  { key: 'bank',            label: 'Bank details',     required: false, prompt: `What's your sort code? (e.g. 12-34-56)\n\nReply *skip* to do this later.` },
+  { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered?\n\nReply *yes*, *no*, or *skip* to do this later.` },
+  { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
+];
+
+const ONBOARDING_WELCOME = `👋 Welcome to The Foreman!
+
+I'm your business assistant — I help you manage jobs, send quotes and invoices, and keep track of what you're owed, all from WhatsApp.
+
+Here's what I can do:
+• *New job* — log a job for a customer
+• *Quote* — send a professional quote as a PDF
+• *Schedule* — book jobs into your calendar
+• *Invoice* — send an invoice when the work's done
+• *Jobs / Unpaid / This week* — check what's on
+
+Let's get you set up first. This will only take a minute and you can skip anything you want to come back to later.`;
+
+async function handleOnboarding({ business, body, mediaUrl, res }) {
+  const trimmed = (body || '').trim();
+  const state = await getConversationState(business.id);
+  const step = state?.collected?.onboardingStep || 0;
+
+  // First ever message — show welcome and start step 0
+  if (!state || state.workflow !== 'onboarding') {
+    await setConversationState(business.id, {
+      workflow: 'onboarding',
+      focus: {},
+      collected: { onboardingStep: 0 },
+      pending: { type: 'field', field: 'onboarding' },
+      options: [],
+    });
+    return twimlReply(res, `${ONBOARDING_WELCOME}\n\n${ONBOARDING_STEPS[0].prompt}`);
+  }
+
+  const current = ONBOARDING_STEPS[step];
+  const isSkip = /^skip$/i.test(trimmed);
+
+  // Handle skip (not allowed for required steps)
+  if (isSkip && current.required) {
+    return twimlReply(res, `This one's needed to get you set up — ${current.prompt}`);
+  }
+
+  // Process the answer for the current step
+  if (!isSkip) {
+    if (current.key === 'bank') {
+      // Bank is two-part — sort code first, then account number
+      if (!state.collected.sortCode) {
+        // Store sort code, re-prompt for account number
+        await setConversationState(business.id, {
+          ...state,
+          collected: { ...state.collected, sortCode: trimmed },
+        });
+        return twimlReply(res, `Got it. Now what's the account number?\n\nReply *skip* to do this later.`);
+      }
+      // Have both — save and move on
+      const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${trimmed}`;
+      await db.updateBusiness(business.id, { payment_details: paymentDetails });
+
+    } else if (current.key === 'vat') {
+      const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
+      const isNo = /^(no|n|nope|nah)$/i.test(trimmed);
+      if (!isYes && !isNo) {
+        return twimlReply(res, `Reply *yes* if you're VAT registered, *no* if not, or *skip* to come back to this later.`);
+      }
+      await db.updateBusiness(business.id, { vat_registered: isYes, vat_number: null });
+
+    } else if (current.key === 'logo') {
+      if (!mediaUrl) {
+        return twimlReply(res, `Please send your logo as a photo, or reply *skip* to do this later.`);
+      }
+      try {
+        const buffer = await downloadToBuffer(mediaUrl);
+        const ext = detectImageExt(buffer);
+        if (!ext) {
+          return twimlReply(res, `❌ That file type isn't supported. Please send a JPEG or PNG, or reply *skip*.`);
+        }
+        const logoUrl = await uploadLogo(business.id, buffer, ext);
+        await db.updateBusiness(business.id, { logo_path: logoUrl });
+      } catch (err) {
+        console.error('Onboarding logo upload failed:', err);
+        return twimlReply(res, `❌ Couldn't save that image. Try again or reply *skip*.`);
+      }
+
+    } else {
+      await db.updateBusiness(business.id, { [current.key]: trimmed });
+    }
+  }
+
+  // Clear sortCode from state if we just finished the bank step
+  const updatedCollected = { ...state.collected, onboardingStep: step + 1 };
+  if (current.key === 'bank') delete updatedCollected.sortCode;
+
+  // Advance to next step
+  const nextStep = step + 1;
+  if (nextStep < ONBOARDING_STEPS.length) {
+    await setConversationState(business.id, {
+      workflow: 'onboarding',
+      focus: {},
+      collected: updatedCollected,
+      pending: { type: 'field', field: 'onboarding' },
+      options: [],
+    });
+    return twimlReply(res, ONBOARDING_STEPS[nextStep].prompt);
+  }
+
+  // All steps done — mark as onboarded
+  await db.updateBusiness(business.id, { onboarded: true });
+  await clearConversationState(business.id);
+  return twimlReply(res, `You're all set! 🎉\n\nType *help* any time to see what I can do, or just get started — try *new job* to log your first one.`);
+}
+
+// ---------------------------------------------------------------------------
 
 function buildOverlapWarning(overlaps) {
   const lines = overlaps.map((o) => {

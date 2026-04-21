@@ -234,6 +234,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
 
