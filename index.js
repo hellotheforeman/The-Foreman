@@ -754,10 +754,10 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
 
 const ONBOARDING_STEPS = [
   { key: 'business_name',   label: 'Business name',   required: true,  prompt: `First up — what's your business name?` },
-  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade? (e.g. Plumber, Electrician, Builder)\n\nReply *skip* to do this later.` },
-  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email address?\n\nReply *skip* to do this later.` },
-  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address?\n\nReply *skip* to do this later.` },
-  { key: 'bank',            label: 'Bank details',     required: false, prompt: `What's your sort code? (e.g. 12-34-56)\n\nReply *skip* to do this later.` },
+  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?\n\nReply *skip* to do this later.` },
+  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
+  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
+  { key: 'bank',            label: 'Bank details',     required: false, prompt: `What's your sort code? This goes on your invoices so customers know where to pay.\n\nReply *skip* to do this later.` },
   { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered?\n\nReply *yes*, *no*, or *skip* to do this later.` },
   { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
 ];
@@ -801,7 +801,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
           ...state,
           collected: { ...state.collected, sortCode: trimmed },
         });
-        return twimlReply(res, `Got it. Now what's the account number?\n\nReply *skip* to do this later.`);
+        return twimlReply(res, `Got it. And the account number?\n\nReply *skip* to do this later.`);
       }
       // Have both — save and move on
       const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${trimmed}`;
