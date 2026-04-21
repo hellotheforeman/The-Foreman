@@ -702,7 +702,7 @@ async function getUnpaidInvoices(businessId) {
 // --- Update helpers ---
 
 async function updateBusiness(id, fields) {
-  const allowed = ['name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path'];
+  const allowed = ['name', 'business_name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path', 'vat_registered', 'vat_number', 'onboarded'];
   const updates = [];
   const values = [];
   let i = 1;
