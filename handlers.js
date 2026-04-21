@@ -94,6 +94,7 @@ const queryHandlers = {
   jobs_by_status: handleJobsByStatus,
   view_job: handleViewJob,
   find: handleFind,
+  list_customers: handleListCustomers,
   earnings: handleEarnings,
   settings: handleSettings,
   help: handleHelp,
@@ -618,6 +619,31 @@ async function handleOpenJobs(intent, res) {
     return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`;
   });
   messenger.twimlReply(res, `📋 *${jobs.length} Open Jobs*\n\n${lines.join('\n')}`);
+}
+
+async function handleListCustomers(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const offset = intent.offset || 0;
+  const [{ customers, hasMore }, total] = await Promise.all([
+    db.listCustomers(business.id, { limit: 10, offset }),
+    db.countCustomers(business.id),
+  ]);
+
+  if (!customers.length) return messenger.twimlReply(res, `No customers yet. Add one with *new customer*.`);
+
+  const lines = customers.map((c) => `• ${c.name}${c.phone ? ` — ${c.phone}` : ''}`);
+  const showing = offset + customers.length;
+  const header = offset === 0
+    ? `👥 *Your customers (${total} total):*`
+    : `👥 *Customers ${offset + 1}–${showing} of ${total}:*`;
+
+  const footer = hasMore
+    ? `\nReply *more customers* to see the next 10, or search by name with *find [name]*.`
+    : `\nSearch by name with *find [name]*.`;
+
+  messenger.twimlReply(res, `${header}\n\n${lines.join('\n')}${footer}`);
 }
 
 async function handleFind(intent, res) {

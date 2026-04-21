@@ -452,6 +452,14 @@ function parse(raw) {
     return { kind: 'query', intent: 'open_jobs' };
   }
 
+  // --- List customers ---
+  if (/^(customers|client|clients|all customers|my customers|customer list)$/i.test(lower)) {
+    return { kind: 'query', intent: 'list_customers' };
+  }
+  if (/^more customers$/i.test(lower)) {
+    return { kind: 'query', intent: 'list_customers', offset: 10 };
+  }
+
   // --- View job detail ---
   const jobDetailMatch = text.match(/^job\s+#?(\d+)$/i);
   if (jobDetailMatch) {

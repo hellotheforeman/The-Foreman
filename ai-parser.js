@@ -35,7 +35,7 @@ const DISPATCH_TOOL = {
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
             'view_schedule', 'unpaid', 'open_jobs', 'unscheduled_jobs',
-            'jobs_by_status', 'view_job', 'find', 'earnings', 'settings', 'help',
+            'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings', 'settings', 'help',
             'greeting', 'thanks',
           ],
           description: 'The specific intent identified from the message.',
@@ -165,6 +165,7 @@ INTENT GUIDE:
 - jobs_by_status: "new jobs", "in progress", "completed jobs"
 - view_job: "job 14", "show me job 3"
 - find: "find Mrs Patel", "look up Smith"
+- list_customers: "customers", "all my customers", "show me my customers"
 - earnings: "earnings", "how much have I made this month"
 - settings: "settings", "change my business name"
 - help: "help", "what can you do"`;

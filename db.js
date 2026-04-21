@@ -318,6 +318,26 @@ async function findOrCreateCustomer(businessId, name, phone, email) {
   return customer;
 }
 
+async function listCustomers(businessId, { limit = 10, offset = 0 } = {}) {
+  const rows = await getAll(
+    `SELECT c.*, COUNT(j.id)::int AS job_count, MAX(j.created_at) AS last_job_at
+     FROM customers c
+     LEFT JOIN jobs j ON j.customer_id = c.id AND j.business_id = $1
+     WHERE c.business_id = $1
+     GROUP BY c.id
+     ORDER BY last_job_at DESC NULLS LAST, c.created_at DESC
+     LIMIT $2 OFFSET $3`,
+    [businessId, limit + 1, offset]
+  );
+  const hasMore = rows.length > limit;
+  return { customers: rows.slice(0, limit), hasMore, total: null };
+}
+
+async function countCustomers(businessId) {
+  const row = await getOne('SELECT COUNT(*)::int AS n FROM customers WHERE business_id = $1', [businessId]);
+  return row?.n || 0;
+}
+
 async function findCustomerByName(businessId, name) {
   return getAll("SELECT * FROM customers WHERE business_id = $1 AND LOWER(name) LIKE '%' || LOWER($2) || '%'", [businessId, name]);
 }
@@ -820,6 +840,8 @@ module.exports = {
   listBusinesses,
   updateBusinessStatus,
   findOrCreateCustomer,
+  listCustomers,
+  countCustomers,
   findCustomerByName,
   getCustomer,
   createJob,
