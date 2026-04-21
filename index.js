@@ -762,18 +762,9 @@ const ONBOARDING_STEPS = [
   { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
 ];
 
-const ONBOARDING_WELCOME = `👋 Welcome to The Foreman!
+const ONBOARDING_WELCOME = `👋 Welcome to The Foreman — your business assistant on WhatsApp.
 
-I'm your business assistant — I help you manage jobs, send quotes and invoices, and keep track of what you're owed, all from WhatsApp.
-
-Here's what I can do:
-• *New job* — log a job for a customer
-• *Quote* — send a professional quote as a PDF
-• *Schedule* — book jobs into your calendar
-• *Invoice* — send an invoice when the work's done
-• *Jobs / Unpaid / This week* — check what's on
-
-Let's get you set up first. This will only take a minute and you can skip anything you want to come back to later.`;
+Quotes, invoices, jobs and scheduling, all from here. Let's get you set up in a couple of minutes. Reply *skip* to any question you want to come back to later.`;
 
 async function handleOnboarding({ business, body, mediaUrl, res }) {
   const trimmed = (body || '').trim();
