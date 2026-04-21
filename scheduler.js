@@ -19,12 +19,16 @@ function start() {
       const dateStr = tomorrow.toISOString().split('T')[0];
 
       for (const business of businesses.filter((b) => b.status === 'active')) {
-        const jobs = await db.getScheduleForDate(dateStr, business.id);
-        if (jobs.length) {
-          await messenger.sendToForeman(
-            `📅 *Tomorrow's schedule:*\n\n${templates.formatScheduleDay(jobs, dateStr)}`,
-            { businessId: business.id, businessPhone: business.phone }
-          );
+        try {
+          const jobs = await db.getScheduleForDate(dateStr, business.id);
+          if (jobs.length) {
+            await messenger.sendToForeman(
+              `📅 *Tomorrow's schedule:*\n\n${templates.formatScheduleDay(jobs, dateStr)}`,
+              { businessId: business.id, businessPhone: business.phone }
+            );
+          }
+        } catch (err) {
+          console.error(`Evening reminder failed for business ${business.id}:`, err.message);
         }
       }
     } catch (err) {
@@ -43,35 +47,39 @@ function start() {
       const endStr = end.toISOString().split('T')[0];
 
       for (const business of businesses.filter((b) => b.status === 'active')) {
-        const jobs = await db.getScheduleRange(startStr, endStr, business.id);
-        const unpaid = await db.getUnpaidInvoices(business.id);
-        const open = await db.getOpenJobs(business.id);
+        try {
+          const jobs = await db.getScheduleRange(startStr, endStr, business.id);
+          const unpaid = await db.getUnpaidInvoices(business.id);
+          const open = await db.getOpenJobs(business.id);
 
-        const parts = [`🔨 *Weekly Summary*\n`];
-        parts.push(`📅 *${jobs.length} jobs scheduled this week*`);
-        if (jobs.length) {
-          const byDate = {};
-          for (const j of jobs) {
-            if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
-            byDate[j.scheduled_date].push(j);
+          const parts = [`🔨 *Weekly Summary*\n`];
+          parts.push(`📅 *${jobs.length} jobs scheduled this week*`);
+          if (jobs.length) {
+            const byDate = {};
+            for (const j of jobs) {
+              if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
+              byDate[j.scheduled_date].push(j);
+            }
+            for (const [d, js] of Object.entries(byDate)) {
+              parts.push(templates.formatScheduleDay(js, d));
+            }
           }
-          for (const [d, js] of Object.entries(byDate)) {
-            parts.push(templates.formatScheduleDay(js, d));
+          if (unpaid.length) {
+            const total = unpaid.reduce((s, i) => s + Number(i.amount), 0);
+            parts.push(`\n💷 *${unpaid.length} unpaid invoices (£${total.toFixed(2)})*`);
           }
-        }
-        if (unpaid.length) {
-          const total = unpaid.reduce((s, i) => s + Number(i.amount), 0);
-          parts.push(`\n💷 *${unpaid.length} unpaid invoices (£${total.toFixed(2)})*`);
-        }
-        const quotedJobs = open.filter((j) => j.status === 'new' && j.quoted_amount);
-        if (quotedJobs.length) {
-          parts.push(`\n📋 *${quotedJobs.length} quotes awaiting response*`);
-        }
+          const quotedJobs = open.filter((j) => j.status === 'new' && j.quoted_amount);
+          if (quotedJobs.length) {
+            parts.push(`\n📋 *${quotedJobs.length} quotes awaiting response*`);
+          }
 
-        await messenger.sendToForeman(parts.join('\n'), {
-          businessId: business.id,
-          businessPhone: business.phone,
-        });
+          await messenger.sendToForeman(parts.join('\n'), {
+            businessId: business.id,
+            businessPhone: business.phone,
+          });
+        } catch (err) {
+          console.error(`Weekly summary failed for business ${business.id}:`, err.message);
+        }
       }
     } catch (err) {
       console.error('Weekly summary failed:', err.message);
@@ -93,11 +101,18 @@ function start() {
         const overdue = unpaid.filter((i) => i.status === 'OVERDUE');
 
         for (const inv of overdue) {
-          const days = Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000);
-          await messenger.sendToForeman(
-            `⚠️ ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${days} days overdue.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
-            { businessId: business.id, businessPhone: business.phone }
-          );
+          try {
+            const days = inv.sent_at
+              ? Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000)
+              : null;
+            const daysStr = days !== null ? `${days} days overdue` : 'overdue';
+            await messenger.sendToForeman(
+              `⚠️ ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${daysStr}.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
+              { businessId: business.id, businessPhone: business.phone }
+            );
+          } catch (err) {
+            console.error(`Overdue reminder failed for invoice ${inv.id}:`, err.message);
+          }
         }
       }
     } catch (err) {

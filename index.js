@@ -58,6 +58,10 @@ function detectImageExt(buffer) {
 // Twilio webhook signature validation middleware.
 // Skipped automatically in local dev (localhost) so manual testing still works.
 const isLocalDev = config.publicUrl.includes('localhost');
+if (!config.twilio.authToken && !isLocalDev) {
+  console.error('FATAL: TWILIO_AUTH_TOKEN is not set. Refusing to start without webhook validation in production.');
+  process.exit(1);
+}
 const validateTwilioSignature = config.twilio.authToken && !isLocalDev
   ? twilio.webhook(config.twilio.authToken, { url: config.publicUrl + '/webhook' })
   : (req, res, next) => {
