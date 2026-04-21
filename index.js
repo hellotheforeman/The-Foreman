@@ -199,6 +199,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (setting.type === 'vat') {
           return twimlReply(res, `Are you VAT registered?\n\nReply *yes* or *no*. (Reply *cancel* to go back)`);
         }
+        if (setting.type === 'bank') {
+          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)\n\n(Reply *cancel* to go back)`);
+        }
         const hint = setting.hint || '(Reply *cancel* to go back)';
         return twimlReply(res, `What should I change *${setting.label}* to?\n\n${hint}`);
       }
@@ -224,6 +227,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
               console.error('Logo upload failed:', err);
               return twimlReply(res, `❌ Couldn't save that image. Please try again.`);
             }
+          }
+
+          if (settingType === 'bank') {
+            // Step 1: collect sort code, move to account_number step
+            await setConversationState(business.id, {
+              ...currentState,
+              collected: { ...currentState.collected, sortCode: trimmed },
+              pending: { type: 'field', field: 'account_number' },
+            });
+            return twimlReply(res, `Got it. Now what's the account number?`);
           }
 
           if (settingType === 'vat') {
@@ -259,6 +272,14 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await db.updateBusiness(business.id, { vat_number: trimmed });
         await clearConversationState(business.id);
         return twimlReply(res, `✅ VAT updated — registered, ${trimmed}.`);
+      }
+
+      if (currentState.pending?.field === 'account_number') {
+        const { sortCode } = currentState.collected || {};
+        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${trimmed}`;
+        await db.updateBusiness(business.id, { payment_details: paymentDetails });
+        await clearConversationState(business.id);
+        return twimlReply(res, `✅ Bank details saved — sort code ${sortCode}, account number ${trimmed}.`);
       }
 
       // Fallback — show menu again

@@ -14,7 +14,7 @@ const SETTINGS_FIELDS = [
   { key: 'trade',          label: 'Trade' },
   { key: 'email',          label: 'Email' },
   { key: 'address',        label: 'Address' },
-  { key: 'payment_details', label: 'Payment details' },
+  { key: 'payment_details', label: 'Bank details', type: 'bank' },
   { key: 'vat', label: 'VAT', type: 'vat' },
   { key: 'logo_path',      label: 'Logo', type: 'image', hint: 'Send your logo as a photo or image. It will appear on all your quotes and invoices.' },
 ];
