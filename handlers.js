@@ -84,6 +84,7 @@ const commandHandlers = {
   mark_complete: handleMarkComplete,
   add_note: handleAddNote,
   update_customer: handleUpdateCustomer,
+  feedback: handleFeedback,
 };
 
 const queryHandlers = {
@@ -786,6 +787,19 @@ async function handleGreeting(intent, res) {
 
 async function handleThanks(intent, res) {
   messenger.twimlReply(res, `No problem. 👍`);
+}
+
+async function handleFeedback(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  if (!intent.message) {
+    return messenger.twimlReply(res, `What's your feedback? Just add it after the word — e.g. *Feedback the invoice layout is confusing*`);
+  }
+
+  const recentMessages = await db.getRecentMessages(business.id, 5);
+  await db.saveFeedback(business.id, intent.message, recentMessages.reverse());
+  messenger.twimlReply(res, `Thanks — feedback noted! 👍`);
 }
 
 async function handleHelp(intent, res) {

@@ -237,6 +237,16 @@ async function init() {
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
 
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS feedback (
+      id SERIAL PRIMARY KEY,
+      business_id INTEGER REFERENCES businesses(id),
+      message TEXT,
+      context JSONB,
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `);
+
   console.log('📦 Database ready');
 }
 
@@ -825,6 +835,22 @@ async function clearConversationState(businessId) {
 
 // --- Message log ---
 
+async function getRecentMessages(businessId, limit = 5) {
+  return getAll(
+    `SELECT direction, body, timestamp FROM message_log
+     WHERE business_id = $1 AND body IS NOT NULL
+     ORDER BY timestamp DESC LIMIT $2`,
+    [businessId, limit]
+  );
+}
+
+async function saveFeedback(businessId, message, context) {
+  await pool.query(
+    'INSERT INTO feedback (business_id, message, context) VALUES ($1, $2, $3)',
+    [businessId, message, JSON.stringify(context)]
+  );
+}
+
 async function logMessage(direction, participant, body, { businessId, customerId, jobId, whatsappMessageId } = {}) {
   await run(
     'INSERT INTO message_log (business_id, direction, participant, customer_id, job_id, body, whatsapp_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -879,5 +905,7 @@ module.exports = {
   setConversationState,
   clearConversationState,
   logMessage,
+  getRecentMessages,
+  saveFeedback,
   getAll,
 };

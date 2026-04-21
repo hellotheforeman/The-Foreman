@@ -489,6 +489,12 @@ function parse(raw) {
     return { kind: 'query', intent: 'help' };
   }
 
+  // --- Feedback ---
+  if (/^feedback\b/i.test(lower)) {
+    const message = text.replace(/^feedback\s*/i, '').trim();
+    return { kind: 'command', intent: 'feedback', message };
+  }
+
   // --- Unknown ---
   return { kind: 'unknown', intent: 'unknown', raw: text };
 }
