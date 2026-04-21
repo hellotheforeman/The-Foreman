@@ -65,7 +65,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       }
     }
 
-    const bizName = business?.name || 'My Trade Business';
+    const bizName = business?.business_name || business?.name || 'My Trade Business';
     doc.font('Helvetica-Bold').fontSize(16).fillColor('#111111')
       .text(bizName, L, headerTopY, { width: mid - L - 10 });
 
