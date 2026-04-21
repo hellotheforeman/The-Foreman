@@ -235,6 +235,8 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
+  // Mark all existing businesses as already onboarded — new column, existing users should skip the wizard
+  await pool.query("UPDATE businesses SET onboarded = true WHERE onboarded = false AND created_at < NOW() - INTERVAL '1 minute'");
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
 
