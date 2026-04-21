@@ -642,7 +642,7 @@ async function handleFind(intent, res) {
       const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
       const date = formatShortDate(j.sort_date);
-      return `  - ${date} ${db.formatJobId(j.id)}: ${j.description}${amount} (${status})`;
+      return `  - ${date} ${db.formatJobId(j.id)}: ${toTitleCase(j.description)}${amount} (${status})`;
     });
     const contactParts = [c.phone, c.email, c.address].filter(Boolean);
     results.push(
@@ -667,7 +667,7 @@ async function handleViewJob(intent, res) {
   ]);
 
   const c = job.customer;
-  const lines = [`*${db.formatJobId(job.id)} — ${job.description}*`];
+  const lines = [`*${db.formatJobId(job.id)} — ${toTitleCase(job.description)}*`];
 
   const contactParts = [c.phone, c.email, c.address].filter(Boolean);
   lines.push(`${c.name}${contactParts.length ? ' · ' + contactParts.join(' · ') : ''}`);
@@ -722,7 +722,7 @@ async function handleJobsByStatus(intent, res) {
 
   if (!jobs.length) return messenger.twimlReply(res, `No ${intent.status} jobs. 📭`);
 
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description}`);
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)}`);
   messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}`);
 }
 
@@ -738,7 +738,7 @@ async function handleMarkComplete(intent, res) {
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id)} marked complete — ${job.customer.name}, ${job.description}.\n\n` +
+    `✅ ${db.formatJobId(job.id)} marked complete — ${job.customer.name}, ${toTitleCase(job.description)}.\n\n` +
     `Reply *invoice ${job.id}* to send an invoice, or *review ${job.id}* to request a review.`
   );
 }
@@ -750,7 +750,7 @@ async function handleUnscheduledJobs(intent, res) {
   const jobs = await db.getUnscheduledJobs(business.id);
   if (!jobs.length) return messenger.twimlReply(res, `No unscheduled jobs. 📭`);
 
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description} (${db.deriveStatus(j)})`);
+  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`);
   messenger.twimlReply(res, `📋 *${jobs.length} unscheduled jobs*\n\n${lines.join('\n')}`);
 }
 
@@ -810,7 +810,7 @@ async function openJobsSuggestion(businessId) {
   const jobs = await db.getOpenJobs(businessId);
   if (!jobs.length) return null;
   return jobs.slice(0, 5)
-    .map(j => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${j.description}`)
+    .map(j => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)}`)
     .join('\n');
 }
 
