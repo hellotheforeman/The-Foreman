@@ -152,6 +152,20 @@ function parse(raw) {
     };
   }
 
+  // "create a quote for Mrs Smith", "quote for Mrs Smith", "send a quote to Mrs Smith"
+  const quoteForMatch = normalisedForQuote.match(/^(?:create\s+a?\s*quote\s+(?:for|to)|quote\s+for|send\s+a?\s*quote\s+(?:for|to))\s+(.+)$/i);
+  if (quoteForMatch) {
+    return {
+      kind: 'command',
+      intent: 'quote',
+      jobId: null,
+      jobRef: quoteForMatch[1].trim(),
+      amount: null,
+      items: null,
+      lineItems: null,
+    };
+  }
+
   // Name/partial reference: "quote wood" — workflow engine resolves to a job
   const quoteNameMatch = normalisedForQuote.match(/^quote\s+(.+)$/i);
   if (quoteNameMatch) {

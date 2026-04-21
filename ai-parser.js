@@ -145,7 +145,7 @@ FIELD RULES:
 INTENT GUIDE:
 - new_customer: "add a customer", "new customer John Smith 07700900123"
 - new_job: "new job", "add a job for Mrs Patel"
-- quote: "quote job 14", "send quote to Patel", "requote 14 850"
+- quote: "quote job 14", "send quote to Patel", "requote 14 850", "create a quote for Mrs Smith", "quote for Mrs Smith" — use jobRef for name-only references
 - schedule: "book job 14 thursday 9am", "schedule Mrs Patel friday"
 - reschedule: "move job 14 to monday", "reschedule boiler service"
 - add_block: "and then friday", "also next tuesday"
