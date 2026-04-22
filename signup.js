@@ -141,7 +141,7 @@ const NAV = `
   <header class="nav">
     <div class="container nav-inner">
       <a href="/" class="logo">
-        <img src="/logo.png" alt="The Foreman" />
+        <img src="/logo.png?v=2" alt="The Foreman" />
       </a>
     </div>
   </header>
@@ -151,7 +151,7 @@ const FOOTER = `
   <footer class="footer">
     <div class="container footer-inner">
       <a href="/" class="logo">
-        <img src="/logo.png" alt="The Foreman" />
+        <img src="/logo.png?v=2" alt="The Foreman" />
       </a>
       <p class="footer-text">Built for UK tradespeople who'd rather be working than doing paperwork.</p>
       <p class="footer-copy">© 2026 The Foreman. All rights reserved.</p>
@@ -229,7 +229,7 @@ function renderThanksPage() {
 <body>
   <div class="thanks-page">
     <div class="thanks-card">
-      <div class="thanks-icon"><img src="/logo.png" alt="The Foreman" /></div>
+      <div class="thanks-icon"><img src="/logo.png?v=2" alt="The Foreman" /></div>
       <h1>Request received!</h1>
       <p>Nice one. We'll review your details and get in touch once your WhatsApp number has been activated on The Foreman.</p>
     </div>
