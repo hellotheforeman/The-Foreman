@@ -27,33 +27,6 @@ const WORKFLOWS = {
       items: 'What should I put on the quote?',
     },
   },
-  schedule: {
-    requiredFields: ['jobId', 'date'],
-    optionalFields: ['time', 'duration', 'durationUnit'],
-    prompts: {
-      jobId: 'Which customer or job do you mean?',
-      date: 'What day should I book it in for?',
-      time: 'What time should I put down?',
-    },
-  },
-  reschedule: {
-    requiredFields: ['jobId', 'date'],
-    optionalFields: ['time', 'duration', 'durationUnit'],
-    prompts: {
-      jobId: 'Which job do you want to reschedule?',
-      date: 'What day should I move it to?',
-      time: 'What time?',
-    },
-  },
-  add_block: {
-    requiredFields: ['jobId', 'date'],
-    optionalFields: ['time', 'duration', 'durationUnit'],
-    prompts: {
-      jobId: 'Which job should I add this block to?',
-      date: 'What day should I book it in for?',
-      time: 'What time?',
-    },
-  },
 };
 
 function getWorkflow(name) {

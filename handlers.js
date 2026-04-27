@@ -72,9 +72,6 @@ const commandHandlers = {
   new_customer: handleNewCustomer,
   new_job: handleNewJob,
   quote: handleQuote,
-  schedule: handleSchedule,
-  reschedule: handleReschedule,
-  add_block: handleAddBlock,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   amend_invoice: handleAmend,
@@ -88,10 +85,8 @@ const commandHandlers = {
 };
 
 const queryHandlers = {
-  view_schedule: handleViewSchedule,
   unpaid: handleUnpaid,
   open_jobs: handleOpenJobs,
-  unscheduled_jobs: handleUnscheduledJobs,
   jobs_by_status: handleJobsByStatus,
   view_job: handleViewJob,
   find: handleFind,
@@ -176,7 +171,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nGive me a shout when you want to get this booked in the calendar.`,
+      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nLet me know when they've accepted it.`,
       pdfUrl
     );
   } catch (err) {
@@ -184,49 +179,9 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nGive me a shout when you want to get this booked in the calendar.`
+      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nLet me know when they've accepted it.`
     );
   }
-}
-
-async function handleSchedule(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date from "${intent.raw}". Try: *schedule ${intent.jobId} thursday 9am*`);
-
-  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
-
-  const timePart = intent.time ? ` at ${intent.time}` : '';
-  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
-
-  messenger.twimlReply(
-    res,
-    `📅 Booked: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id)} — ${job.customer.name}, ${toTitleCase(job.description)}.`
-  );
-}
-
-async function handleAddBlock(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *and then friday at 9*`);
-
-  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
-
-  const timeStr = intent.time || 'TBC';
-  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
-
-  messenger.twimlReply(
-    res,
-    `📅 Block added: ${templates.formatDate(intent.date)} at ${timeStr}${durationStr}\n` +
-    `${db.formatJobId(job.id)} — ${job.customer.name}.`
-  );
 }
 
 async function handlePaid(intent, res) {
@@ -402,27 +357,6 @@ async function handleReview(intent, res) {
   );
 }
 
-async function handleReschedule(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const job = await db.getJobWithCustomer(intent.jobId, business.id);
-  if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (!intent.date) return messenger.twimlReply(res, `❌ Couldn't parse a date. Try: *reschedule ${intent.jobId} thursday 9am*`);
-
-  await db.clearBookingBlocks(job.id, business.id);
-  await db.addBookingBlock(job.id, business.id, intent.date, intent.time || null, intent.duration || null, intent.durationUnit || 'hours');
-
-  const timePart = intent.time ? ` at ${intent.time}` : '';
-  const durationStr = intent.duration ? ` for ${intent.duration} ${intent.durationUnit}` : '';
-
-  messenger.twimlReply(
-    res,
-    `📅 Rescheduled: ${templates.formatDate(intent.date)}${timePart}${durationStr}\n` +
-    `${db.formatJobId(job.id)} — ${job.customer.name}, ${toTitleCase(job.description)}.`
-  );
-}
-
 async function handleCancelJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
@@ -464,83 +398,6 @@ async function handleUpdateCustomer(intent, res) {
   if (!updated) return messenger.twimlReply(res, `❌ Couldn't update that field.`);
 
   messenger.twimlReply(res, `✅ Updated ${customer.name}'s ${intent.field}: ${intent.value}`);
-}
-
-async function handleViewSchedule(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const now = new Date();
-
-  if (intent.period === 'tomorrow') {
-    const d = new Date(now);
-    d.setDate(d.getDate() + 1);
-    const dateStr = d.toISOString().split('T')[0];
-    const jobs = await db.getScheduleForDate(dateStr, business.id);
-    return messenger.twimlReply(res, `*Tomorrow:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
-  }
-
-  if (intent.period === 'week' || intent.period === 'this_week') {
-    const start = now.toISOString().split('T')[0];
-    const end = new Date(now);
-    end.setDate(end.getDate() + 7);
-    const endStr = end.toISOString().split('T')[0];
-    const jobs = await db.getScheduleRange(start, endStr, business.id);
-
-    if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled this week. 📭`);
-
-    const byDate = {};
-    for (const j of jobs) {
-      if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
-      byDate[j.scheduled_date].push(j);
-    }
-    const lines = Object.entries(byDate)
-      .map(([d, js]) => templates.formatScheduleDay(js, d))
-      .join('\n\n');
-
-    return messenger.twimlReply(res, `*This week:*\n\n${lines}`);
-  }
-
-  if (intent.period === 'next_week' || intent.period === 'week_after_next' || intent.period === 'week_of') {
-    let start;
-    let label;
-    if (intent.period === 'week_of') {
-      start = new Date(intent.date);
-      label = `Week of ${templates.formatDate(intent.date)}`;
-    } else {
-      const daysUntilNextMonday = ((1 - now.getDay() + 7) % 7) || 7;
-      start = new Date(now);
-      start.setDate(start.getDate() + daysUntilNextMonday + (intent.period === 'week_after_next' ? 7 : 0));
-      label = intent.period === 'week_after_next' ? 'Week after next' : 'Next week';
-    }
-    const startStr = start.toISOString().split('T')[0];
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    const endStr = end.toISOString().split('T')[0];
-    const jobs = await db.getScheduleRange(startStr, endStr, business.id);
-
-    if (!jobs.length) return messenger.twimlReply(res, `Nothing scheduled that week. 📭`);
-
-    const byDate = {};
-    for (const j of jobs) {
-      if (!byDate[j.scheduled_date]) byDate[j.scheduled_date] = [];
-      byDate[j.scheduled_date].push(j);
-    }
-    const lines = Object.entries(byDate)
-      .map(([d, js]) => templates.formatScheduleDay(js, d))
-      .join('\n\n');
-
-    return messenger.twimlReply(res, `*${label}:*\n\n${lines}`);
-  }
-
-  if (intent.period === 'date') {
-    const jobs = await db.getScheduleForDate(intent.date, business.id);
-    return messenger.twimlReply(res, `*${templates.formatDate(intent.date)}:*\n${templates.formatScheduleDay(jobs, intent.date)}`);
-  }
-
-  const dateStr = now.toISOString().split('T')[0];
-  const jobs = await db.getScheduleForDate(dateStr, business.id);
-  messenger.twimlReply(res, `*Today:*\n${templates.formatScheduleDay(jobs, dateStr)}`);
 }
 
 async function handleEarnings(intent, res) {
@@ -688,10 +545,7 @@ async function handleViewJob(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
-  const [blocks, invoice] = await Promise.all([
-    db.getBookingBlocksForJob(intent.jobId, business.id),
-    db.getInvoiceByJob(intent.jobId, business.id),
-  ]);
+  const invoice = await db.getInvoiceByJob(intent.jobId, business.id);
 
   const c = job.customer;
   const lines = [`*${db.formatJobId(job.id)} — ${toTitleCase(job.description)}*`];
@@ -704,20 +558,6 @@ async function handleViewJob(intent, res) {
   if (job.quoted_amount) {
     const items = job.quote_items ? ` (${formatLineItemsText(job.quote_items)})` : '';
     lines.push(`Quoted: £${Number(job.quoted_amount).toFixed(2)}${items}`);
-  }
-
-  if (blocks.length) {
-    lines.push('');
-    lines.push('📅 *Booked:*');
-    for (const b of blocks) {
-      const isMultiDay = b.duration_unit === 'days' && b.duration > 1;
-      const dateStr = isMultiDay
-        ? `${templates.formatDate(b.start_date)} – ${templates.formatDate(b.end_date)}`
-        : templates.formatDate(b.start_date);
-      const time = b.start_time ? ` at ${b.start_time}` : '';
-      const dur = isMultiDay ? ` (${b.duration} days)` : (b.duration ? ` (${b.duration} ${b.duration_unit})` : '');
-      lines.push(`• ${dateStr}${time}${dur}`);
-    }
   }
 
   lines.push('');
@@ -770,17 +610,6 @@ async function handleMarkComplete(intent, res) {
   );
 }
 
-async function handleUnscheduledJobs(intent, res) {
-  const business = requireBusiness(intent, res);
-  if (!business) return;
-
-  const jobs = await db.getUnscheduledJobs(business.id);
-  if (!jobs.length) return messenger.twimlReply(res, `No unscheduled jobs. 📭`);
-
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`);
-  messenger.twimlReply(res, `📋 *${jobs.length} unscheduled jobs*\n\n${lines.join('\n')}`);
-}
-
 async function handleGreeting(intent, res) {
   messenger.twimlReply(res, `Alright 👍 What do you need?`);
 }
@@ -807,11 +636,10 @@ async function handleHelp(intent, res) {
     res,
     `🔨 *The Foreman — run your business from your phone*\n\n` +
     `Keep all your customers and jobs in one place.\n` +
-    `Book work in and don't double up.\n` +
     `Send PDF quotes and invoices in minutes.\n` +
     `Know what you're owed and chase it.\n` +
-    `Check your week at a glance.\n` +
-    `Track your earnings and drive more reviews.`
+    `Track your earnings.\n` +
+    `Drive more reviews.`
   );
 }
 
