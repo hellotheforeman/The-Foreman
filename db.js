@@ -41,8 +41,15 @@ async function init() {
     )
   `);
 
+  // Allow phone to be optional — phone was made NOT NULL at table creation but is no longer required
+  await pool.query(`ALTER TABLE customers ALTER COLUMN phone DROP NOT NULL`).catch(() => {});
+
+  // Unique index on phone only makes sense when phone is present
+  await pool.query(`DROP INDEX IF EXISTS customers_business_phone_idx`);
   await pool.query(`
-    CREATE UNIQUE INDEX IF NOT EXISTS customers_business_phone_idx ON customers (business_id, phone)
+    CREATE UNIQUE INDEX IF NOT EXISTS customers_business_phone_idx
+    ON customers (business_id, phone)
+    WHERE phone IS NOT NULL
   `);
 
   await pool.query(`
@@ -308,16 +315,28 @@ async function updateBusinessStatus(id, status) {
 }
 
 async function findOrCreateCustomer(businessId, name, phone, email) {
-  let customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
+  // Match by phone when provided, otherwise fall back to name match
+  let customer = null;
+  if (phone) {
+    customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND phone = $2', [businessId, phone]);
+  }
+  if (!customer) {
+    customer = await getOne('SELECT * FROM customers WHERE business_id = $1 AND LOWER(name) = LOWER($2)', [businessId, name]);
+  }
   if (!customer) {
     const { rows } = await pool.query(
       'INSERT INTO customers (business_id, name, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
-      [businessId, name, phone, email || null]
+      [businessId, name, phone || null, email || null]
     );
     customer = rows[0];
   } else {
     const updates = [];
     const vals = [];
+    if (phone && !customer.phone) {
+      updates.push(`phone = $${vals.length + 1}`);
+      vals.push(phone);
+      customer.phone = phone;
+    }
     if (email && !customer.email) {
       updates.push(`email = $${vals.length + 1}`);
       vals.push(email);
