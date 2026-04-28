@@ -264,6 +264,14 @@ async function handleAmend(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
+  if (!intent.jobId) {
+    const suggestion = await openJobsSuggestion(business.id);
+    return messenger.twimlReply(res, suggestion
+      ? `Which quote or invoice do you want to amend? Here are your open jobs:\n\n${suggestion}`
+      : `Which quote or invoice do you want to amend? Say *jobs* to see what's on.`
+    );
+  }
+
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 

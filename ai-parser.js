@@ -150,7 +150,7 @@ INTENT GUIDE:
 - reschedule: "move job 14 to monday", "reschedule boiler service"
 - add_block: "and then friday", "also next tuesday"
 - send_invoice: "invoice job 14", "invoice Mrs Patel 450"
-- amend_invoice: "amend invoice 14", "change invoice 14 to 500"
+- amend_invoice: "amend invoice 14", "change invoice 14 to 500", "amend quote 14", "change quote 9 to 850"
 - paid: "paid 14", "job 14 paid", "mark 14 as paid"
 - chase: "chase 14", "send reminder for job 14"
 - review: "review 14", "ask Patel for a review"
