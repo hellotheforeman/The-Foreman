@@ -438,8 +438,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.
     if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.amount == null) {
-      const customerRef = intent.jobRef ||
-        (intent.items && !parseLineItems(intent.items) ? intent.items : null);
+      const { customerRef, prefilledDescription } = extractQuoteParts(intent);
 
       if (customerRef) {
         const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: customerRef }, raw: body, state: null });
@@ -460,10 +459,20 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
         }
 
-        // Customer exists but no open job — skip to description
+        // Customer exists but no open job — skip to description (or price if we already have it)
         const existingCustomers = await db.findCustomerByName(business.id, customerRef);
         if (existingCustomers.length === 1) {
           const c = existingCustomers[0];
+          if (prefilledDescription) {
+            await setConversationState(business.id, {
+              workflow: 'quote_flow',
+              focus: {},
+              collected: { step: 'price', customerId: c.id, customerName: c.name, description: prefilledDescription },
+              pending: { type: 'field', field: 'price' },
+              options: [],
+            });
+            return twimlReply(res, `Got it — ${c.name}, ${prefilledDescription}.\n\nWhat price?\n\n(Or itemised: *labour 250, parts 45*)`);
+          }
           await setConversationState(business.id, {
             workflow: 'quote_flow',
             focus: {},
@@ -478,7 +487,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await setConversationState(business.id, {
           workflow: 'quote_flow',
           focus: {},
-          collected: { step: 'phone', customerName: customerRef },
+          collected: { step: 'phone', customerName: customerRef, description: prefilledDescription || null },
           pending: { type: 'field', field: 'phone' },
           options: [],
         });
@@ -542,20 +551,24 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       // Step: phone number
       if (c.step === 'phone') {
-        if (/^skip$/i.test(trimmed)) {
+        let phone = null;
+        if (!/^skip$/i.test(trimmed)) {
+          const stripped = trimmed.replace(/[\s\-().]/g, '');
+          if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
+            return twimlReply(res, `That doesn't look like a valid UK mobile. What's their number?\n\nReply *skip* to leave it blank.`);
+          }
+          phone = normalisePhone(stripped);
+        }
+        if (c.description) {
           await setConversationState(business.id, {
             ...currentState,
-            collected: { ...c, step: 'description', phone: null },
+            collected: { ...c, step: 'price', phone },
           });
-          return twimlReply(res, `What's the job for ${c.customerName}?`);
-        }
-        const stripped = trimmed.replace(/[\s\-().]/g, '');
-        if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
-          return twimlReply(res, `That doesn't look like a valid UK mobile. What's their number?\n\nReply *skip* to leave it blank.`);
+          return twimlReply(res, `What price?\n\n(Or itemised: *labour 250, parts 45*)`);
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { ...c, step: 'description', phone: normalisePhone(stripped) },
+          collected: { ...c, step: 'description', phone },
         });
         return twimlReply(res, `What's the job for ${c.customerName}?`);
       }
@@ -969,6 +982,35 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
 }
 
 // ---------------------------------------------------------------------------
+
+// Extracts customer name (and optionally job description) from a parsed quote intent.
+// Handles:
+//   intent.jobRef set directly ("quote for Mrs Smith")
+//   intent.items is a plain name ("quote Mrs Smith")
+//   intent.items is a natural language sentence ("quote me a job for Mrs Smith to fit a kitchen")
+function extractQuoteParts(intent) {
+  if (intent.jobRef) return { customerRef: intent.jobRef, prefilledDescription: null };
+
+  if (!intent.items || parseLineItems(intent.items)) return { customerRef: null, prefilledDescription: null };
+
+  const raw = intent.items;
+
+  // "… for [Name] to [description]" — most common natural language form
+  const forToMatch = raw.match(/\bfor\s+([A-Z][^\s]+(?:\s+[A-Z][^\s]+)*)\s+to\s+(.+)$/i);
+  if (forToMatch) return { customerRef: forToMatch[1].trim(), prefilledDescription: forToMatch[2].trim() };
+
+  // "… for [Name]" only
+  const forOnlyMatch = raw.match(/\bfor\s+([A-Z][^\s]+(?:\s+[A-Z][^\s]+)*)$/i);
+  if (forOnlyMatch) return { customerRef: forOnlyMatch[1].trim(), prefilledDescription: null };
+
+  // Short phrase with no prepositions — treat as a customer name
+  const words = raw.trim().split(/\s+/);
+  if (words.length <= 3 && !/\b(for|the|a|an|to|with|and|job|quote|new|me)\b/i.test(raw)) {
+    return { customerRef: raw.trim(), prefilledDescription: null };
+  }
+
+  return { customerRef: null, prefilledDescription: null };
+}
 
 async function createCustomerAndJob(businessId, collected) {
   let customer;
