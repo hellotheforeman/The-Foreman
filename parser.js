@@ -126,6 +126,11 @@ function parse(raw) {
     };
   }
 
+  // Bare "quote" — starts the guided new-quote flow
+  if (/^quote\s*$/i.test(lower)) {
+    return { kind: 'command', intent: 'quote', jobId: null, jobRef: null, amount: null, items: null, lineItems: null };
+  }
+
   // Job ID only — no amount or items: "quote 14" or "quote job 14" → triggers guided workflow
   const quoteJustIdMatch = normalisedForQuote.toLowerCase().match(/^quote\s+(?:job\s+)?#?(\d+)\s*$/);
   if (quoteJustIdMatch) {
@@ -211,6 +216,12 @@ function parse(raw) {
   const invoiceMatch = lower.match(/^(?:send\s+)?invoice\s+#?(\d+)\s*$/);
   if (invoiceMatch) {
     return { kind: 'command', intent: 'send_invoice', jobId: parseInt(invoiceMatch[1], 10) };
+  }
+
+  // Invoice by customer name: "invoice Mrs Smith"
+  const invoiceByNameMatch = text.match(/^(?:send\s+)?invoice\s+(?!#?\d)(.+)$/i);
+  if (invoiceByNameMatch) {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: invoiceByNameMatch[1].trim(), amount: null };
   }
 
   // --- Amend invoice ---

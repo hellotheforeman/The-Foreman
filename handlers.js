@@ -146,7 +146,7 @@ async function handleNewJob(intent, res) {
     `✅ ${db.formatJobId(job.id)} created\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${toTitleCase(job.description)}\n\n` +
-    `Let me know when your ready to put a quote together.`
+    `Let me know when you're ready to put a quote together.`
   );
 }
 
@@ -634,12 +634,22 @@ async function handleFeedback(intent, res) {
 async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
-    `🔨 *The Foreman — run your business from your phone*\n\n` +
-    `Keep all your customers and jobs in one place.\n` +
-    `Send PDF quotes and invoices in minutes.\n` +
-    `Know what you're owed and chase it.\n` +
-    `Track your earnings.\n` +
-    `Drive more reviews.`
+    `🔨 *The Foreman*\n\n` +
+    `*Quotes & invoices*\n` +
+    `• *quote* — start a new quote\n` +
+    `• *quote 14 450* — quote job #14 for £450\n` +
+    `• *invoice 14* — invoice from the existing quote\n` +
+    `• *invoice Mrs Smith* — invoice by name\n` +
+    `• *paid 14* — mark invoice as paid\n\n` +
+    `*Jobs & customers*\n` +
+    `• *jobs* — see open jobs\n` +
+    `• *unpaid* — see what you're owed\n` +
+    `• *find Smith* — search for a customer\n` +
+    `• *chase 14* — get a payment reminder to copy\n\n` +
+    `*Earnings*\n` +
+    `• *earnings* — this month's summary\n` +
+    `• *earnings this week / this year*\n\n` +
+    `*Settings* — update your business details`
   );
 }
 
