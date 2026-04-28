@@ -401,7 +401,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             collected: { ...currentState.collected, quote_type: 'quick' },
             pending: { type: 'field', field: 'amount' },
           });
-          return twimlReply(res, 'What price should I use?');
+          return twimlReply(res, 'Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).');
         } else {
           await setConversationState(business.id, {
             ...currentState,
@@ -471,7 +471,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
               pending: { type: 'field', field: 'price' },
               options: [],
             });
-            return twimlReply(res, `Got it — ${c.name}, ${prefilledDescription}.\n\nWhat price?\n\n(Or itemised: *labour 250, parts 45*)`);
+            return twimlReply(res, `Got it — ${c.name}, ${prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
           }
           await setConversationState(business.id, {
             workflow: 'quote_flow',
@@ -480,7 +480,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             pending: { type: 'field', field: 'description' },
             options: [],
           });
-          return twimlReply(res, `What's the job for ${c.name}?`);
+          return twimlReply(res, `What's the scope of work for ${c.name}?`);
         }
 
         // New customer — ask for address first, then description/price
@@ -554,10 +554,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
         if (c.description) {
           await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
-          return twimlReply(res, `What price?\n\n(Or itemised: *labour 250, parts 45*)`);
+          return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
         }
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
-        return twimlReply(res, `What's the job for ${c.customerName}?`);
+        return twimlReply(res, `What's the scope of work for ${c.customerName}?`);
       }
 
       // Step: job description
@@ -566,7 +566,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           ...currentState,
           collected: { ...c, step: 'price', description: trimmed },
         });
-        return twimlReply(res, `What price?\n\n(Or itemised: *labour 250, parts 45*)`);
+        return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
       }
 
       // Step: price or line items — detect format automatically

@@ -30,19 +30,24 @@ function quoteMessage(job, customer, business) {
   const vatLines = business?.vat_registered
     ? [`Subtotal: £${net.toFixed(2)}`, `VAT (20%): £${(net * 0.20).toFixed(2)}`, `💰 *Total: £${(net * 1.20).toFixed(2)}*`]
     : [`💰 *Total: £${net.toFixed(2)}*`];
+  const scopeSection = job.description && job.quote_items
+    ? ['*Scope of work*', job.description, '']
+    : [];
   return [
     `Hi ${customerGreetingName(customer)}! 👋`,
     '',
     `Thanks for your enquiry. Here's your quote from ${name}:`,
     '',
     `📋 *Quote ${formatJobId(job.id)}*`,
+    '',
+    ...scopeSection,
     items,
     '',
     ...vatLines,
     '',
     'This quote is valid for 30 days.',
     '',
-    'Reply *YES* to accept, or let us know if you have any questions.',
+    'Work subject to standard terms and conditions available on request.',
     '',
     `— ${name}`,
   ].join('\n');

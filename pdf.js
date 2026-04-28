@@ -127,6 +127,15 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       doc.font('Helvetica').fontSize(9).fillColor('#666666').text(detail);
     }
 
+    // ── SCOPE OF WORK ──────────────────────────────────────────
+    if (job.description) {
+      doc.moveDown(1.5);
+      doc.font('Helvetica-Bold').fontSize(8).fillColor('#888888')
+        .text('SCOPE OF WORK');
+      doc.font('Helvetica').fontSize(10).fillColor('#111111')
+        .text(job.description, { paragraphGap: 0 });
+    }
+
     // ── TABLE ──────────────────────────────────────────────────
     const tableTopY = doc.y + 20;
     drawRule(doc, tableTopY);
@@ -205,7 +214,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
         .text('Please pay within 14 days. Thank you for your business.', { paragraphGap: 6 });
     } else {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
-        .text('This quote is valid for 30 days. Reply YES to accept or let us know if you have any questions.');
+        .text('Work subject to standard terms and conditions available on request.');
     }
 
     // ── FOOTER ─────────────────────────────────────────────────

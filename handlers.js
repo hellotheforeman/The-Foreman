@@ -171,7 +171,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 ${label} ${db.formatJobId(job.id)} — £${total} for ${job.customer.name}\n\nLet me know when they've accepted it.`,
+      `📋 £${total} ${label.toLowerCase()} for ${job.customer.name} ready\nSend it when you're happy 👍`,
       pdfUrl
     );
   } catch (err) {
@@ -179,7 +179,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 ${label} ready for ${job.customer.name} (${job.customer.phone})\n\n${msg}\n\nLet me know when they've accepted it.`
+      `📋 £${total} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
     );
   }
 }
