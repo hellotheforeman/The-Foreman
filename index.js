@@ -459,7 +459,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
         }
 
-        // Customer exists but no open job — skip to description (or price if we already have it)
+        // Customer exists but no open job — skip to price if we have description, else ask for it
         const existingCustomers = await db.findCustomerByName(business.id, customerRef);
         if (existingCustomers.length === 1) {
           const c = existingCustomers[0];
@@ -480,18 +480,28 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             pending: { type: 'field', field: 'description' },
             options: [],
           });
-          return twimlReply(res, `Got it — what's the job for ${c.name}?`);
+          return twimlReply(res, `What's the job for ${c.name}?`);
         }
 
-        // New customer — need phone
+        // New customer — go straight to description (or price if we already have it)
+        if (prefilledDescription) {
+          await setConversationState(business.id, {
+            workflow: 'quote_flow',
+            focus: {},
+            collected: { step: 'price', customerName: customerRef, description: prefilledDescription },
+            pending: { type: 'field', field: 'price' },
+            options: [],
+          });
+          return twimlReply(res, `Got it — ${customerRef}, ${prefilledDescription}.\n\nWhat price?\n\n(Or itemised: *labour 250, parts 45*)`);
+        }
         await setConversationState(business.id, {
           workflow: 'quote_flow',
           focus: {},
-          collected: { step: 'phone', customerName: customerRef, description: prefilledDescription || null },
-          pending: { type: 'field', field: 'phone' },
+          collected: { step: 'description', customerName: customerRef },
+          pending: { type: 'field', field: 'description' },
           options: [],
         });
-        return twimlReply(res, `I don't have ${customerRef} on file yet. What's their phone number?\n\nReply *skip* if you don't have it.`);
+        return twimlReply(res, `Got it — what's the job for ${customerRef}?`);
       }
 
       // Bare "quote" — ask for customer name
@@ -544,33 +554,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { step: 'phone', customerName: trimmed },
+          collected: { step: 'description', customerName: trimmed },
         });
-        return twimlReply(res, `What's their phone number?\n\nReply *skip* if you don't have it.`);
-      }
-
-      // Step: phone number
-      if (c.step === 'phone') {
-        let phone = null;
-        if (!/^skip$/i.test(trimmed)) {
-          const stripped = trimmed.replace(/[\s\-().]/g, '');
-          if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
-            return twimlReply(res, `That doesn't look like a valid UK mobile. What's their number?\n\nReply *skip* to leave it blank.`);
-          }
-          phone = normalisePhone(stripped);
-        }
-        if (c.description) {
-          await setConversationState(business.id, {
-            ...currentState,
-            collected: { ...c, step: 'price', phone },
-          });
-          return twimlReply(res, `What price?\n\n(Or itemised: *labour 250, parts 45*)`);
-        }
-        await setConversationState(business.id, {
-          ...currentState,
-          collected: { ...c, step: 'description', phone },
-        });
-        return twimlReply(res, `What's the job for ${c.customerName}?`);
+        return twimlReply(res, `What's the job for ${trimmed}?`);
       }
 
       // Step: job description
