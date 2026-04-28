@@ -1,7 +1,7 @@
 const express = require('express');
 const config = require('./config');
 const { parse, parseLineItems } = require('./parser');
-const { dispatch, SETTINGS_FIELDS, buildSettingsMenu } = require('./handlers');
+const { dispatch, SETTINGS_FIELDS, buildSettingsMenu, openJobsSuggestion } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
 const { twimlReply, twimlReplyPair } = require('./messenger');
 const scheduler = require('./scheduler');
@@ -751,6 +751,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
       }
 
+      // Amend existing invoice — re-dispatches to amend_invoice handler
+      if (currentState.pending?.field === 'amend_existing_invoice') {
+        let lineItems = parseLineItems(trimmed);
+        if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) lineItems = null;
+        const m = !lineItems && trimmed.match(/^(?:total\s+)?£?(\d+(?:\.\d{1,2})?)\s*$/i);
+        if (!lineItems && !m) return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
+        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : parseFloat(m[1]);
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'amend_invoice', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
+      }
+
       // Collect amount for amend or manual (accepts single amount or line items)
       if (currentState.pending?.field === 'amend_items' || currentState.pending?.field === 'manual_amount') {
         let lineItems = parseLineItems(trimmed);
@@ -822,6 +833,63 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return dispatch({ ...completedIntent, business }, res);
     }
 
+    // --- Amend with context ---
+    // Handles "amend" with no job ID. If quote_focus is active (just sent a quote),
+    // use that job. Otherwise save amend_pending and ask which job.
+    if (intent.intent === 'amend_invoice' && !intent.jobId) {
+      const focusJobId = currentState?.workflow === 'quote_focus' ? currentState.focus?.jobId : null;
+      if (focusJobId) {
+        await clearConversationState(business.id);
+        return routeAmend(focusJobId, business, res);
+      }
+      const suggestion = await openJobsSuggestion(business.id);
+      await setConversationState(business.id, {
+        workflow: 'amend_pending',
+        focus: {},
+        collected: {},
+        pending: { type: 'field', field: 'jobRef' },
+        options: [],
+      });
+      return twimlReply(res, suggestion
+        ? `Which quote or invoice do you want to amend? Here are your open jobs:\n\n${suggestion}`
+        : `Which quote or invoice do you want to amend? Say *jobs* to see what's on.`
+      );
+    }
+
+    if (currentState?.workflow === 'amend_pending') {
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
+      if (resolved.status === 'resolved') {
+        await clearConversationState(business.id);
+        return routeAmend(resolved.job.id, business, res);
+      }
+      if (resolved.status === 'multiple') {
+        const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        await setConversationState(business.id, {
+          workflow: 'amend_pending',
+          focus: {},
+          collected: { jobs: resolved.jobs.slice(0, 5) },
+          pending: { type: 'selection', field: 'jobId' },
+          options: resolved.jobs.slice(0, 5),
+        });
+        return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
+      }
+      if (currentState.pending?.type === 'selection') {
+        const jobs = currentState.collected?.jobs || [];
+        const n = parseInt(trimmed, 10);
+        if (n >= 1 && n <= jobs.length) {
+          await clearConversationState(business.id);
+          return routeAmend(jobs[n - 1].id, business, res);
+        }
+        return twimlReply(res, `Reply with a number 1–${jobs.length}, or *cancel* to dismiss.`);
+      }
+      return twimlReply(res, `Couldn't find a job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
+    }
+    // --- End amend with context ---
+
     await dispatch(intent, res);
 
   } catch (err) {
@@ -841,6 +909,47 @@ app.post('/status', (req, res) => {
 
 function toTitleCase(str) {
   return str.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+// Routes an amend request to the right flow based on whether the job has a quote or invoice.
+async function routeAmend(jobId, business, res) {
+  const job = await db.getJobWithCustomer(jobId, business.id);
+  if (!job) return twimlReply(res, `Couldn't find that job. Say *jobs* to see what's on.`);
+
+  const invoice = await db.getInvoiceByJob(job.id, business.id);
+  if (invoice) {
+    if (invoice.status === 'PAID') {
+      return twimlReply(res, `❌ ${db.formatJobId(job.id)} is already paid — can't amend it.`);
+    }
+    const currentItemsStr = formatItemsForCopy(invoice.line_items_json, invoice.line_items, invoice.amount);
+    await setConversationState(business.id, {
+      workflow: 'invoice_guided',
+      focus: { jobId: job.id },
+      collected: { jobId: job.id },
+      pending: { type: 'field', field: 'amend_existing_invoice' },
+      options: [],
+    });
+    return twimlReplyPair(res, `What should the invoice show instead? Currently:`, currentItemsStr);
+  }
+
+  if (job.quoted_amount) {
+    const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
+    await setConversationState(business.id, {
+      workflow: 'quote_guided',
+      focus: { jobId: job.id },
+      collected: {
+        jobId: job.id,
+        quoted_amount: Number(job.quoted_amount),
+        quote_items: job.quote_items || null,
+        quote_line_items_json: job.quote_line_items_json || null,
+      },
+      pending: { type: 'field', field: 'amend_items' },
+      options: [],
+    });
+    return twimlReplyPair(res, `What should the quote show instead? Currently:`, currentItemsStr);
+  }
+
+  return twimlReply(res, `${db.formatJobId(job.id)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
 }
 
 function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {

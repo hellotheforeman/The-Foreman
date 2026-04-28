@@ -2,6 +2,7 @@ const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
 const { generateQuotePdf, generateInvoicePdf } = require('./pdf');
+const { setConversationState } = require('./conversation-state');
 
 function toTitleCase(str) {
   return String(str).replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -167,6 +168,14 @@ async function handleQuote(intent, res) {
   const total = Number(intent.amount).toFixed(2);
   const label = isReQuote ? 'Re-quoted' : 'Quote';
 
+  await setConversationState(business.id, {
+    workflow: 'quote_focus',
+    focus: { jobId: job.id },
+    collected: {},
+    pending: null,
+    options: [],
+  });
+
   try {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
@@ -263,14 +272,6 @@ async function handleSendInvoice(intent, res) {
 async function handleAmend(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
-
-  if (!intent.jobId) {
-    const suggestion = await openJobsSuggestion(business.id);
-    return messenger.twimlReply(res, suggestion
-      ? `Which quote or invoice do you want to amend? Here are your open jobs:\n\n${suggestion}`
-      : `Which quote or invoice do you want to amend? Say *jobs* to see what's on.`
-    );
-  }
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
@@ -719,4 +720,4 @@ function formatShortDate(dateStr) {
   return `${day}-${month}-${year}`;
 }
 
-module.exports = { dispatch, SETTINGS_FIELDS, buildSettingsMenu };
+module.exports = { dispatch, SETTINGS_FIELDS, buildSettingsMenu, openJobsSuggestion };
