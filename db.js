@@ -314,7 +314,7 @@ async function updateBusinessStatus(id, status) {
   return rows[0] || null;
 }
 
-async function findOrCreateCustomer(businessId, name, phone, email) {
+async function findOrCreateCustomer(businessId, name, phone, email, address) {
   // Match by phone when provided, otherwise fall back to name match
   let customer = null;
   if (phone) {
@@ -325,8 +325,8 @@ async function findOrCreateCustomer(businessId, name, phone, email) {
   }
   if (!customer) {
     const { rows } = await pool.query(
-      'INSERT INTO customers (business_id, name, phone, email) VALUES ($1, $2, $3, $4) RETURNING *',
-      [businessId, name, phone || null, email || null]
+      'INSERT INTO customers (business_id, name, phone, email, address) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [businessId, name, phone || null, email || null, address || null]
     );
     customer = rows[0];
   } else {
@@ -341,6 +341,11 @@ async function findOrCreateCustomer(businessId, name, phone, email) {
       updates.push(`email = $${vals.length + 1}`);
       vals.push(email);
       customer.email = email;
+    }
+    if (address && !customer.address) {
+      updates.push(`address = $${vals.length + 1}`);
+      vals.push(address);
+      customer.address = address;
     }
     if (updates.length) {
       vals.push(customer.id);

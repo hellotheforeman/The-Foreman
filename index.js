@@ -483,25 +483,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `What's the job for ${c.name}?`);
         }
 
-        // New customer — go straight to description (or price if we already have it)
-        if (prefilledDescription) {
-          await setConversationState(business.id, {
-            workflow: 'quote_flow',
-            focus: {},
-            collected: { step: 'price', customerName: customerRef, description: prefilledDescription },
-            pending: { type: 'field', field: 'price' },
-            options: [],
-          });
-          return twimlReply(res, `Got it — ${customerRef}, ${prefilledDescription}.\n\nWhat price?\n\n(Or itemised: *labour 250, parts 45*)`);
-        }
+        // New customer — ask for address first, then description/price
         await setConversationState(business.id, {
           workflow: 'quote_flow',
           focus: {},
-          collected: { step: 'description', customerName: customerRef },
-          pending: { type: 'field', field: 'description' },
+          collected: { step: 'address', customerName: customerRef, description: prefilledDescription || null },
+          pending: { type: 'field', field: 'address' },
           options: [],
         });
-        return twimlReply(res, `Got it — what's the job for ${customerRef}?`);
+        return twimlReply(res, `What's ${customerRef}'s address?\n\nReply *skip* to leave blank.`);
       }
 
       // Bare "quote" — ask for customer name
@@ -554,9 +544,20 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { step: 'description', customerName: trimmed },
+          collected: { step: 'address', customerName: trimmed },
         });
-        return twimlReply(res, `What's the job for ${trimmed}?`);
+        return twimlReply(res, `What's their address?\n\nReply *skip* to leave blank.`);
+      }
+
+      // Step: address (new customers only)
+      if (c.step === 'address') {
+        const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
+        if (c.description) {
+          await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
+          return twimlReply(res, `What price?\n\n(Or itemised: *labour 250, parts 45*)`);
+        }
+        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
+        return twimlReply(res, `What's the job for ${c.customerName}?`);
       }
 
       // Step: job description
@@ -969,6 +970,12 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
 
 // ---------------------------------------------------------------------------
 
+function formatAddress(raw) {
+  const titled = raw.trim().replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+  // Ensure UK postcode at the end is fully uppercase
+  return titled.replace(/([A-Za-z]{1,2}\d{1,2}[A-Za-z]?\s*\d[A-Za-z]{2})\s*$/i, m => m.toUpperCase());
+}
+
 // Extracts customer name (and optionally job description) from a parsed quote intent.
 // Handles:
 //   intent.jobRef set directly ("quote for Mrs Smith")
@@ -1003,7 +1010,7 @@ async function createCustomerAndJob(businessId, collected) {
   if (collected.customerId) {
     customer = await db.getCustomer(collected.customerId, businessId);
   } else {
-    customer = await db.findOrCreateCustomer(businessId, collected.customerName, collected.phone, null);
+    customer = await db.findOrCreateCustomer(businessId, collected.customerName, collected.phone, null, collected.address || null);
   }
   const job = await db.createJob(businessId, customer.id, collected.description || 'Job');
   // Attach customer to job for use by handlers
