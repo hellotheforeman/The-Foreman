@@ -802,40 +802,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice guided workflow ---
 
-    const workflowResult = await workflowEngine.handleMessage({
-      business,
-      raw: body,
-      parsedIntent: intent,
-      currentState,
-    });
-
-    if (workflowResult?.type === 'prompt') {
-      await setConversationState(business.id, workflowResult.state);
-      return twimlReply(res, workflowResult.message);
-    }
-
-    if (workflowResult?.type === 'cancel') {
-      await clearConversationState(business.id);
-      return twimlReply(res, workflowResult.message);
-    }
-
-    if (workflowResult?.type === 'action') {
-      const completedIntent = workflowResult.intent;
-
-      if (workflowResult.clearState === false) {
-        // leave existing state for out-of-band help/query handling
-      } else if (workflowResult.state) {
-        await setConversationState(business.id, workflowResult.state);
-      } else {
-        await clearConversationState(business.id);
-      }
-
-      return dispatch({ ...completedIntent, business }, res);
-    }
-
     // --- Amend with context ---
     // Handles "amend" with no job ID. If quote_focus is active (just sent a quote),
     // use that job. Otherwise save amend_pending and ask which job.
+    // Must run before the workflow engine, which would otherwise dispatch amend_quote
+    // directly to handleQuote and bypass this routing logic.
     if ((intent.intent === 'amend_invoice' || intent.intent === 'amend_quote') && !intent.jobId) {
       const focusJobId = (currentState?.workflow === 'quote_focus' || currentState?.workflow === 'invoice_focus') ? currentState.focus?.jobId : null;
       if (focusJobId) {
@@ -909,6 +880,37 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         options: [],
       });
       return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
+    }
+
+    const workflowResult = await workflowEngine.handleMessage({
+      business,
+      raw: body,
+      parsedIntent: intent,
+      currentState,
+    });
+
+    if (workflowResult?.type === 'prompt') {
+      await setConversationState(business.id, workflowResult.state);
+      return twimlReply(res, workflowResult.message);
+    }
+
+    if (workflowResult?.type === 'cancel') {
+      await clearConversationState(business.id);
+      return twimlReply(res, workflowResult.message);
+    }
+
+    if (workflowResult?.type === 'action') {
+      const completedIntent = workflowResult.intent;
+
+      if (workflowResult.clearState === false) {
+        // leave existing state for out-of-band help/query handling
+      } else if (workflowResult.state) {
+        await setConversationState(business.id, workflowResult.state);
+      } else {
+        await clearConversationState(business.id);
+      }
+
+      return dispatch({ ...completedIntent, business }, res);
     }
 
     await dispatch(intent, res);
