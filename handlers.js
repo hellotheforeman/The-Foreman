@@ -75,6 +75,7 @@ const commandHandlers = {
   quote: handleQuote,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
+  amend_quote: handleQuote,
   amend_invoice: handleAmend,
   chase: handleChase,
   review: handleReview,

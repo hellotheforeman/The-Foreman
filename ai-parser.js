@@ -31,7 +31,7 @@ const DISPATCH_TOOL = {
           enum: [
             // Commands
             'new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block',
-            'send_invoice', 'amend_invoice', 'paid', 'chase', 'review',
+            'send_invoice', 'amend_invoice', 'amend_quote', 'paid', 'chase', 'review',
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
             'view_schedule', 'unpaid', 'open_jobs', 'unscheduled_jobs',
@@ -142,6 +142,10 @@ FIELD RULES:
 - For view_schedule with "today" / "tomorrow" / "this week" / "next week": set period only, no date field.
 - For view_schedule with a specific date: set period="date" and the date field.
 
+COMMAND PHRASING:
+- Phrases like "Can you X", "I'd like to X", "I want to X", "can we X" are always commands, not help requests. Map them to the appropriate intent.
+- "Can you amend the quote?" → amend_quote. "Can you send an invoice?" → send_invoice. "I'd like to make some changes to the quote" → amend_quote.
+
 INTENT GUIDE:
 - new_customer: "add a customer", "new customer John Smith 07700900123"
 - new_job: "new job", "add a job for Mrs Patel"
@@ -150,7 +154,8 @@ INTENT GUIDE:
 - reschedule: "move job 14 to monday", "reschedule boiler service"
 - add_block: "and then friday", "also next tuesday"
 - send_invoice: "invoice job 14", "invoice Mrs Patel 450"
-- amend_invoice: "amend invoice 14", "change invoice 14 to 500", "amend quote 14", "change quote 9 to 850"
+- amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote"
+- amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14"
 - paid: "paid 14", "job 14 paid", "mark 14 as paid"
 - chase: "chase 14", "send reminder for job 14"
 - review: "review 14", "ask Patel for a review"

@@ -836,7 +836,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- Amend with context ---
     // Handles "amend" with no job ID. If quote_focus is active (just sent a quote),
     // use that job. Otherwise save amend_pending and ask which job.
-    if (intent.intent === 'amend_invoice' && !intent.jobId) {
+    if ((intent.intent === 'amend_invoice' || intent.intent === 'amend_quote') && !intent.jobId) {
       const focusJobId = currentState?.workflow === 'quote_focus' ? currentState.focus?.jobId : null;
       if (focusJobId) {
         await clearConversationState(business.id);
@@ -889,6 +889,27 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Couldn't find a job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
     }
     // --- End amend with context ---
+
+    // amend_quote with a job ID but no amount — enter guided quote amend flow
+    if (intent.intent === 'amend_quote' && intent.jobId && intent.amount == null) {
+      const job = await db.getJobWithCustomer(intent.jobId, business.id);
+      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+      if (!job.quoted_amount) return twimlReply(res, `${db.formatJobId(intent.jobId)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
+      const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
+      await setConversationState(business.id, {
+        workflow: 'quote_guided',
+        focus: { jobId: job.id },
+        collected: {
+          jobId: job.id,
+          quoted_amount: Number(job.quoted_amount),
+          quote_items: job.quote_items || null,
+          quote_line_items_json: job.quote_line_items_json || null,
+        },
+        pending: { type: 'field', field: 'amend_items' },
+        options: [],
+      });
+      return twimlReplyPair(res, `What should the quote show instead? Currently:`, currentItemsStr);
+    }
 
     await dispatch(intent, res);
 
