@@ -126,7 +126,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && !currentState) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus')) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
@@ -348,7 +348,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           });
           return twimlReplyPair(
             res,
-            `What should the quote show instead? Currently:`,
+            `What do you want to change it to? It currently shows:`,
             currentItemsStr
           );
         }
@@ -717,7 +717,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           );
           return twimlReplyPair(
             res,
-            `What should the invoice show instead? Currently:`,
+            `What do you want to change it to? It currently shows:`,
             currentItemsStr
           );
         }
@@ -851,8 +851,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         options: [],
       });
       return twimlReply(res, suggestion
-        ? `Which quote or invoice do you want to amend? Here are your open jobs:\n\n${suggestion}`
-        : `Which quote or invoice do you want to amend? Say *jobs* to see what's on.`
+        ? `Which quote did you want to change? Here's what you've got open:\n\n${suggestion}`
+        : `Which quote did you want to change? Say *jobs* to see what's on.`
       );
     }
 
@@ -908,7 +908,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         pending: { type: 'field', field: 'amend_items' },
         options: [],
       });
-      return twimlReplyPair(res, `What should the quote show instead? Currently:`, currentItemsStr);
+      return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
     }
 
     await dispatch(intent, res);
@@ -950,7 +950,7 @@ async function routeAmend(jobId, business, res) {
       pending: { type: 'field', field: 'amend_existing_invoice' },
       options: [],
     });
-    return twimlReplyPair(res, `What should the invoice show instead? Currently:`, currentItemsStr);
+    return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
   }
 
   if (job.quoted_amount) {
@@ -967,7 +967,7 @@ async function routeAmend(jobId, business, res) {
       pending: { type: 'field', field: 'amend_items' },
       options: [],
     });
-    return twimlReplyPair(res, `What should the quote show instead? Currently:`, currentItemsStr);
+    return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
   }
 
   return twimlReply(res, `${db.formatJobId(job.id)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);

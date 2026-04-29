@@ -698,7 +698,7 @@ async function openJobsSuggestion(businessId) {
   const jobs = await db.getOpenJobs(businessId);
   if (!jobs.length) return null;
   return jobs.slice(0, 5)
-    .map(j => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)}`)
+    .map(j => `• ${j.customer_name} — ${toTitleCase(j.description)}`)
     .join('\n');
 }
 
