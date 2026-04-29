@@ -253,6 +253,14 @@ async function handleSendInvoice(intent, res) {
     invoice = await db.createInvoice(business.id, job.id, amount, lineItemsStr, lineItemsJson);
   }
 
+  await setConversationState(business.id, {
+    workflow: 'invoice_focus',
+    focus: { jobId: job.id },
+    collected: {},
+    pending: null,
+    options: [],
+  });
+
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(

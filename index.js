@@ -126,7 +126,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus')) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus')) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
@@ -837,7 +837,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Handles "amend" with no job ID. If quote_focus is active (just sent a quote),
     // use that job. Otherwise save amend_pending and ask which job.
     if ((intent.intent === 'amend_invoice' || intent.intent === 'amend_quote') && !intent.jobId) {
-      const focusJobId = currentState?.workflow === 'quote_focus' ? currentState.focus?.jobId : null;
+      const focusJobId = (currentState?.workflow === 'quote_focus' || currentState?.workflow === 'invoice_focus') ? currentState.focus?.jobId : null;
       if (focusJobId) {
         await clearConversationState(business.id);
         return routeAmend(focusJobId, business, res);
