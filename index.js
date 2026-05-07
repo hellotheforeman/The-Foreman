@@ -619,7 +619,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, 'Cancelled.');
       }
       // If the user has issued a new command, abandon the pick and handle it
-      if (intent.kind === 'command' && intent.intent !== 'send_invoice') {
+      if (intent.kind === 'command') {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
