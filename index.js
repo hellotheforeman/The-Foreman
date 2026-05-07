@@ -802,6 +802,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice guided workflow ---
 
+    const trimmed = body.trim();
+
     // --- Amend with context ---
     // Handles "amend" with no job ID. If quote_focus is active (just sent a quote),
     // use that job. Otherwise save amend_pending and ask which job.
