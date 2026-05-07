@@ -618,13 +618,32 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      const n = parseInt(trimmed, 10);
-      if (!n || n < 1 || n > jobs.length) {
-        return twimlReply(res, `Reply with a number 1–${jobs.length}, or *cancel* to dismiss.`);
+      // Numeric selection from a presented list
+      if (jobs.length) {
+        const n = parseInt(trimmed, 10);
+        if (n >= 1 && n <= jobs.length) {
+          await clearConversationState(business.id);
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: jobs[n - 1].id, business }, res);
+        }
       }
-      const job = jobs[n - 1];
-      await clearConversationState(business.id);
-      return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, business }, res);
+      // Name-based resolution
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
+      if (resolved.status === 'resolved') {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'send_invoice', jobId: resolved.job.id, business }, res);
+      }
+      if (resolved.status === 'multiple') {
+        const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        await setConversationState(business.id, {
+          workflow: 'invoice_pick',
+          focus: {},
+          collected: { jobs: resolved.jobs.slice(0, 5) },
+          pending: { type: 'selection', field: 'jobId' },
+          options: resolved.jobs.slice(0, 5),
+        });
+        return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
+      }
+      return twimlReply(res, `Couldn't find an open job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
     }
     // --- End invoice by name ---
 
@@ -632,6 +651,21 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Triggered when: "invoice 14" — no amount provided.
     // Checks for existing quote and guides accordingly.
     if (!currentState && intent.intent === 'send_invoice' && intent.amount == null) {
+      if (!intent.jobId) {
+        const suggestion = await openJobsSuggestion(business.id);
+        await setConversationState(business.id, {
+          workflow: 'invoice_pick',
+          focus: {},
+          collected: {},
+          pending: { type: 'field', field: 'jobRef' },
+          options: [],
+        });
+        return twimlReply(res, suggestion
+          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}`
+          : `Which job do you want to invoice? Say *jobs* to see what's on.`
+        );
+      }
+
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
       if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
 
