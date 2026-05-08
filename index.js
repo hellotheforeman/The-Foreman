@@ -734,8 +734,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           options: [],
         });
         return twimlReply(res, suggestion
-          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}`
-          : `Which job do you want to invoice? Say *jobs* to see what's on.`
+          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
         );
       }
 
@@ -989,6 +989,25 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         options: [],
       });
       return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
+    }
+
+    // --- Invoice with no job ID and active state ---
+    // Handles "invoice" / "create an invoice" when a focus or other state is active,
+    // which would otherwise fall through to the workflow engine with no jobId.
+    if (intent.intent === 'send_invoice' && !intent.jobId && !intent.jobRef && intent.amount == null) {
+      await clearConversationState(business.id);
+      const suggestion = await openJobsSuggestion(business.id);
+      await setConversationState(business.id, {
+        workflow: 'invoice_pick',
+        focus: {},
+        collected: {},
+        pending: { type: 'field', field: 'jobRef' },
+        options: [],
+      });
+      return twimlReply(res, suggestion
+        ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
+        : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
+      );
     }
 
     const workflowResult = await workflowEngine.handleMessage({
