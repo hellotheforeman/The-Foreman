@@ -126,7 +126,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'invoice_pick' || currentState.workflow === 'amend_pending')) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'invoice_pick' || currentState.workflow === 'amend_pending' || currentState.workflow === 'invoice_flow')) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
@@ -591,6 +591,54 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End unified quote flow ---
 
+    // --- Invoice flow ---
+    // Mirrors quote_flow but creates a job and dispatches send_invoice at the end.
+    if (currentState?.workflow === 'invoice_flow') {
+      const trimmed = body.trim();
+      const c = currentState.collected || {};
+
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Invoice cancelled.');
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
+      if (c.step === 'address') {
+        const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
+        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
+        return twimlReply(res, `What's the scope of work for ${c.customerName}?`);
+      }
+
+      if (c.step === 'description') {
+        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', description: trimmed } });
+        return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+      }
+
+      if (c.step === 'price') {
+        const lineItems = parseLineItems(trimmed);
+        if (lineItems) {
+          const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
+          await clearConversationState(business.id);
+          const { job } = await createCustomerAndJob(business.id, c);
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
+        }
+        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
+        if (!m) return twimlReply(res, `Please enter a price, e.g. *450*, or itemised: *labour 250, parts 45*`);
+        const amount = parseFloat(m[1]);
+        await clearConversationState(business.id);
+        const { job } = await createCustomerAndJob(business.id, c);
+        return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount, items: null, lineItems: null, business }, res);
+      }
+
+      await clearConversationState(business.id);
+      return twimlReply(res, 'Invoice cancelled.');
+    }
+    // --- End invoice flow ---
+
     // --- Invoice by name ---
     if (!currentState && intent.intent === 'send_invoice' && !intent.jobId && intent.jobRef) {
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
@@ -648,7 +696,27 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
       }
-      return twimlReply(res, `Couldn't find an open job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
+      // No existing job matched — start invoice_flow to create one
+      const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+      if (existingCustomers.length === 1) {
+        const c = existingCustomers[0];
+        await setConversationState(business.id, {
+          workflow: 'invoice_flow',
+          focus: {},
+          collected: { step: 'description', customerId: c.id, customerName: c.name },
+          pending: { type: 'field', field: 'description' },
+          options: [],
+        });
+        return twimlReply(res, `What's the scope of work for ${c.name}?`);
+      }
+      await setConversationState(business.id, {
+        workflow: 'invoice_flow',
+        focus: {},
+        collected: { step: 'address', customerName: trimmed },
+        pending: { type: 'field', field: 'address' },
+        options: [],
+      });
+      return twimlReply(res, `What's ${trimmed}'s address?\n\nReply *skip* to leave blank.`);
     }
     // --- End invoice by name ---
 
@@ -1193,7 +1261,7 @@ async function createCustomerAndJob(businessId, collected) {
 
 
 
-const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'settings']);
+const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'send_invoice', 'settings']);
 
 function isWorkflowInterrupt(intent) {
   return intent?.kind === 'query' || (intent?.kind === 'command' && !WORKFLOW_INTENTS.has(intent.intent));
