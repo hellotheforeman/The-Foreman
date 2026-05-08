@@ -678,10 +678,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, 'Cancelled.');
       }
       // If the user has issued a new command, abandon the pick and handle it.
-      // Exception: send_invoice with no jobId just means they said "invoice" again — re-show the list.
-      if (intent.kind === 'command' && !(intent.intent === 'send_invoice' && !intent.jobId)) {
+      if (intent.kind === 'command' && intent.intent !== 'send_invoice') {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
+      }
+      // "Invoice" with no job ID while already in invoice_pick — re-show the full picker.
+      if (intent.intent === 'send_invoice' && !intent.jobId && !intent.jobRef) {
+        const suggestion = await openJobsSuggestion(business.id);
+        return twimlReply(res, suggestion
+          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
+        );
       }
       // Numeric selection from a presented list
       if (jobs.length) {
