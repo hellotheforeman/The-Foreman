@@ -126,7 +126,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'invoice_pick' || currentState.workflow === 'amend_pending' || currentState.workflow === 'invoice_flow')) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'invoice_flow')) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
