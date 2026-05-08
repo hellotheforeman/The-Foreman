@@ -666,8 +666,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      // If the user has issued a new command, abandon the pick and handle it
-      if (intent.kind === 'command') {
+      // If the user has issued a new command, abandon the pick and handle it.
+      // Exception: send_invoice with no jobId just means they said "invoice" again — re-show the list.
+      if (intent.kind === 'command' && !(intent.intent === 'send_invoice' && !intent.jobId)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
