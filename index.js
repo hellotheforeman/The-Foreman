@@ -607,6 +607,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return dispatch({ ...intent, business }, res);
       }
 
+      if (c.step === 'customer_name') {
+        const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+        if (existingCustomers.length === 1) {
+          const existing = existingCustomers[0];
+          await setConversationState(business.id, { ...currentState, collected: { step: 'description', customerId: existing.id, customerName: existing.name } });
+          return twimlReply(res, `What's the scope of work for ${existing.name}?`);
+        }
+        await setConversationState(business.id, { ...currentState, collected: { step: 'address', customerName: trimmed } });
+        return twimlReply(res, `What's ${trimmed}'s address?\n\nReply *skip* to leave blank.`);
+      }
+
       if (c.step === 'address') {
         const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
@@ -697,27 +708,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
       }
-      // No existing job matched — start invoice_flow to create one
-      const existingCustomers = await db.findCustomerByName(business.id, trimmed);
-      if (existingCustomers.length === 1) {
-        const c = existingCustomers[0];
-        await setConversationState(business.id, {
-          workflow: 'invoice_flow',
-          focus: {},
-          collected: { step: 'description', customerId: c.id, customerName: c.name },
-          pending: { type: 'field', field: 'description' },
-          options: [],
-        });
-        return twimlReply(res, `What's the scope of work for ${c.name}?`);
-      }
+      // No existing job matched — start invoice_flow and ask who to invoice
       await setConversationState(business.id, {
         workflow: 'invoice_flow',
         focus: {},
-        collected: { step: 'address', customerName: trimmed },
-        pending: { type: 'field', field: 'address' },
+        collected: { step: 'customer_name' },
+        pending: { type: 'field', field: 'customer_name' },
         options: [],
       });
-      return twimlReply(res, `What's ${trimmed}'s address?\n\nReply *skip* to leave blank.`);
+      return twimlReply(res, `Who do you want to invoice?`);
     }
     // --- End invoice by name ---
 
