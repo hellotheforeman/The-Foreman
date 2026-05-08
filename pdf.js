@@ -25,7 +25,7 @@ function normaliseLineItems(lineItemsJson, fallbackDescription, fallbackAmount) 
   return [];
 }
 
-function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails, vat, logoBuffer }) {
+function generatePdf({ type, docNumber, date, business, customer, lineItems, paymentDetails, vat, logoBuffer, description }) {
   const safeName = (customer?.name || 'unknown').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
   const dateStr = new Date().toISOString().split('T')[0];
   const filename = `${type}-${safeName}-${dateStr}.pdf`;
@@ -128,12 +128,12 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     }
 
     // ── SCOPE OF WORK ──────────────────────────────────────────
-    if (job.description) {
+    if (description) {
       doc.moveDown(1.5);
       doc.font('Helvetica-Bold').fontSize(8).fillColor('#888888')
         .text('SCOPE OF WORK');
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
-        .text(job.description, { paragraphGap: 0 });
+        .text(description, { paragraphGap: 0 });
     }
 
     // ── TABLE ──────────────────────────────────────────────────
@@ -244,6 +244,7 @@ async function generateQuotePdf(job, customer, business) {
     paymentDetails: null,
     vat,
     logoBuffer,
+    description: job.description || null,
   });
 }
 
@@ -266,6 +267,7 @@ async function generateInvoicePdf(job, invoice, customer, business) {
     paymentDetails,
     vat,
     logoBuffer,
+    description: job.description || null,
   });
 }
 
