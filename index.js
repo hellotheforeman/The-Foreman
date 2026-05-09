@@ -126,7 +126,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'invoice_flow')) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending')) {
       const aiIntent = await parseWithAI(body);
       if (aiIntent) intent = aiIntent;
     }
@@ -611,15 +611,28 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const existingCustomers = await db.findCustomerByName(business.id, trimmed);
         if (existingCustomers.length === 1) {
           const existing = existingCustomers[0];
-          await setConversationState(business.id, { ...currentState, collected: { step: 'description', customerId: existing.id, customerName: existing.name } });
-          return twimlReply(res, `What's the scope of work for ${existing.name}?`);
+          await setConversationState(business.id, { ...currentState, collected: { step: 'phone', customerId: existing.id, customerName: existing.name } });
+        } else {
+          await setConversationState(business.id, { ...currentState, collected: { step: 'phone', customerName: trimmed } });
         }
-        await setConversationState(business.id, { ...currentState, collected: { step: 'address', customerName: trimmed } });
-        return twimlReply(res, `What's ${trimmed}'s address?\n\nReply *skip* to leave blank.`);
+        return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
+      }
+
+      if (c.step === 'phone') {
+        if (!/^skip$/i.test(trimmed)) {
+          const stripped = trimmed.replace(/[\s\-().]/g, '');
+          if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
+            return twimlReply(res, `That doesn't look like a valid UK mobile. What's their phone number?\n\nReply *skip* to leave blank.`);
+          }
+          await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'address', phone: normalisePhone(stripped) } });
+        } else {
+          await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'address' } });
+        }
+        return twimlReply(res, `What's their address?\n\nReply *skip* to leave blank.`);
       }
 
       if (c.step === 'address') {
-        const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
+        const address = /^skip$/i.test(trimmed) ? null : trimmed;
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
         return twimlReply(res, `What's the scope of work for ${c.customerName}?`);
       }
@@ -715,15 +728,19 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
       }
-      // No existing job matched — start invoice_flow and ask who to invoice
+      // No existing job matched — check if customer exists at all (just no open job)
+      const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+      const collected = existingCustomers.length === 1
+        ? { step: 'phone', customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
+        : { step: 'phone', customerName: trimmed };
       await setConversationState(business.id, {
         workflow: 'invoice_flow',
         focus: {},
-        collected: { step: 'customer_name' },
-        pending: { type: 'field', field: 'customer_name' },
+        collected,
+        pending: { type: 'field', field: 'phone' },
         options: [],
       });
-      return twimlReply(res, `Who do you want to invoice?`);
+      return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
     }
     // --- End invoice by name ---
 
