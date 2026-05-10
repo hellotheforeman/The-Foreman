@@ -85,7 +85,7 @@ const DISPATCH_TOOL = {
         },
         name: {
           type: 'string',
-          description: 'Customer full name for new_customer or new_job.',
+          description: 'Customer full name for new_customer, new_job, or paid (when customer name is mentioned, e.g. "Joe Duck now paid").',
         },
         phone: {
           type: 'string',
@@ -156,7 +156,7 @@ INTENT GUIDE:
 - send_invoice: "invoice job 14", "invoice Mrs Patel 450"
 - amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote"
 - amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14"
-- paid: "paid 14", "job 14 paid", "mark 14 as paid"
+- paid: "paid 14", "job 14 paid", "mark 14 as paid", "Joe Duck paid", "Joe Duck now paid" (extract name)
 - chase: "chase 14", "send reminder for job 14"
 - review: "review 14", "ask Patel for a review"
 - cancel_job: "cancel job 14"

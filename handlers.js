@@ -199,12 +199,29 @@ async function handlePaid(intent, res) {
   if (!business) return;
 
   if (!intent.jobId) {
-    const suggestion = await unpaidSuggestion(business.id);
-    return messenger.twimlReply(res,
-      suggestion
-        ? `Which Job got paid? Your unpaid invoices:\n\n${suggestion}\n\nSay *paid 4* to mark one off.`
-        : `Which Job got paid? Say *paid 4* with the Job number.`
-    );
+    const allUnpaid = await db.getUnpaidInvoices(business.id);
+
+    if (intent.name) {
+      const nameLower = intent.name.toLowerCase();
+      const matched = allUnpaid.filter(i => i.customer_name.toLowerCase().includes(nameLower));
+
+      if (matched.length === 1) {
+        await db.markInvoicePaid(matched[0].id);
+        return messenger.twimlReply(res, `💰 ${db.formatJobId(matched[0].job_id)} — invoice marked as paid. Nice one!`);
+      }
+
+      if (matched.length > 1) {
+        const list = matched.map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`).join('\n');
+        return messenger.twimlReply(res, `Which invoice for ${intent.name}?\n\n${list}`);
+      }
+    }
+
+    if (!allUnpaid.length) return messenger.twimlReply(res, `No unpaid invoices. 🎉`);
+
+    const list = allUnpaid.slice(0, 5)
+      .map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`)
+      .join('\n');
+    return messenger.twimlReply(res, `Which invoice got paid?\n\n${list}`);
   }
 
   const invoice = await db.getInvoiceByJob(intent.jobId, business.id);
