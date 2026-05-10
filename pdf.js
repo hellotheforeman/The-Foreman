@@ -159,8 +159,11 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
         .text(String(item.description), L, rowStartY, { width: descWidth });
       const afterDesc = doc.y;
 
+      // If afterDesc < rowStartY, a page break occurred while rendering the description.
+      // Use the new page's top margin so the amount doesn't re-trigger a second overflow.
+      const amountY = afterDesc < rowStartY ? doc.page.margins.top : rowStartY;
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
-        .text(`£${Number(item.amount).toFixed(2)}`, L, rowStartY, { width: R - L, align: 'right' });
+        .text(`£${Number(item.amount).toFixed(2)}`, L, amountY, { width: R - L, align: 'right' });
 
       currentY = Math.max(afterDesc, doc.y) + 10;
 
