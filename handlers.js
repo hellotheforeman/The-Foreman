@@ -706,7 +706,11 @@ async function openJobsSuggestion(businessId) {
   const jobs = await db.getOpenJobs(businessId);
   if (!jobs.length) return null;
   return jobs.slice(0, 5)
-    .map(j => `• ${j.customer_name} — ${toTitleCase(j.description)}`)
+    .map(j => {
+      const desc = toTitleCase(j.description);
+      const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
+      return `• ${j.customer_name} — ${summary}`;
+    })
     .join('\n');
 }
 
