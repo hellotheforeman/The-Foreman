@@ -492,7 +492,9 @@ async function handleOpenJobs(intent, res) {
   if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
 
   const lines = jobs.map((j) => {
-    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)} (${db.deriveStatus(j)})`;
+    const desc = toTitleCase(j.description);
+    const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
+    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary} (${db.deriveStatus(j)})`;
   });
   messenger.twimlReply(res, `📋 *${jobs.length} Open Jobs*\n\n${lines.join('\n')}`);
 }
