@@ -19,7 +19,7 @@ const config = {
 };
 
 // Validate required config
-const required = ['twilio.accountSid', 'twilio.authToken', 'twilio.whatsappNumber'];
+const required = ['twilio.accountSid', 'twilio.authToken', 'twilio.whatsappNumber', 'supabase.url', 'supabase.serviceKey'];
 for (const key of required) {
   const val = key.split('.').reduce((o, k) => o?.[k], config);
   if (!val || val.includes('XXXX')) {

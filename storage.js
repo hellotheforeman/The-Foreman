@@ -2,6 +2,9 @@ const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const config = require('./config');
 
+if (!config.supabase.url || !config.supabase.serviceKey) {
+  console.error('❌ Supabase not configured — PDF upload will fail. Set SUPABASE_URL and SUPABASE_SERVICE_KEY env vars.');
+}
 const supabase = createClient(config.supabase.url, config.supabase.serviceKey);
 
 async function uploadLogo(businessId, buffer, ext) {
