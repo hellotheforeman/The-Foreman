@@ -185,7 +185,7 @@ async function handleQuote(intent, res) {
       pdfUrl
     );
   } catch (err) {
-    console.error('Quote PDF generation failed:', err.message, err.cause || '');
+    console.error('Quote PDF generation failed:', err.message);
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
@@ -269,7 +269,7 @@ async function handleSendInvoice(intent, res) {
       pdfUrl
     );
   } catch (err) {
-    console.error('Invoice PDF generation failed:', err.message, err.cause || '');
+    console.error('Invoice PDF generation failed:', err.message);
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
@@ -321,7 +321,7 @@ async function handleAmend(intent, res) {
       pdfUrl
     );
   } catch (err) {
-    console.error('Invoice PDF generation failed:', err.message, err.cause || '');
+    console.error('Invoice PDF generation failed:', err.message);
     messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}`);
   }
 }

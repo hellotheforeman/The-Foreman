@@ -2,9 +2,6 @@ const { createClient } = require('@supabase/supabase-js');
 const https = require('https');
 const config = require('./config');
 
-if (!config.supabase.url || !config.supabase.serviceKey) {
-  console.error('❌ Supabase not configured — PDF upload will fail. Set SUPABASE_URL and SUPABASE_SERVICE_KEY env vars.');
-}
 const supabase = createClient(config.supabase.url, config.supabase.serviceKey);
 
 async function uploadLogo(businessId, buffer, ext) {
@@ -23,10 +20,7 @@ async function uploadPdf(businessId, type, filename, buffer) {
   const { error } = await supabase.storage
     .from('pdfs')
     .upload(filePath, buffer, { contentType: 'application/pdf', upsert: true });
-  if (error) {
-    console.error('Supabase PDF upload error:', error.message, error.statusCode || '', error.error || '');
-    throw error;
-  }
+  if (error) throw error;
   const { data } = supabase.storage.from('pdfs').getPublicUrl(filePath);
   return data.publicUrl;
 }
