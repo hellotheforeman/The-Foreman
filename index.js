@@ -592,7 +592,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- End unified quote flow ---
 
     // --- Invoice flow ---
-    // Mirrors quote_flow but creates a job and dispatches send_invoice at the end.
+    // Entered from invoice_pick after a name is typed. Collects phone, address,
+    // description, and price for a new or existing customer, then creates the job and invoice.
     if (currentState?.workflow === 'invoice_flow') {
       const trimmed = body.trim();
       const c = currentState.collected || {};
@@ -605,17 +606,6 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
-      }
-
-      if (c.step === 'customer_name') {
-        const existingCustomers = await db.findCustomerByName(business.id, trimmed);
-        if (existingCustomers.length === 1) {
-          const existing = existingCustomers[0];
-          await setConversationState(business.id, { ...currentState, collected: { step: 'phone', customerId: existing.id, customerName: existing.name } });
-        } else {
-          await setConversationState(business.id, { ...currentState, collected: { step: 'phone', customerName: trimmed } });
-        }
-        return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
       }
 
       if (c.step === 'phone') {
