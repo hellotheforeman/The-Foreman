@@ -127,11 +127,12 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       doc.font('Helvetica').fontSize(9).fillColor('#666666').text(detail);
     }
 
-    // ── SCOPE OF WORK ──────────────────────────────────────────
+    // ── SCOPE OF WORK / WORK COMPLETED ────────────────────────
     if (description) {
+      const scopeLabel = type === 'invoice' ? 'WORK COMPLETED' : 'SCOPE OF WORK';
       doc.moveDown(1.5);
       doc.font('Helvetica-Bold').fontSize(8).fillColor('#888888')
-        .text('SCOPE OF WORK');
+        .text(scopeLabel);
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
         .text(description, { paragraphGap: 0 });
     }
@@ -213,8 +214,8 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
         .text('PAYMENT DETAILS');
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
         .text(paymentDetails, { paragraphGap: 0 });
-      doc.font('Helvetica').fontSize(9).fillColor('#888888')
-        .text('Please pay within 14 days. Thank you for your business.', { paragraphGap: 6 });
+      doc.font('Helvetica').fontSize(10).fillColor('#111111')
+        .text('Please pay within 14 days. Thank you for your business.');
     } else {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
         .text('Work subject to standard terms and conditions available on request.');
@@ -235,6 +236,7 @@ async function generateQuotePdf(job, customer, business) {
     job.quote_items || job.description,
     job.quoted_amount
   );
+  const hasStructuredItems = !!(job.quote_line_items_json || job.quote_items);
   const vat = business?.vat_registered ? { rate: 0.20, number: business.vat_number || null } : null;
   const logoBuffer = business?.logo_path ? await downloadLogoBuffer(business.logo_path).catch(() => null) : null;
   return generatePdf({
@@ -247,7 +249,7 @@ async function generateQuotePdf(job, customer, business) {
     paymentDetails: null,
     vat,
     logoBuffer,
-    description: job.description || null,
+    description: hasStructuredItems ? (job.description || null) : null,
   });
 }
 
@@ -258,6 +260,7 @@ async function generateInvoicePdf(job, invoice, customer, business) {
     invoice.line_items || job.description,
     invoice.amount
   );
+  const hasStructuredItems = !!(invoice.line_items_json || invoice.line_items);
   const vat = business?.vat_registered ? { rate: 0.20, number: business.vat_number || null } : null;
   const logoBuffer = business?.logo_path ? await downloadLogoBuffer(business.logo_path).catch(() => null) : null;
   return generatePdf({
@@ -270,7 +273,7 @@ async function generateInvoicePdf(job, invoice, customer, business) {
     paymentDetails,
     vat,
     logoBuffer,
-    description: job.description || null,
+    description: hasStructuredItems ? (job.description || null) : null,
   });
 }
 
