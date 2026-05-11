@@ -206,8 +206,9 @@ async function handlePaid(intent, res) {
       const matched = allUnpaid.filter(i => i.customer_name.toLowerCase().includes(nameLower));
 
       if (matched.length === 1) {
-        await db.markInvoicePaid(matched[0].id);
-        return messenger.twimlReply(res, `💰 ${db.formatJobId(matched[0].job_id)} — invoice marked as paid. Nice one!`);
+        const m = matched[0];
+        await db.markInvoicePaid(m.id);
+        return messenger.twimlReply(res, `💰 ${m.customer_name} — £${Number(m.amount).toFixed(2)} marked as paid. Nice one!`);
       }
 
       if (matched.length > 1) {
