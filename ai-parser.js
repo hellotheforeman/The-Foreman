@@ -80,7 +80,7 @@ const DISPATCH_TOOL = {
         },
         status: {
           type: 'string',
-          enum: ['new', 'in progress', 'complete', 'cancelled', 'outstanding'],
+          enum: ['quoted', 'invoiced', 'paid', 'cancelled'],
           description: 'Job status for the jobs_by_status query.',
         },
         name: {
@@ -167,7 +167,7 @@ INTENT GUIDE:
 - unpaid: "unpaid", "outstanding invoices"
 - open_jobs: "jobs", "open jobs", "pipeline"
 - unscheduled_jobs: "unscheduled", "not booked in"
-- jobs_by_status: "new jobs", "in progress", "completed jobs"
+- jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs"
 - view_job: "job 14", "show me job 3"
 - find: "find Mrs Patel", "look up Smith"
 - list_customers: "customers", "all my customers", "show me my customers"

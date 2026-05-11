@@ -637,14 +637,14 @@ async function handleMarkComplete(intent, res) {
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (job.status === 'complete') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already marked complete.`);
+  if (job.status === 'paid') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already paid.`);
   if (job.status === 'cancelled') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is cancelled.`);
 
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id)} marked complete — ${job.customer.name}, ${toTitleCase(job.description)}.\n\n` +
-    `Reply *invoice ${job.id}* to send an invoice, or *review ${job.id}* to request a review.`
+    `✅ ${db.formatJobId(job.id)} marked paid — ${job.customer.name}, ${toTitleCase(job.description)}.\n\n` +
+    `Reply *review ${job.id}* to request a review.`
   );
 }
 

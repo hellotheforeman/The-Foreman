@@ -345,11 +345,10 @@ function parse(raw) {
   }
 
   // --- Jobs by status ---
-  if (/^new\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'new' };
-  if (/^(in[\s-]progress(\s+jobs?)?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'in progress' };
-  if (/^(complete[d]?\s+jobs?|jobs?\s+complete[d]?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'complete' };
+  if (/^quoted\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
+  if (/^invoiced\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'invoiced' };
+  if (/^(paid\s+jobs?|jobs?\s+paid)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'paid' };
   if (/^(cancelled?\s+jobs?|jobs?\s+cancelled?)$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'cancelled' };
-  if (/^outstanding\s+jobs?$/i.test(lower)) return { kind: 'query', intent: 'jobs_by_status', status: 'outstanding' };
 
   // --- Find customer ---
   const findMatch = text.match(/^find\s+(.+)$/i);
