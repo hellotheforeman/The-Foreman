@@ -493,13 +493,12 @@ async function handleUnpaid(intent, res) {
   const total = invoices.reduce((sum, i) => sum + Number(i.amount), 0);
   const lines = invoices.map((i) => {
     const days = Math.floor((Date.now() - new Date(i.sent_at).getTime()) / 86400000);
-    const overdue = days >= 14 ? ' ⚠️ overdue' : '';
-    return `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}, sent ${days} day${days === 1 ? '' : 's'} ago${overdue}`;
+    return `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}, sent ${days} day${days === 1 ? '' : 's'} ago`;
   });
 
   messenger.twimlReply(
     res,
-    `💷 *${invoices.length} unpaid — £${total.toFixed(2)} outstanding*\n\n${lines.join('\n\n')}`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)} outstanding*\n\n${lines.join('\n\n')}\n\nI'll let you know as soon as anything goes overdue.`
   );
 }
 
