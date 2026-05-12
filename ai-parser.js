@@ -137,7 +137,7 @@ INTENT GUIDE:
 - update_customer: "update Patel's phone to 07700900456"
 - unpaid: "unpaid", "outstanding invoices"
 - open_jobs: "jobs", "open jobs", "pipeline"
-- jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs"
+- jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs", "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "what's been invoiced", "invoices out" → status=invoiced
 - view_job: "job 14", "show me job 3"
 - find: "find Mrs Patel", "look up Smith"
 - list_customers: "customers", "all my customers", "show me my customers"

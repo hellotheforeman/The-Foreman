@@ -325,6 +325,11 @@ function parse(raw) {
     return { kind: 'query', intent: 'unpaid' };
   }
 
+  // --- Quotes out ---
+  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower)) {
+    return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
+  }
+
   // --- Open jobs ---
   if (/^(jobs|open|active|pipeline)$/i.test(lower)) {
     return { kind: 'query', intent: 'open_jobs' };

@@ -626,7 +626,11 @@ async function handleJobsByStatus(intent, res) {
 
   if (!jobs.length) return messenger.twimlReply(res, `No ${intent.status} jobs. 📭`);
 
-  const lines = jobs.map((j) => `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${toTitleCase(j.description)}`);
+  const lines = jobs.map((j) => {
+    const desc = toTitleCase(j.description);
+    const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
+    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary}`;
+  });
   messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}`);
 }
 
