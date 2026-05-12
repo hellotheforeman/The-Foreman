@@ -63,6 +63,10 @@ const DISPATCH_TOOL = {
           enum: ['quoted', 'invoiced', 'paid', 'cancelled'],
           description: 'Job status for the jobs_by_status query.',
         },
+        period: {
+          type: 'string',
+          description: 'Time period for earnings/stats queries. Use: "today", "week", "month", "year", or "last_N_days"/"last_N_weeks"/"last_N_months" (e.g. "last_3_months", "last_90_days"). Default: "month".',
+        },
         name: {
           type: 'string',
           description: 'Customer full name for new_customer, new_job, or paid (when customer name is mentioned, e.g. "Joe Duck now paid").',
@@ -144,9 +148,10 @@ INTENT GUIDE:
 - find: "find Mrs Patel", "look up Smith"
 - list_customers: "customers", "all my customers", "show me my customers"
 - earnings: "earnings", "how much have I made this month"
-- financial_summary: "how's business", "stats", "how am I doing", "give me an overview" — overview of all stats for a period
+- financial_summary: "how's business", "stats", "how am I doing", "give me an overview", "how have I done in last 3 months" — overview of all stats for a period; set period accordingly
 - conversion_rate: "what's my conversion rate", "how many quotes am I winning", "how many quotes convert"
 - avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
+PERIOD EXAMPLES: "last 3 months" → last_3_months, "last 90 days" → last_90_days, "last quarter" → last_3_months, "this year" → year, "this week" → week
 - settings: "settings", "change my business name"
 - help: "help", "what can you do"`;
 }

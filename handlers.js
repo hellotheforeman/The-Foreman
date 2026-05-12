@@ -455,25 +455,38 @@ async function handleUpdateCustomer(intent, res) {
 
 function resolvePeriod(period) {
   const now = new Date();
+  const end = new Date(now); end.setHours(23, 59, 59, 999);
+
+  // "last_3_months", "last_90_days", "last_2_weeks" etc.
+  const lastNMatch = (period || '').match(/^last_(\d+)_(day|week|month|year)s?$/);
+  if (lastNMatch) {
+    const n = parseInt(lastNMatch[1], 10);
+    const unit = lastNMatch[2];
+    const start = new Date(now);
+    if (unit === 'day') start.setDate(start.getDate() - n);
+    else if (unit === 'week') start.setDate(start.getDate() - n * 7);
+    else if (unit === 'month') start.setMonth(start.getMonth() - n);
+    else if (unit === 'year') start.setFullYear(start.getFullYear() - n);
+    start.setHours(0, 0, 0, 0);
+    const label = `Last ${n} ${unit}${n !== 1 ? 's' : ''}`;
+    return { start, end, label };
+  }
+
   if (period === 'today') {
     const start = new Date(now); start.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
     return { start, end, label: 'Today' };
   }
   if (period === 'week' || period === 'this_week') {
     const daysToMonday = (now.getDay() + 6) % 7;
     const start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
     return { start, end, label: 'This week' };
   }
   if (period === 'year') {
     const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-    const end = new Date(now); end.setHours(23, 59, 59, 999);
     return { start, end, label: 'This year' };
   }
   // month (default)
   const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-  const end = new Date(now); end.setHours(23, 59, 59, 999);
   return { start, end, label: 'This month' };
 }
 

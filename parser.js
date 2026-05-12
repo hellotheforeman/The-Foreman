@@ -312,39 +312,22 @@ function parse(raw) {
 
   // --- Financial summary (overview) ---
   if (/\b(how'?s\s+business|how\s+am\s+i\s+doing|business\s+overview|give\s+me\s+a\s+summary|stats?|financial\s+summary)\b/i.test(lower)) {
-    let period = 'month';
-    if (/\btoday\b/.test(lower)) period = 'today';
-    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
-    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
-    return { kind: 'query', intent: 'financial_summary', period };
+    return { kind: 'query', intent: 'financial_summary', period: parsePeriod(lower) };
   }
 
   // --- Conversion rate ---
   if (/\bconversion\s+rate\b|\bhow\s+many\s+quotes?\s+(am\s+i\s+)?(winning|converting|convert)\b/i.test(lower)) {
-    let period = 'month';
-    if (/\btoday\b/.test(lower)) period = 'today';
-    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
-    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
-    return { kind: 'query', intent: 'conversion_rate', period };
+    return { kind: 'query', intent: 'conversion_rate', period: parsePeriod(lower) };
   }
 
   // --- Average payment time ---
   if (/\bhow\s+long.{0,20}(get\s+paid|to\s+pay)\b|\baverage\s+pay(ment(\s+time)?)?\b|\bpayment\s+time\b/i.test(lower)) {
-    let period = 'month';
-    if (/\btoday\b/.test(lower)) period = 'today';
-    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
-    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
-    return { kind: 'query', intent: 'avg_payment_time', period };
+    return { kind: 'query', intent: 'avg_payment_time', period: parsePeriod(lower) };
   }
 
   // --- Earnings / income summary ---
   if (/\b(earnings?|earned|income|revenue|how much (have i |i've )?made|profit|takings?)\b/i.test(lower)) {
-    let period = 'month';
-    if (/\btoday\b/.test(lower)) period = 'today';
-    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
-    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
-    else if (/\bthis month\b|\bmonth\b/.test(lower)) period = 'month';
-    return { kind: 'query', intent: 'earnings', period };
+    return { kind: 'query', intent: 'earnings', period: parsePeriod(lower) };
   }
 
   // --- Unpaid / overdue ---
@@ -417,6 +400,23 @@ function parseLineItems(str) {
     items.push({ description: m[1].trim(), amount: parseFloat(m[2]) });
   }
   return items.length ? items : null;
+}
+
+// Extracts a period string from a message. Returns a string consumed by resolvePeriod in handlers.js.
+function parsePeriod(lower) {
+  // "last N months/weeks/days" — e.g. "last 3 months", "last 90 days"
+  const lastNMatch = lower.match(/\blast\s+(\d+)\s+(day|week|month|year)s?\b/);
+  if (lastNMatch) return `last_${lastNMatch[1]}_${lastNMatch[2]}s`;
+
+  // Named shorthands
+  if (/\blast\s+quarter\b/.test(lower)) return 'last_3_months';
+  if (/\btoday\b/.test(lower)) return 'today';
+  if (/\bthis\s+week\b|\blast\s+week\b/.test(lower)) return 'week';
+  if (/\bthis\s+year\b|\blast\s+year\b/.test(lower)) return 'year';
+  if (/\bthis\s+month\b|\blast\s+month\b/.test(lower)) return 'month';
+  if (/\bweek\b/.test(lower)) return 'week';
+  if (/\byear\b/.test(lower)) return 'year';
+  return 'month';
 }
 
 function normalisePhone(phone) {
