@@ -707,7 +707,7 @@ async function handleHelp(intent, res) {
     `*Getting paid*\n` +
     `Tell me when a job's been paid and I'll mark it off. If something's overdue, ask me to draft a payment reminder — you copy it and send it yourself.\n\n` +
     `*Your pipeline*\n` +
-    `Check what's open, what's quoted, what's invoiced, and what you're still owed — any time.\n\n` +
+    `Check what's quoted, what's invoiced, and what you're still owed — any time.\n\n` +
     `*Earnings*\n` +
     `Ask for a summary this week, this month, or this year.\n\n` +
     `*Settings*\n` +
