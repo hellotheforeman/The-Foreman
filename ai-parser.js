@@ -30,11 +30,11 @@ const DISPATCH_TOOL = {
           type: 'string',
           enum: [
             // Commands
-            'new_customer', 'new_job', 'quote', 'schedule', 'reschedule', 'add_block',
+            'new_customer', 'new_job', 'quote',
             'send_invoice', 'amend_invoice', 'amend_quote', 'paid', 'chase', 'review',
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
-            'view_schedule', 'unpaid', 'open_jobs', 'unscheduled_jobs',
+            'unpaid', 'open_jobs',
             'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings', 'settings', 'help',
             'greeting', 'thanks',
           ],
@@ -55,28 +55,6 @@ const DISPATCH_TOOL = {
         items: {
           type: 'string',
           description: 'Line items as raw text, e.g. "Labour 200, Parts 50, Callout 40".',
-        },
-        date: {
-          type: 'string',
-          description: 'Date in YYYY-MM-DD format. Resolve relative expressions like "thursday", "next monday", "2nd May" using today\'s date. Always use the next upcoming occurrence.',
-        },
-        time: {
-          type: 'string',
-          description: 'Time in HH:MM 24-hour format, e.g. "09:00" or "14:30".',
-        },
-        duration: {
-          type: 'number',
-          description: 'Duration value, e.g. 3 (for "3 days" or "2 hours").',
-        },
-        durationUnit: {
-          type: 'string',
-          enum: ['hours', 'days'],
-          description: 'Unit for the duration field.',
-        },
-        period: {
-          type: 'string',
-          enum: ['today', 'tomorrow', 'this_week', 'next_week', 'week_after_next', 'date', 'week_of'],
-          description: 'Schedule view period. Use "date" when a specific date is given. Use "week_of" when a date is given as a week anchor.',
         },
         status: {
           type: 'string',
@@ -139,9 +117,6 @@ FIELD RULES:
 - Use jobId (integer) when a job number is explicitly mentioned. Use jobRef (string) otherwise.
 - Amounts must be numbers only — no £ symbols, no words like "four fifty".
 - Phone numbers must be UK format: 07xxx or +447xxx.
-- For view_schedule with "today" / "tomorrow" / "this week" / "next week": set period only, no date field.
-- For view_schedule with a specific date: set period="date" and the date field.
-
 COMMAND PHRASING:
 - Phrases like "Can you X", "I'd like to X", "I want to X", "can we X" are always commands, not help requests. Map them to the appropriate intent.
 - "Can you amend the quote?" → amend_quote. "Can you send an invoice?" → send_invoice. "I'd like to make some changes to the quote" → amend_quote.
@@ -150,9 +125,6 @@ INTENT GUIDE:
 - new_customer: "add a customer", "new customer John Smith 07700900123"
 - new_job: "new job", "add a job for Mrs Patel"
 - quote: "quote job 14", "send quote to Patel", "requote 14 850", "create a quote for Mrs Smith", "quote for Mrs Smith" — use jobRef for name-only references
-- schedule: "book job 14 thursday 9am", "schedule Mrs Patel friday"
-- reschedule: "move job 14 to monday", "reschedule boiler service"
-- add_block: "and then friday", "also next tuesday"
 - send_invoice: "invoice job 14", "invoice Mrs Patel 450"
 - amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote"
 - amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14"
@@ -163,10 +135,8 @@ INTENT GUIDE:
 - mark_complete: "complete 14", "done 14", "mark job 14 as done"
 - add_note: "note on job 14: customer wants callback"
 - update_customer: "update Patel's phone to 07700900456"
-- view_schedule: "today", "this week", "thursday", "what's on 14th April"
 - unpaid: "unpaid", "outstanding invoices"
 - open_jobs: "jobs", "open jobs", "pipeline"
-- unscheduled_jobs: "unscheduled", "not booked in"
 - jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs"
 - view_job: "job 14", "show me job 3"
 - find: "find Mrs Patel", "look up Smith"

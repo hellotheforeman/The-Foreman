@@ -53,26 +53,6 @@ function quoteMessage(job, customer, business) {
   ].join('\n');
 }
 
-function scheduleConfirmation(job, customer, business) {
-  const date = formatDate(job.scheduled_date);
-  const timePart = job.scheduled_time ? ` at ${job.scheduled_time}` : '';
-  const postcode = job.postcode ? ` (${job.postcode})` : '';
-  const name = businessName(business);
-  const durationSuffix = job.duration ? ` for ${job.duration} ${job.duration_unit || 'hours'}` : '';
-  return [
-    `Hi ${customerGreetingName(customer)}! ✅`,
-    '',
-    `Your job is confirmed:`,
-    '',
-    `📅 *${date}${timePart}${durationSuffix}*`,
-    `🔧 ${job.description}${postcode}`,
-    '',
-    `We'll see you then! If you need to reschedule, just reply to this message.`,
-    '',
-    `— ${name}`,
-  ].join('\n');
-}
-
 function invoiceMessage(job, invoice, customer, business) {
   const items = invoice.line_items || job.description;
   const name = businessName(business);
@@ -141,48 +121,14 @@ function formatDate(dateStr) {
   return `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
 }
 
-function workingDayNumber(startDateStr, currentDateStr) {
-  const d = new Date(startDateStr + 'T12:00:00Z');
-  const target = new Date(currentDateStr + 'T12:00:00Z');
-  let count = 1;
-  while (d < target) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const dow = d.getUTCDay();
-    if (dow !== 0 && dow !== 6) count++;
-  }
-  return count;
-}
-
 function toTitleCase(str) {
   return (str || '').replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
-function formatScheduleDay(jobs, dateStr) {
-  if (!jobs.length) return 'Nothing scheduled.';
-  const lines = jobs.map((j) => {
-    const rawTime = j.scheduled_time || j.start_time || null;
-    const isMultiDay = j.duration_unit === 'days' && j.duration > 1;
-    const timePrefix = rawTime ? `${rawTime} — ` : '';
-    const postcode = j.postcode ? `, ${j.postcode}` : '';
-    let durationStr = '';
-    if (isMultiDay) {
-      const blockStart = j.start_date || j.scheduled_date;
-      const dayNum = workingDayNumber(blockStart, dateStr);
-      durationStr = ` (day ${dayNum} of ${j.duration})`;
-    } else if (j.duration) {
-      durationStr = ` (${j.duration} ${j.duration_unit || 'hrs'})`;
-    }
-    return `• ${timePrefix}${j.customer_name}, ${toTitleCase(j.description)}${postcode}${durationStr}`;
-  });
-  return `📅 *${formatDate(dateStr)}*\n${lines.join('\n')}`;
-}
-
 module.exports = {
   quoteMessage,
-  scheduleConfirmation,
   invoiceMessage,
   paymentReminder,
   reviewRequestMessage,
   formatDate,
-  formatScheduleDay,
 };

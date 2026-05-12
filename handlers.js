@@ -552,12 +552,11 @@ async function handleFind(intent, res) {
   const results = [];
   for (const c of customers.slice(0, 5)) {
     const jobs = await db.getAll(
-      `SELECT j.*, COALESCE(i.amount, j.quoted_amount) AS latest_amount,
-              COALESCE(j.scheduled_date, j.created_at::date) AS sort_date
+      `SELECT j.*, COALESCE(i.amount, j.quoted_amount) AS latest_amount
        FROM jobs j
        LEFT JOIN invoices i ON i.job_id = j.id
        WHERE j.business_id = $1 AND j.customer_id = $2
-       ORDER BY COALESCE(j.scheduled_date, j.created_at::date) DESC LIMIT 5`,
+       ORDER BY j.created_at DESC LIMIT 5`,
       [business.id, c.id]
     );
     const jobLines = jobs.map((j) => {

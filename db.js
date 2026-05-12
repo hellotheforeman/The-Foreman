@@ -72,29 +72,6 @@ async function init() {
     )
   `);
 
-  await pool.query(`
-    CREATE TABLE IF NOT EXISTS booking_blocks (
-      id SERIAL PRIMARY KEY,
-      job_id INTEGER NOT NULL REFERENCES jobs(id),
-      business_id INTEGER NOT NULL REFERENCES businesses(id),
-      start_date TEXT NOT NULL,
-      end_date TEXT,
-      start_time TEXT,
-      duration INTEGER,
-      duration_unit TEXT DEFAULT 'hours',
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `);
-
-  await pool.query('ALTER TABLE booking_blocks ADD COLUMN IF NOT EXISTS end_date TEXT');
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS booking_blocks_job_id_idx ON booking_blocks (job_id)
-  `);
-
-  await pool.query(`
-    CREATE INDEX IF NOT EXISTS booking_blocks_business_date_idx ON booking_blocks (business_id, start_date)
-  `);
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS invoices (
@@ -223,18 +200,6 @@ async function init() {
       AND message_log.business_id IS NULL
   `);
 
-  // Migrate existing scheduled jobs into booking_blocks (idempotent)
-  await pool.query(`
-    INSERT INTO booking_blocks (job_id, business_id, start_date, start_time)
-    SELECT id, business_id, scheduled_date, scheduled_time
-    FROM jobs
-    WHERE scheduled_date IS NOT NULL
-      AND business_id IS NOT NULL
-      AND status NOT IN ('cancelled', 'paid')
-      AND NOT EXISTS (
-        SELECT 1 FROM booking_blocks WHERE job_id = jobs.id
-      )
-  `);
 
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
@@ -422,67 +387,6 @@ async function setQuote(jobId, amount, items, lineItemsJson) {
 
 // Returns the date that is numDays working days after startDateStr (inclusive).
 // e.g. addWorkingDays('2026-04-17', 3) → '2026-04-21' (Fri → Mon → Tue)
-function addWorkingDays(startDateStr, numDays) {
-  // Use noon UTC to avoid DST edge-cases when formatting back to ISO date
-  const d = new Date(startDateStr + 'T12:00:00Z');
-  let remaining = numDays - 1; // the start date counts as day 1
-  while (remaining > 0) {
-    d.setUTCDate(d.getUTCDate() + 1);
-    const dow = d.getUTCDay();
-    if (dow !== 0 && dow !== 6) remaining--; // skip Sun(0) and Sat(6)
-  }
-  return d.toISOString().split('T')[0];
-}
-
-async function addBookingBlock(jobId, businessId, startDate, startTime, duration, durationUnit) {
-  // For multi-day blocks, compute the last working day so queries can do a simple range check
-  const endDate = (durationUnit === 'days' && duration > 1)
-    ? addWorkingDays(startDate, duration)
-    : startDate;
-
-  const { rows } = await pool.query(
-    `INSERT INTO booking_blocks (job_id, business_id, start_date, end_date, start_time, duration, duration_unit)
-     VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING *`,
-    [jobId, businessId, startDate, endDate, startTime || null, duration || null, durationUnit || 'hours']
-  );
-  await run(
-    `UPDATE jobs SET scheduled_date = $1, scheduled_time = $2 WHERE id = $3`,
-    [startDate, startTime || null, jobId]
-  );
-  return rows[0];
-}
-
-async function getBookingOverlaps(businessId, startDate, endDate, excludeJobId) {
-  const { rows } = await pool.query(
-    `SELECT DISTINCT ON (bb.job_id)
-       bb.start_date, bb.end_date,
-       j.id AS job_id, j.description,
-       c.name AS customer_name
-     FROM booking_blocks bb
-     JOIN jobs j ON bb.job_id = j.id
-     JOIN customers c ON j.customer_id = c.id
-     WHERE bb.business_id = $1
-       AND bb.job_id != $2
-       AND bb.start_date <= $4
-       AND bb.end_date >= $3
-       AND j.status NOT IN ('cancelled', 'paid')
-     ORDER BY bb.job_id, bb.start_date`,
-    [businessId, excludeJobId || 0, startDate, endDate]
-  );
-  return rows;
-}
-
-async function clearBookingBlocks(jobId, businessId) {
-  await run('DELETE FROM booking_blocks WHERE job_id = $1 AND business_id = $2', [jobId, businessId]);
-}
-
-async function getBookingBlocksForJob(jobId, businessId) {
-  return getAll(
-    'SELECT * FROM booking_blocks WHERE job_id = $1 AND business_id = $2 ORDER BY start_date, start_time NULLS LAST',
-    [jobId, businessId]
-  );
-}
-
 async function cancelJob(jobId, businessId) {
   await run("UPDATE jobs SET status = 'cancelled' WHERE id = $1 AND business_id = $2", [jobId, businessId]);
   return getJob(jobId, businessId);
@@ -496,96 +400,6 @@ async function markJobComplete(jobId, businessId) {
   return getJob(jobId, businessId);
 }
 
-async function getScheduleForDate(dateStr, businessId) {
-  // Weekends are never working days — return nothing for Sat/Sun
-  const dow = new Date(dateStr + 'T12:00:00Z').getUTCDay();
-  if (dow === 0 || dow === 6) return [];
-
-  return getAll(
-    `SELECT
-       j.id, j.description, j.postcode, j.status,
-       bb.id AS block_id,
-       bb.start_date AS scheduled_date,
-       bb.start_time AS scheduled_time,
-       bb.duration,
-       bb.duration_unit,
-       c.name AS customer_name,
-       c.phone AS customer_phone
-     FROM booking_blocks bb
-     JOIN jobs j ON bb.job_id = j.id
-     JOIN customers c ON j.customer_id = c.id
-     WHERE bb.business_id = $1
-       AND j.status NOT IN ('cancelled', 'paid')
-       AND $2::date BETWEEN bb.start_date::date AND COALESCE(bb.end_date::date, bb.start_date::date)
-     ORDER BY bb.start_time NULLS LAST`,
-    [businessId, dateStr]
-  );
-}
-
-async function getScheduleRange(startDate, endDate, businessId) {
-  // Fetch all blocks that overlap the requested range, then expand multi-day
-  // blocks so each working day within the range gets its own row.
-  const blocks = await getAll(
-    `SELECT
-       j.id, j.description, j.postcode, j.status,
-       bb.id AS block_id,
-       bb.start_date,
-       bb.end_date,
-       bb.start_time AS scheduled_time,
-       bb.duration,
-       bb.duration_unit,
-       c.name AS customer_name,
-       c.phone AS customer_phone
-     FROM booking_blocks bb
-     JOIN jobs j ON bb.job_id = j.id
-     JOIN customers c ON j.customer_id = c.id
-     WHERE bb.business_id = $1
-       AND j.status NOT IN ('cancelled', 'paid')
-       AND bb.start_date::date <= $3::date
-       AND COALESCE(bb.end_date::date, bb.start_date::date) >= $2::date
-     ORDER BY bb.start_date, bb.start_time NULLS LAST`,
-    [businessId, startDate, endDate]
-  );
-
-  // Expand multi-day blocks into one row per working day within the range
-  const rows = [];
-  const rangeStart = new Date(startDate + 'T12:00:00Z');
-  const rangeEnd = new Date(endDate + 'T12:00:00Z');
-
-  for (const block of blocks) {
-    const blockEnd = block.end_date || block.start_date;
-    if (block.start_date === blockEnd) {
-      // Single-day block — include as-is if it's a weekday
-      const d = new Date(block.start_date + 'T12:00:00Z');
-      const dow = d.getUTCDay();
-      if (dow !== 0 && dow !== 6) {
-        rows.push({ ...block, scheduled_date: block.start_date });
-      }
-    } else {
-      // Multi-day: emit one row per working day within [rangeStart, rangeEnd]
-      const blockStart = new Date(block.start_date + 'T12:00:00Z');
-      const blockEndDate = new Date(blockEnd + 'T12:00:00Z');
-      const cursor = new Date(Math.max(blockStart, rangeStart));
-      const limit = new Date(Math.min(blockEndDate, rangeEnd));
-      while (cursor <= limit) {
-        const dow = cursor.getUTCDay();
-        if (dow !== 0 && dow !== 6) {
-          rows.push({ ...block, scheduled_date: cursor.toISOString().split('T')[0] });
-        }
-        cursor.setUTCDate(cursor.getUTCDate() + 1);
-      }
-    }
-  }
-
-  rows.sort((a, b) => {
-    if (a.scheduled_date < b.scheduled_date) return -1;
-    if (a.scheduled_date > b.scheduled_date) return 1;
-    return (a.scheduled_time || '') < (b.scheduled_time || '') ? -1 : 1;
-  });
-
-  return rows;
-}
-
 async function getOpenJobs(businessId) {
   return getAll(
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
@@ -593,19 +407,6 @@ async function getOpenJobs(businessId) {
      JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1
        AND j.status NOT IN ('cancelled', 'paid')
-     ORDER BY j.created_at DESC`,
-    [businessId]
-  );
-}
-
-async function getUnscheduledJobs(businessId) {
-  return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
-     FROM jobs j
-     JOIN customers c ON j.customer_id = c.id
-     WHERE j.business_id = $1
-       AND j.status NOT IN ('cancelled', 'paid')
-       AND NOT EXISTS (SELECT 1 FROM booking_blocks bb WHERE bb.job_id = j.id)
      ORDER BY j.created_at DESC`,
     [businessId]
   );
@@ -627,7 +428,6 @@ async function findOpenJobsByCustomerName(businessId, query) {
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'paid')
-       AND (j.scheduled_date IS NULL OR j.scheduled_date >= CURRENT_DATE - INTERVAL '30 days')
        AND LOWER(c.name) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
@@ -639,7 +439,6 @@ async function findJobsByDescription(businessId, query) {
     `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
      FROM jobs j JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1 AND j.status NOT IN ('cancelled', 'paid')
-       AND (j.scheduled_date IS NULL OR j.scheduled_date >= CURRENT_DATE - INTERVAL '30 days')
        AND LOWER(j.description) LIKE '%' || LOWER($2) || '%'
      ORDER BY j.created_at DESC LIMIT 10`,
     [businessId, query]
@@ -742,7 +541,7 @@ async function updateBusiness(id, fields) {
 }
 
 async function updateJob(id, businessId, fields) {
-  const allowed = ['status', 'scheduled_date', 'scheduled_time', 'notes', 'completion_notes', 'description'];
+  const allowed = ['status', 'notes', 'completion_notes', 'description'];
   const updates = [];
   const values = [];
   let i = 1;
@@ -896,15 +695,7 @@ module.exports = {
   getJob,
   getJobWithCustomer,
   setQuote,
-  addBookingBlock,
-  getBookingOverlaps,
-  clearBookingBlocks,
-  addWorkingDays,
-  getBookingBlocksForJob,
-  getScheduleForDate,
-  getScheduleRange,
   getOpenJobs,
-  getUnscheduledJobs,
   getJobsByStatus,
   findOpenJobsByCustomerName,
   findJobsByDescription,

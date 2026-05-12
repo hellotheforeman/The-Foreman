@@ -9,7 +9,7 @@ function extractReferenceText({ parsedIntent, raw, state }) {
   const text = (raw || '').trim();
   if (!text) return '';
 
-  const refMatch = text.match(/(?:for|with|to|book|schedule|quote|invoice|chase|follow up|paid|done)\s+([a-z][a-z\s'.-]+)/i);
+  const refMatch = text.match(/(?:for|with|to|quote|invoice|chase|follow up|paid|done)\s+([a-z][a-z\s'.-]+)/i);
   if (refMatch) return refMatch[1].trim();
 
   return text;
