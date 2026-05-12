@@ -701,21 +701,19 @@ async function handleHelp(intent, res) {
   messenger.twimlReply(
     res,
     `🔨 *The Foreman*\n\n` +
+    `Here's what I can help with:\n\n` +
     `*Quotes & invoices*\n` +
-    `• *quote* — start a new quote\n` +
-    `• *quote 14 450* — quote job #14 for £450\n` +
-    `• *invoice 14* — invoice from the existing quote\n` +
-    `• *invoice Mrs Smith* — invoice by name\n` +
-    `• *paid 14* — mark invoice as paid\n\n` +
-    `*Jobs & customers*\n` +
-    `• *jobs* — see open jobs\n` +
-    `• *unpaid* — see what you're owed\n` +
-    `• *find Smith* — search for a customer\n` +
-    `• *chase 14* — get a payment reminder to copy\n\n` +
+    `Send quotes and invoices as PDFs — just tell me the customer and the price. I'll guide you through the rest. You can itemise the work or give a single total.\n\n` +
+    `*Getting paid*\n` +
+    `Tell me when a job's been paid and I'll mark it off. If something's overdue, ask me to draft a payment reminder — you copy it and send it yourself.\n\n` +
+    `*Your pipeline*\n` +
+    `Check what's open, what's quoted, what's invoiced, and what you're still owed — any time.\n\n` +
     `*Earnings*\n` +
-    `• *earnings* — this month's summary\n` +
-    `• *earnings this week / this year*\n\n` +
-    `*Settings* — update your business details`
+    `Ask for a summary this week, this month, or this year.\n\n` +
+    `*Settings*\n` +
+    `Update your business name, bank details, VAT, logo, payment terms and more.\n\n` +
+    `---\n` +
+    `💬 Got a suggestion or something not working right? Just say *feedback* followed by your message — it goes straight to the team.`
   );
 }
 
