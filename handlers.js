@@ -472,6 +472,11 @@ function resolvePeriod(period) {
     return { start, end, label };
   }
 
+  if (period === 'yesterday') {
+    const start = new Date(now); start.setDate(start.getDate() - 1); start.setHours(0, 0, 0, 0);
+    const yesterdayEnd = new Date(now); yesterdayEnd.setDate(yesterdayEnd.getDate() - 1); yesterdayEnd.setHours(23, 59, 59, 999);
+    return { start, end: yesterdayEnd, label: 'Yesterday' };
+  }
   if (period === 'today') {
     const start = new Date(now); start.setHours(0, 0, 0, 0);
     return { start, end, label: 'Today' };

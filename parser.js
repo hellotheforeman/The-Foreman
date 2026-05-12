@@ -410,6 +410,7 @@ function parsePeriod(lower) {
 
   // Named shorthands
   if (/\blast\s+quarter\b/.test(lower)) return 'last_3_months';
+  if (/\byesterday\b/.test(lower)) return 'yesterday';
   if (/\btoday\b/.test(lower)) return 'today';
   if (/\bthis\s+week\b|\blast\s+week\b/.test(lower)) return 'week';
   if (/\bthis\s+year\b|\blast\s+year\b/.test(lower)) return 'year';
