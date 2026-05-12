@@ -348,30 +348,40 @@ async function handleChase(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
+  if (!intent.jobId) {
+    const ref = intent.jobRef || intent.name;
+    if (ref) {
+      const allUnpaid = await db.getUnpaidInvoices(business.id);
+      const nameLower = ref.toLowerCase();
+      const matched = allUnpaid.filter(i => i.customer_name.toLowerCase().includes(nameLower));
+
+      if (matched.length === 1) {
+        const m = matched[0];
+        const job = await db.getJobWithCustomer(m.job_id, business.id);
+        const invoice = await db.getInvoiceByJob(job.id, business.id);
+        const msg = templates.paymentReminder(job, invoice, job.customer, business);
+        return messenger.twimlReply(res,
+          `Here's a reminder you can send to ${job.customer.name}:\n\n${msg}`
+        );
+      }
+
+      if (matched.length > 1) {
+        const list = matched.map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`).join('\n');
+        return messenger.twimlReply(res, `Which invoice for ${ref}?\n\n${list}`);
+      }
+    }
+    return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
+  }
+
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
-  if (!invoice) {
-    const suggestion = await unpaidSuggestion(business.id);
-    return messenger.twimlReply(res,
-      suggestion
-        ? `No invoice found for ${db.formatJobId(job.id)}. Here's what's outstanding:\n\n${suggestion}`
-        : `No invoice found for ${db.formatJobId(job.id)}. Send one first with *invoice ${job.id}*.`
-    );
-  }
+  if (!invoice) return messenger.twimlReply(res, `No invoice found for ${db.formatJobId(job.id)}. Send one first.`);
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
   const msg = templates.paymentReminder(job, invoice, job.customer, business);
-
-  messenger.twimlReply(
-    res,
-    `💷 Payment reminder for ${job.customer.name} (${job.customer.phone}):\n` +
-    `─────────────────\n` +
-    `${msg}\n` +
-    `─────────────────\n\n` +
-    `Copy and send this on WhatsApp.`
-  );
+  messenger.twimlReply(res, `Here's a reminder you can send to ${job.customer.name}:\n\n${msg}`);
 }
 
 async function handleReview(intent, res) {
