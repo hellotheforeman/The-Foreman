@@ -630,9 +630,9 @@ async function handleJobsByStatus(intent, res) {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
     if (intent.status === 'quoted') {
-      const date = j.created_at ? formatShortDate(new Date(j.created_at).toISOString().split('T')[0]) : null;
+      const days = j.created_at ? Math.floor((Date.now() - new Date(j.created_at).getTime()) / 86400000) : null;
       const amount = j.quoted_amount ? ` — £${Number(j.quoted_amount).toFixed(2)}` : '';
-      const datePart = date ? ` (${date})` : '';
+      const datePart = days !== null ? ` (${days} day${days === 1 ? '' : 's'} ago)` : '';
       return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
     }
     return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary}`;
