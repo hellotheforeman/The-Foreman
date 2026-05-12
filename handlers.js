@@ -629,9 +629,20 @@ async function handleJobsByStatus(intent, res) {
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
+    if (intent.status === 'quoted') {
+      const date = j.created_at ? formatShortDate(new Date(j.created_at).toISOString().split('T')[0]) : null;
+      const amount = j.quoted_amount ? ` — £${Number(j.quoted_amount).toFixed(2)}` : '';
+      const datePart = date ? ` (${date})` : '';
+      return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
+    }
     return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary}`;
   });
-  messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}`);
+
+  const footer = intent.status === 'quoted'
+    ? '\n\nLet me know if you want to chase or cancel any of these.'
+    : '';
+
+  messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}${footer}`);
 }
 
 async function handleMarkComplete(intent, res) {
