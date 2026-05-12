@@ -173,6 +173,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (setting.type === 'bank') {
           return twimlReply(res, `What's your sort code? (e.g. 12-34-56)\n\n(Reply *cancel* to go back)`);
         }
+        if (setting.type === 'image') {
+          if (business.logo_path) {
+            return twimlReply(res, `Send a new photo to replace your logo, or reply *remove* to delete it.\n\n(Reply *cancel* to go back)`);
+          }
+          return twimlReply(res, `Send your logo as a photo or image. It will appear on all your quotes and invoices.\n\n(Reply *cancel* to go back)`);
+        }
         const hint = setting.hint || '(Reply *cancel* to go back)';
         return twimlReply(res, `What should I change *${setting.label}* to?\n\n${hint}`);
       }
@@ -181,8 +187,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const { settingKey, settingLabel, settingType } = currentState.collected || {};
         if (settingKey) {
           if (settingType === 'image') {
+            if (/^remove$/i.test(trimmed)) {
+              await db.updateBusiness(business.id, { logo_path: null });
+              await clearConversationState(business.id);
+              return twimlReply(res, `✅ Logo removed.`);
+            }
             if (!mediaUrl) {
-              return twimlReply(res, `Please send your logo as a photo or image. (Reply *cancel* to go back)`);
+              const hint = business.logo_path
+                ? `Send a new photo to replace it, or reply *remove* to delete it. (Reply *cancel* to go back)`
+                : `Please send your logo as a photo or image. (Reply *cancel* to go back)`;
+              return twimlReply(res, hint);
             }
             try {
               const buffer = await downloadToBuffer(mediaUrl);
