@@ -215,7 +215,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
         .text(paymentDetails, { paragraphGap: 0 });
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
-        .text('Please pay within 14 days. Thank you for your business.');
+        .text(`Please pay within ${business?.payment_days || 14} days. Thank you for your business.`);
     } else {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
         .text('Work subject to standard terms and conditions available on request.');

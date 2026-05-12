@@ -74,7 +74,7 @@ function invoiceMessage(job, invoice, customer, business) {
     `💳 *Payment details:*`,
     payment,
     '',
-    `Please pay within 14 days. Thanks for choosing ${name}!`,
+    `Please pay within ${business?.payment_days || 14} days. Thanks for choosing ${name}!`,
     '',
     `— ${name}`,
   ].join('\n');

@@ -230,6 +230,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             return twimlReply(res, `What's your VAT number?`);
           }
 
+          if (settingType === 'number') {
+            const n = parseInt(trimmed, 10);
+            if (!n || n < 1 || n > 365 || String(n) !== trimmed.trim()) {
+              return twimlReply(res, `Please enter a whole number of days, e.g. *14* or *30*. (Reply *cancel* to go back)`);
+            }
+            await db.updateBusiness(business.id, { [settingKey]: n });
+            await clearConversationState(business.id);
+            return twimlReply(res, `✅ *${settingLabel}* updated to: ${n} days`);
+          }
+
           const isBoolean = settingType === 'boolean';
           const value = isBoolean ? /^(yes|y|true|1)$/i.test(trimmed) : trimmed;
           const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;

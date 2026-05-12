@@ -205,6 +205,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_days INTEGER NOT NULL DEFAULT 14');
   // Mark all existing businesses as already onboarded — new column, existing users should skip the wizard
   await pool.query("UPDATE businesses SET onboarded = true WHERE onboarded = false AND created_at < NOW() - INTERVAL '1 minute'");
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
@@ -520,7 +521,7 @@ async function getUnpaidInvoices(businessId) {
 // --- Update helpers ---
 
 async function updateBusiness(id, fields) {
-  const allowed = ['name', 'business_name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path', 'vat_registered', 'vat_number', 'onboarded'];
+  const allowed = ['name', 'business_name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path', 'vat_registered', 'vat_number', 'onboarded', 'payment_days'];
   const updates = [];
   const values = [];
   let i = 1;
@@ -590,7 +591,11 @@ async function updateCustomer(id, businessId, fields) {
 async function markAllOverdueInvoices() {
   await run(
     `UPDATE invoices SET status = 'OVERDUE'
-     WHERE status = 'SENT' AND sent_at < NOW() - INTERVAL '14 days'`
+     WHERE status = 'SENT'
+       AND sent_at < NOW() - (
+         SELECT COALESCE(b.payment_days, 14) * INTERVAL '1 day'
+         FROM businesses b WHERE b.id = invoices.business_id
+       )`
   );
 }
 

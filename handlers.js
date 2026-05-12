@@ -18,6 +18,7 @@ const SETTINGS_FIELDS = [
   { key: 'payment_details', label: 'Bank details', type: 'bank' },
   { key: 'vat', label: 'VAT', type: 'vat' },
   { key: 'logo_path',      label: 'Logo', type: 'image', hint: 'Send your logo as a photo or image. It will appear on all your quotes and invoices.' },
+  { key: 'payment_days',  label: 'Payment terms (days)', type: 'number' },
 ];
 
 function buildSettingsMenu(business) {
@@ -32,6 +33,9 @@ function buildSettingsMenu(business) {
       }
     } else if (s.type === 'image') {
       display = business.logo_path ? '✅ uploaded' : '_not set_';
+    } else if (s.type === 'number') {
+      const val = business[s.key];
+      display = (val !== null && val !== undefined && val !== '') ? `${val} days` : '_not set_';
     } else {
       const val = business[s.key];
       if (val === null || val === undefined || val === '') {
