@@ -310,8 +310,35 @@ function parse(raw) {
     };
   }
 
+  // --- Financial summary (overview) ---
+  if (/\b(how'?s\s+business|how\s+am\s+i\s+doing|business\s+overview|give\s+me\s+a\s+summary|stats?|financial\s+summary)\b/i.test(lower)) {
+    let period = 'month';
+    if (/\btoday\b/.test(lower)) period = 'today';
+    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
+    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
+    return { kind: 'query', intent: 'financial_summary', period };
+  }
+
+  // --- Conversion rate ---
+  if (/\bconversion\s+rate\b|\bhow\s+many\s+quotes?\s+(am\s+i\s+)?(winning|converting|convert)\b/i.test(lower)) {
+    let period = 'month';
+    if (/\btoday\b/.test(lower)) period = 'today';
+    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
+    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
+    return { kind: 'query', intent: 'conversion_rate', period };
+  }
+
+  // --- Average payment time ---
+  if (/\bhow\s+long.{0,20}(get\s+paid|to\s+pay)\b|\baverage\s+pay(ment(\s+time)?)?\b|\bpayment\s+time\b/i.test(lower)) {
+    let period = 'month';
+    if (/\btoday\b/.test(lower)) period = 'today';
+    else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';
+    else if (/\bthis year\b|\byear\b/.test(lower)) period = 'year';
+    return { kind: 'query', intent: 'avg_payment_time', period };
+  }
+
   // --- Earnings / income summary ---
-  if (/\b(earnings?|earned|income|revenue|how much (have i |i've )?made|profit|summary|takings?)\b/i.test(lower)) {
+  if (/\b(earnings?|earned|income|revenue|how much (have i |i've )?made|profit|takings?)\b/i.test(lower)) {
     let period = 'month';
     if (/\btoday\b/.test(lower)) period = 'today';
     else if (/\bthis week\b|\bweek\b/.test(lower)) period = 'week';

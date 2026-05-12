@@ -98,6 +98,9 @@ const queryHandlers = {
   find: handleFind,
   list_customers: handleListCustomers,
   earnings: handleEarnings,
+  financial_summary: handleFinancialSummary,
+  conversion_rate: handleConversionRate,
+  avg_payment_time: handleAvgPaymentTime,
   settings: handleSettings,
   help: handleHelp,
   greeting: handleGreeting,
@@ -450,33 +453,35 @@ async function handleUpdateCustomer(intent, res) {
   messenger.twimlReply(res, `✅ Updated ${customer.name}'s ${intent.field}: ${intent.value}`);
 }
 
+function resolvePeriod(period) {
+  const now = new Date();
+  if (period === 'today') {
+    const start = new Date(now); start.setHours(0, 0, 0, 0);
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    return { start, end, label: 'Today' };
+  }
+  if (period === 'week' || period === 'this_week') {
+    const daysToMonday = (now.getDay() + 6) % 7;
+    const start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    return { start, end, label: 'This week' };
+  }
+  if (period === 'year') {
+    const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
+    const end = new Date(now); end.setHours(23, 59, 59, 999);
+    return { start, end, label: 'This year' };
+  }
+  // month (default)
+  const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
+  const end = new Date(now); end.setHours(23, 59, 59, 999);
+  return { start, end, label: 'This month' };
+}
+
 async function handleEarnings(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const now = new Date();
-  let start, end, label;
-
-  if (intent.period === 'today') {
-    start = new Date(now); start.setHours(0, 0, 0, 0);
-    end = new Date(now); end.setHours(23, 59, 59, 999);
-    label = 'Today';
-  } else if (intent.period === 'week' || intent.period === 'this_week') {
-    const daysToMonday = (now.getDay() + 6) % 7;
-    start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
-    end = new Date(now); end.setHours(23, 59, 59, 999);
-    label = 'This week';
-  } else if (intent.period === 'year') {
-    start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
-    end = new Date(now); end.setHours(23, 59, 59, 999);
-    label = 'This year';
-  } else {
-    // month (default)
-    start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
-    end = new Date(now); end.setHours(23, 59, 59, 999);
-    label = 'This month';
-  }
-
+  const { start, end, label } = resolvePeriod(intent.period);
   const summary = await db.getEarningsSummary(business.id, start.toISOString(), end.toISOString());
 
   const invoiced = Number(summary.total_invoiced).toFixed(2);
@@ -491,10 +496,108 @@ async function handleEarnings(intent, res) {
     `Total invoiced: £${invoiced}`;
 
   if (overdue > 0) {
-    msg += `\n\n⚠️ £${overdue.toFixed(2)} is overdue (over 14 days). Say *unpaid* to see who owes you.`;
+    msg += `\n\n⚠️ £${overdue.toFixed(2)} is overdue (over ${business.payment_days || 14} days). Say *unpaid* to see who owes you.`;
   }
 
   messenger.twimlReply(res, msg);
+}
+
+async function handleFinancialSummary(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const { start, end, label } = resolvePeriod(intent.period);
+  const startIso = start.toISOString();
+  const endIso = end.toISOString();
+
+  const [earnings, unpaidInvoices, quotesOut, conversion, paymentTime] = await Promise.all([
+    db.getEarningsSummary(business.id, startIso, endIso),
+    db.getUnpaidInvoices(business.id),
+    db.getQuotesOutstandingValue(business.id),
+    db.getConversionRate(business.id, startIso, endIso),
+    db.getAvgPaymentTime(business.id, startIso, endIso),
+  ]);
+
+  const paid = Number(earnings.total_paid).toFixed(2);
+  const owed = unpaidInvoices.reduce((sum, i) => sum + Number(i.amount), 0).toFixed(2);
+  const quotesValue = Number(quotesOut.total_value).toFixed(2);
+  const quotesCount = Number(quotesOut.count);
+
+  const totalJobs = Number(conversion.total_jobs);
+  const convertedJobs = Number(conversion.converted_jobs);
+  const conversionStr = totalJobs >= 3
+    ? `${convertedJobs} of ${totalJobs} quotes converted (${Math.round((convertedJobs / totalJobs) * 100)}%)`
+    : totalJobs > 0 ? `${convertedJobs} of ${totalJobs} quotes converted (too few for a reliable rate)`
+    : 'No jobs in this period';
+
+  const sampleSize = Number(paymentTime.sample_size);
+  const avgDays = paymentTime.avg_days ? Math.round(Number(paymentTime.avg_days)) : null;
+  const paymentTimeStr = sampleSize >= 3 && avgDays !== null
+    ? `Your customers typically pay in ${avgDays} day${avgDays === 1 ? '' : 's'}`
+    : sampleSize > 0 ? `${avgDays} days average (only ${sampleSize} payment${sampleSize === 1 ? '' : 's'} — keep an eye on this)`
+    : 'No payments received in this period';
+
+  const lines = [
+    `📊 *${label}*\n`,
+    `💰 Collected: £${paid}`,
+    `⏳ Outstanding: £${owed}`,
+    `📋 Quotes out: ${quotesCount > 0 ? `${quotesCount} worth £${quotesValue}` : 'none'}`,
+    ``,
+    `📈 Conversion: ${conversionStr}`,
+    `⏱ Payment time: ${paymentTimeStr}`,
+  ];
+
+  messenger.twimlReply(res, lines.join('\n'));
+}
+
+async function handleConversionRate(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const { start, end, label } = resolvePeriod(intent.period);
+  const data = await db.getConversionRate(business.id, start.toISOString(), end.toISOString());
+
+  const total = Number(data.total_jobs);
+  const converted = Number(data.converted_jobs);
+
+  if (total === 0) {
+    return messenger.twimlReply(res, `No jobs in ${label.toLowerCase()} to calculate a conversion rate.`);
+  }
+
+  const rate = Math.round((converted / total) * 100);
+  const caveat = total < 3 ? ` (only ${total} job${total === 1 ? '' : 's'} — too few for a reliable figure)` : '';
+
+  messenger.twimlReply(res,
+    `📈 *Conversion rate — ${label}*\n\n` +
+    `${converted} of ${total} quotes converted into invoices — *${rate}%*${caveat}.`
+  );
+}
+
+async function handleAvgPaymentTime(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const { start, end, label } = resolvePeriod(intent.period);
+  const data = await db.getAvgPaymentTime(business.id, start.toISOString(), end.toISOString());
+
+  const sample = Number(data.sample_size);
+
+  if (sample === 0) {
+    return messenger.twimlReply(res, `No payments received in ${label.toLowerCase()} to calculate an average.`);
+  }
+
+  const avgDays = Math.round(Number(data.avg_days));
+  const caveat = sample < 3 ? `\n\n_Only ${sample} payment${sample === 1 ? '' : 's'} in this period — add more data for a reliable figure._` : '';
+  const paymentDays = business.payment_days || 14;
+  const vsTerms = avgDays <= paymentDays
+    ? `That's within your ${paymentDays}-day terms. 👍`
+    : `That's ${avgDays - paymentDays} day${avgDays - paymentDays === 1 ? '' : 's'} over your ${paymentDays}-day terms.`;
+
+  messenger.twimlReply(res,
+    `⏱ *Average time to get paid — ${label}*\n\n` +
+    `*${avgDays} day${avgDays === 1 ? '' : 's'}* on average across ${sample} payment${sample === 1 ? '' : 's'}.\n\n` +
+    `${vsTerms}${caveat}`
+  );
 }
 
 async function handleUnpaid(intent, res) {
@@ -708,8 +811,8 @@ async function handleHelp(intent, res) {
     `Tell me when a job's been paid and I'll mark it off. If something's overdue, ask me to draft a payment reminder — you copy it and send it yourself.\n\n` +
     `*Your pipeline*\n` +
     `Check what's quoted, what's invoiced, and what you're still owed — any time.\n\n` +
-    `*Earnings*\n` +
-    `Ask for a summary this week, this month, or this year.\n\n` +
+    `*Earnings & stats*\n` +
+    `Ask how much you've earned this week, month, or year. Or ask how's business for a fuller picture — what you're owed, quotes outstanding, conversion rate, and how quickly your customers pay.\n\n` +
     `*Settings*\n` +
     `Update your business name, bank details, VAT, logo, payment terms and more.\n\n` +
     `---\n` +

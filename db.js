@@ -616,6 +616,44 @@ async function getEarningsSummary(businessId, startDate, endDate) {
   return row;
 }
 
+async function getConversionRate(businessId, startDate, endDate) {
+  return getOne(
+    `SELECT
+       COUNT(*)                                    AS total_jobs,
+       COUNT(i.id)                                 AS converted_jobs
+     FROM jobs j
+     LEFT JOIN invoices i ON i.job_id = j.id AND i.business_id = j.business_id
+     WHERE j.business_id = $1
+       AND j.created_at >= $2 AND j.created_at <= $3
+       AND j.status != 'cancelled'`,
+    [businessId, startDate, endDate]
+  );
+}
+
+async function getAvgPaymentTime(businessId, startDate, endDate) {
+  return getOne(
+    `SELECT
+       COUNT(*)                                                              AS sample_size,
+       AVG(EXTRACT(EPOCH FROM (paid_at - sent_at)) / 86400)                 AS avg_days
+     FROM invoices
+     WHERE business_id = $1
+       AND status = 'PAID'
+       AND paid_at >= $2 AND paid_at <= $3`,
+    [businessId, startDate, endDate]
+  );
+}
+
+async function getQuotesOutstandingValue(businessId) {
+  return getOne(
+    `SELECT
+       COUNT(*)                              AS count,
+       COALESCE(SUM(quoted_amount), 0)       AS total_value
+     FROM jobs
+     WHERE business_id = $1 AND status = 'quoted'`,
+    [businessId]
+  );
+}
+
 // --- Conversation state ---
 
 async function getConversationState(businessId) {
@@ -719,6 +757,9 @@ module.exports = {
   appendJobNote,
   updateCustomer,
   markAllOverdueInvoices,
+  getConversionRate,
+  getAvgPaymentTime,
+  getQuotesOutstandingValue,
   getConversationState,
   setConversationState,
   clearConversationState,

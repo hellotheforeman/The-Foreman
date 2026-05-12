@@ -35,7 +35,9 @@ const DISPATCH_TOOL = {
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
             'unpaid', 'open_jobs',
-            'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings', 'settings', 'help',
+            'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings',
+            'financial_summary', 'conversion_rate', 'avg_payment_time',
+            'settings', 'help',
             'greeting', 'thanks',
           ],
           description: 'The specific intent identified from the message.',
@@ -142,6 +144,9 @@ INTENT GUIDE:
 - find: "find Mrs Patel", "look up Smith"
 - list_customers: "customers", "all my customers", "show me my customers"
 - earnings: "earnings", "how much have I made this month"
+- financial_summary: "how's business", "stats", "how am I doing", "give me an overview" — overview of all stats for a period
+- conversion_rate: "what's my conversion rate", "how many quotes am I winning", "how many quotes convert"
+- avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
 - settings: "settings", "change my business name"
 - help: "help", "what can you do"`;
 }
