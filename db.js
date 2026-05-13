@@ -6,9 +6,11 @@ if (!process.env.DATABASE_URL) {
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.DATABASE_URL && process.env.DATABASE_URL.includes('railway')
-    ? { rejectUnauthorized: false }
-    : false,
+  ssl: (() => {
+    const url = process.env.DATABASE_URL || '';
+    if (url.includes('localhost') || url.includes('127.0.0.1')) return false;
+    return { rejectUnauthorized: false };
+  })(),
 });
 
 async function init() {
@@ -466,12 +468,22 @@ async function findLikelyOpenJobs(businessId, query) {
 // --- Invoice queries ---
 
 async function createInvoice(businessId, jobId, amount, lineItems, lineItemsJson) {
-  const { rows } = await pool.query(
-    'INSERT INTO invoices (business_id, job_id, amount, line_items, line_items_json) VALUES ($1, $2, $3, $4, $5) RETURNING *',
-    [businessId, jobId, amount, lineItems || null, lineItemsJson ? JSON.stringify(lineItemsJson) : null]
-  );
-  await run("UPDATE jobs SET status = 'invoiced' WHERE id = $1 AND status != 'cancelled'", [jobId]);
-  return rows[0];
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'INSERT INTO invoices (business_id, job_id, amount, line_items, line_items_json) VALUES ($1, $2, $3, $4, $5) RETURNING *',
+      [businessId, jobId, amount, lineItems || null, lineItemsJson ? JSON.stringify(lineItemsJson) : null]
+    );
+    await client.query("UPDATE jobs SET status = 'invoiced' WHERE id = $1 AND status != 'cancelled'", [jobId]);
+    await client.query('COMMIT');
+    return rows[0];
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function updateInvoice(jobId, businessId, fields) {
@@ -506,8 +518,18 @@ async function getInvoiceByJob(jobId, businessId) {
 }
 
 async function markInvoicePaid(invoiceId) {
-  await run("UPDATE invoices SET status = 'PAID', paid_at = NOW() WHERE id = $1", [invoiceId]);
-  await run("UPDATE jobs SET status = 'paid' WHERE id = (SELECT job_id FROM invoices WHERE id = $1)", [invoiceId]);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("UPDATE invoices SET status = 'PAID', paid_at = NOW() WHERE id = $1", [invoiceId]);
+    await client.query("UPDATE jobs SET status = 'paid' WHERE id = (SELECT job_id FROM invoices WHERE id = $1)", [invoiceId]);
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
   return getOne('SELECT * FROM invoices WHERE id = $1', [invoiceId]);
 }
 
@@ -715,6 +737,27 @@ async function saveFeedback(businessId, message, context) {
   );
 }
 
+async function hasProcessedMessage(messageSid) {
+  if (!messageSid) return false;
+  const row = await getOne('SELECT id FROM message_log WHERE whatsapp_message_id = $1', [messageSid]);
+  return !!row;
+}
+
+async function getStaleQuotes(daysOld) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, b.phone AS business_phone
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     JOIN businesses b ON j.business_id = b.id
+     WHERE j.status = 'quoted'
+       AND j.quoted_amount IS NOT NULL
+       AND j.created_at < NOW() - ($1 * INTERVAL '1 day')
+       AND j.created_at >= NOW() - (($1 + 1) * INTERVAL '1 day')
+       AND b.status = 'active'`,
+    [daysOld]
+  );
+}
+
 async function logMessage(direction, participant, body, { businessId, customerId, jobId, whatsappMessageId } = {}) {
   await run(
     'INSERT INTO message_log (business_id, direction, participant, customer_id, job_id, body, whatsapp_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -757,6 +800,8 @@ module.exports = {
   appendJobNote,
   updateCustomer,
   markAllOverdueInvoices,
+  hasProcessedMessage,
+  getStaleQuotes,
   getConversionRate,
   getAvgPaymentTime,
   getQuotesOutstandingValue,

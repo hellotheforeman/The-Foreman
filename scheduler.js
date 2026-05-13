@@ -4,7 +4,31 @@ const messenger = require('./messenger');
 
 const TZ = { timezone: 'Europe/London' };
 
+function toTitleCase(str) {
+  return (str || '').replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
 function start() {
+  // Nudge tradesperson when a quote has been out for 7 days with no response — 9am daily
+  cron.schedule('0 9 * * *', async () => {
+    try {
+      const staleQuotes = await db.getStaleQuotes(7);
+      for (const job of staleQuotes) {
+        try {
+          const amount = job.quoted_amount ? ` — £${Number(job.quoted_amount).toFixed(2)}` : '';
+          await messenger.sendToForeman(
+            `📋 Your quote for ${job.customer_name} (${toTitleCase(job.description)}${amount}) has been out for 7 days with no response — worth a follow-up?`,
+            { businessId: job.business_id, businessPhone: job.business_phone }
+          );
+        } catch (err) {
+          console.error(`Quote follow-up failed for job ${job.id}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error('Quote follow-up check failed:', err.message);
+    }
+  }, TZ);
+
   // Mark invoices unpaid for 14+ days as OVERDUE and alert the tradesperson — 10am daily
   cron.schedule('0 10 * * *', async () => {
     try {
@@ -37,7 +61,7 @@ function start() {
     }
   }, TZ);
 
-  console.log('⏰ Scheduler started (overdue invoice checks)');
+  console.log('⏰ Scheduler started (overdue invoice checks, quote follow-ups)');
 }
 
 module.exports = { start };

@@ -1,13 +1,5 @@
 const db = require('./db');
-
-function normalisePhone(phone) {
-  if (!phone) return '';
-  let value = String(phone).trim().replace(/[\s()-]/g, '');
-  if (value.startsWith('00')) value = `+${value.slice(2)}`;
-  if (value.startsWith('0')) value = `+44${value.slice(1)}`;
-  if (value.startsWith('44') && !value.startsWith('+')) value = `+${value}`;
-  return value;
-}
+const { normalisePhone } = require('./phone');
 
 function escapeHtml(value) {
   return String(value ?? '')

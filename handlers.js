@@ -166,6 +166,10 @@ async function handleQuote(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
+  if (!intent.amount || Number(intent.amount) <= 0) {
+    return messenger.twimlReply(res, `❌ Amount must be greater than £0.`);
+  }
+
   const isReQuote = !!job.quoted_amount;
 
   await db.setQuote(job.id, intent.amount, intent.items, intent.lineItems || null);
@@ -259,6 +263,9 @@ async function handleSendInvoice(intent, res) {
     let amount, lineItemsStr, lineItemsJson;
 
     if (intent.amount != null) {
+      if (Number(intent.amount) <= 0) {
+        return messenger.twimlReply(res, `❌ Amount must be greater than £0.`);
+      }
       // Amount given explicitly in command
       amount = intent.amount;
       lineItemsStr = intent.items || null;
@@ -321,7 +328,7 @@ async function handleAmend(intent, res) {
   }
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is already paid — can't amend it.`);
 
-  if (intent.amount == null) {
+  if (intent.amount == null || Number(intent.amount) <= 0) {
     return messenger.twimlReply(
       res,
       `❌ Couldn't parse an amount. Try:\n• *amend ${intent.jobId} 450 description*\n• *amend ${intent.jobId} service 250 | parts 45*`

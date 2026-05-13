@@ -1,5 +1,6 @@
 const express = require('express');
 const config = require('./config');
+const { normalisePhone } = require('./phone');
 const { parse, parseLineItems } = require('./parser');
 const { dispatch, SETTINGS_FIELDS, buildSettingsMenu, openJobsSuggestion } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
@@ -97,6 +98,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     if (!from || (!body && !mediaUrl)) {
       return res.status(400).send('Missing From or Body');
+    }
+
+    // Idempotency — Twilio retries webhooks on timeout; ignore duplicates
+    if (messageSid && await db.hasProcessedMessage(messageSid)) {
+      console.log(`⚠️ Duplicate webhook ${messageSid} — skipping`);
+      return res.status(200).type('text/xml').send('<?xml version="1.0" encoding="UTF-8"?><Response/>');
     }
 
     const normPhone = normalisePhone(from);
@@ -1324,12 +1331,7 @@ function isWorkflowInterrupt(intent) {
   return intent?.kind === 'query' || (intent?.kind === 'command' && !WORKFLOW_INTENTS.has(intent.intent));
 }
 
-function normalisePhone(phone) {
-  let p = phone.replace(/\s+/g, '').replace('whatsapp:', '');
-  if (p.startsWith('0')) p = '+44' + p.slice(1);
-  else if (p.startsWith('44') && !p.startsWith('+')) p = '+' + p;
-  return p;
-}
+
 
 async function start() {
   await db.init();

@@ -402,6 +402,8 @@ function parseLineItems(str) {
   return items.length ? items : null;
 }
 
+const { normalisePhone } = require('./phone');
+
 // Extracts a period string from a message. Returns a string consumed by resolvePeriod in handlers.js.
 function parsePeriod(lower) {
   // "last N months/weeks/days" — e.g. "last 3 months", "last 90 days"
@@ -418,18 +420,6 @@ function parsePeriod(lower) {
   if (/\bweek\b/.test(lower)) return 'week';
   if (/\byear\b/.test(lower)) return 'year';
   return 'month';
-}
-
-function normalisePhone(phone) {
-  let p = phone.replace(/\s+/g, '');
-  if (p.startsWith('0')) {
-    p = '+44' + p.slice(1);
-  } else if (p.startsWith('44')) {
-    p = '+' + p;
-  } else if (!p.startsWith('+')) {
-    p = '+44' + p;
-  }
-  return p;
 }
 
 module.exports = { parse, normalisePhone, parseLineItems };
