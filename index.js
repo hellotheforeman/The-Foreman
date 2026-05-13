@@ -1016,25 +1016,81 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End amend with context ---
 
-    // amend_quote with a job ID but no amount — enter guided quote amend flow
+    // --- Amend menu workflow ---
+    if (currentState?.workflow === 'amend_menu') {
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+
+      const { jobId: amendJobId, customerId, hasInvoice } = currentState.collected || {};
+      const docLabel = hasInvoice ? 'invoice' : 'quote';
+
+      if (currentState.pending?.field === 'choose') {
+        const n = parseInt(trimmed, 10);
+        if (!n || n < 1 || n > 5) {
+          return twimlReply(res, `Reply with a number 1–5, or *cancel* to dismiss.`);
+        }
+        if (n === 1) {
+          await clearConversationState(business.id);
+          return routeAmendPrice(amendJobId, business, res);
+        }
+        const prompts = {
+          2: { field: 'description',      question: `What's the new scope of work?` },
+          3: { field: 'customer_name',    question: `What's the new customer name?` },
+          4: { field: 'customer_address', question: `What's the new address?\n\nReply *skip* to clear it.` },
+          5: { field: 'customer_phone',   question: `What's the new phone number? (e.g. 07700900123)\n\nReply *skip* to clear it.` },
+        };
+        const p = prompts[n];
+        await setConversationState(business.id, { ...currentState, pending: { type: 'field', field: p.field } });
+        return twimlReply(res, `${p.question}\n\n(Reply *cancel* to go back)`);
+      }
+
+      if (currentState.pending?.field === 'description') {
+        await db.updateJob(amendJobId, business.id, { description: trimmed });
+        await clearConversationState(business.id);
+        return twimlReply(res, `✅ Scope of work updated.\n\nResend the ${docLabel} when you're ready.`);
+      }
+
+      if (currentState.pending?.field === 'customer_name') {
+        await db.updateCustomer(customerId, business.id, { name: trimmed });
+        await clearConversationState(business.id);
+        return twimlReply(res, `✅ Customer name updated to: ${trimmed}\n\nResend the ${docLabel} when you're ready.`);
+      }
+
+      if (currentState.pending?.field === 'customer_address') {
+        const address = /^skip$/i.test(trimmed) ? null : trimmed;
+        await db.updateCustomer(customerId, business.id, { address });
+        await clearConversationState(business.id);
+        return twimlReply(res, address
+          ? `✅ Address updated.\n\nResend the ${docLabel} when you're ready.`
+          : `✅ Address cleared.`);
+      }
+
+      if (currentState.pending?.field === 'customer_phone') {
+        if (/^skip$/i.test(trimmed)) {
+          await db.updateCustomer(customerId, business.id, { phone: null });
+          await clearConversationState(business.id);
+          return twimlReply(res, `✅ Phone cleared.`);
+        }
+        const stripped = trimmed.replace(/[\s\-().]/g, '');
+        if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
+          return twimlReply(res, `That doesn't look like a valid UK mobile. Try again, e.g. *07700900123*\n\n(Reply *cancel* to go back)`);
+        }
+        const normed = normalisePhone(stripped);
+        await db.updateCustomer(customerId, business.id, { phone: normed });
+        await clearConversationState(business.id);
+        return twimlReply(res, `✅ Phone updated to: ${normed}`);
+      }
+
+      await clearConversationState(business.id);
+      return twimlReply(res, 'Cancelled.');
+    }
+    // --- End amend menu workflow ---
+
+    // amend_quote with a job ID but no amount — show the amend menu
     if (intent.intent === 'amend_quote' && intent.jobId && intent.amount == null) {
-      const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
-      if (!job.quoted_amount) return twimlReply(res, `${db.formatJobId(intent.jobId)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
-      const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
-      await setConversationState(business.id, {
-        workflow: 'quote_guided',
-        focus: { jobId: job.id },
-        collected: {
-          jobId: job.id,
-          quoted_amount: Number(job.quoted_amount),
-          quote_items: job.quote_items || null,
-          quote_line_items_json: job.quote_line_items_json || null,
-        },
-        pending: { type: 'field', field: 'amend_items' },
-        options: [],
-      });
-      return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
+      return routeAmend(intent.jobId, business, res);
     }
 
     // --- Invoice with no job ID and active state ---
@@ -1108,16 +1164,46 @@ function toTitleCase(str) {
   return str.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
-// Routes an amend request to the right flow based on whether the job has a quote or invoice.
+// Shows the amend menu — user picks what they want to change.
 async function routeAmend(jobId, business, res) {
   const job = await db.getJobWithCustomer(jobId, business.id);
   if (!job) return twimlReply(res, `Couldn't find that job. Say *jobs* to see what's on.`);
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
+  if (invoice?.status === 'PAID') {
+    return twimlReply(res, `❌ ${db.formatJobId(job.id)} is already paid — can't amend it.`);
+  }
+  if (!job.quoted_amount && !invoice) {
+    return twimlReply(res, `${db.formatJobId(job.id)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
+  }
+
+  await setConversationState(business.id, {
+    workflow: 'amend_menu',
+    focus: { jobId: job.id },
+    collected: { jobId: job.id, customerId: job.customer.id, hasInvoice: !!invoice },
+    pending: { type: 'selection', field: 'choose' },
+    options: [],
+  });
+
+  return twimlReply(res,
+    `*${toTitleCase(job.description)}* — ${job.customer.name}\n\n` +
+    `What would you like to change?\n\n` +
+    `1. Price / items\n` +
+    `2. Scope of work\n` +
+    `3. Customer name\n` +
+    `4. Customer address\n` +
+    `5. Customer phone\n\n` +
+    `Reply with a number, or *cancel* to dismiss.`
+  );
+}
+
+// Routes directly to price/items amendment (skips menu — used when option 1 is selected).
+async function routeAmendPrice(jobId, business, res) {
+  const job = await db.getJobWithCustomer(jobId, business.id);
+  if (!job) return twimlReply(res, `Couldn't find that job.`);
+
+  const invoice = await db.getInvoiceByJob(job.id, business.id);
   if (invoice) {
-    if (invoice.status === 'PAID') {
-      return twimlReply(res, `❌ ${db.formatJobId(job.id)} is already paid — can't amend it.`);
-    }
     const currentItemsStr = formatItemsForCopy(invoice.line_items_json, invoice.line_items, invoice.amount);
     await setConversationState(business.id, {
       workflow: 'invoice_guided',
@@ -1129,24 +1215,20 @@ async function routeAmend(jobId, business, res) {
     return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
   }
 
-  if (job.quoted_amount) {
-    const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
-    await setConversationState(business.id, {
-      workflow: 'quote_guided',
-      focus: { jobId: job.id },
-      collected: {
-        jobId: job.id,
-        quoted_amount: Number(job.quoted_amount),
-        quote_items: job.quote_items || null,
-        quote_line_items_json: job.quote_line_items_json || null,
-      },
-      pending: { type: 'field', field: 'amend_items' },
-      options: [],
-    });
-    return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
-  }
-
-  return twimlReply(res, `${db.formatJobId(job.id)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
+  const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
+  await setConversationState(business.id, {
+    workflow: 'quote_guided',
+    focus: { jobId: job.id },
+    collected: {
+      jobId: job.id,
+      quoted_amount: Number(job.quoted_amount),
+      quote_items: job.quote_items || null,
+      quote_line_items_json: job.quote_line_items_json || null,
+    },
+    pending: { type: 'field', field: 'amend_items' },
+    options: [],
+  });
+  return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
 }
 
 function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
