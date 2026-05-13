@@ -156,8 +156,9 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       const item = lineItems[idx];
       const rowStartY = currentY;
 
+      const descText = String(item.description).charAt(0).toUpperCase() + String(item.description).slice(1);
       doc.font('Helvetica').fontSize(10).fillColor('#111111')
-        .text(String(item.description), L, rowStartY, { width: descWidth });
+        .text(descText, L, rowStartY, { width: descWidth });
       const afterDesc = doc.y;
 
       // If afterDesc < rowStartY, a page break occurred while rendering the description.

@@ -23,8 +23,13 @@ function customerGreetingName(customer) {
   return parts[0];
 }
 
+function capitaliseItems(str) {
+  if (!str) return str;
+  return str.split(',').map(s => s.trimStart().charAt(0).toUpperCase() + s.trimStart().slice(1)).join(', ');
+}
+
 function quoteMessage(job, customer, business) {
-  const items = job.quote_items || job.description;
+  const items = capitaliseItems(job.quote_items || job.description);
   const name = businessName(business);
   const net = Number(job.quoted_amount);
   const vatLines = business?.vat_registered
@@ -54,7 +59,7 @@ function quoteMessage(job, customer, business) {
 }
 
 function invoiceMessage(job, invoice, customer, business) {
-  const items = invoice.line_items || job.description;
+  const items = capitaliseItems(invoice.line_items || job.description);
   const name = businessName(business);
   const payment = paymentDetails(business);
   const net = Number(invoice.amount);
