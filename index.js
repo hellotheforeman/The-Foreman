@@ -107,12 +107,13 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
 
     const normPhone = normalisePhone(from);
-    const business = await findBusinessByPhone(normPhone);
+    let business = await findBusinessByPhone(normPhone);
 
     if (!business) {
-      console.log(`📥 Unregistered sender (${from}) — sending sign-up message`);
-      await logMessage('IN', 'TRADESPERSON', body, { whatsappMessageId: messageSid });
-      return twimlReply(res, `Your number isn't registered with The Foreman yet.\n\nVisit theforeman.co.uk/signup to get started.`);
+      console.log(`📥 New user (${from}) — auto-creating account`);
+      business = await db.createBusinessFromPhone(normPhone);
+      await logMessage('IN', 'TRADESPERSON', body, { businessId: business.id, whatsappMessageId: messageSid });
+      return handleOnboarding({ business, body, mediaUrl, res });
     }
 
     await logMessage('IN', 'TRADESPERSON', body, { businessId: business.id, whatsappMessageId: messageSid });
@@ -1175,9 +1176,9 @@ const ONBOARDING_STEPS = [
   { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
 ];
 
-const ONBOARDING_WELCOME = `👋 Welcome to The Foreman — your business assistant on WhatsApp.
+const ONBOARDING_WELCOME = `👋 Welcome to The Foreman — quotes, invoices and jobs, all from WhatsApp.
 
-Quotes, invoices, jobs and scheduling, all from here. Let's get you set up in a couple of minutes. Reply *skip* to any question you want to come back to later.`;
+It's completely free. Let's get you set up in a couple of minutes — reply *skip* to anything you want to come back to later.`;
 
 async function handleOnboarding({ business, body, mediaUrl, res }) {
   const trimmed = (body || '').trim();

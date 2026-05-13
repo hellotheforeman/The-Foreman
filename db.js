@@ -268,6 +268,19 @@ async function findBusinessByPhone(phone) {
   return getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
 }
 
+async function createBusinessFromPhone(phone) {
+  const existing = await getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
+  if (existing) return existing;
+  const { rows } = await pool.query(
+    `INSERT INTO businesses (name, business_name, phone, status, onboarded)
+     VALUES ($1, $1, $2, 'active', false)
+     RETURNING *`,
+    [phone, phone]
+  );
+  console.log(`✅ Auto-created business for ${phone}`);
+  return rows[0];
+}
+
 async function listBusinesses() {
   return getAll('SELECT * FROM businesses ORDER BY created_at DESC');
 }
@@ -770,6 +783,7 @@ module.exports = {
   formatJobId,
   createBusiness,
   findBusinessByPhone,
+  createBusinessFromPhone,
   listBusinesses,
   updateBusinessStatus,
   findOrCreateCustomer,
