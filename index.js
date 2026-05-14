@@ -1024,12 +1024,28 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       const { jobId: amendJobId, customerId, hasInvoice } = currentState.collected || {};
-      const docLabel = hasInvoice ? 'invoice' : 'quote';
+
+      // Resends the quote or invoice PDF after a field has been updated.
+      const resendDocument = async () => {
+        const updatedJob = await db.getJobWithCustomer(amendJobId, business.id);
+        await clearConversationState(business.id);
+        if (hasInvoice) {
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: amendJobId, business }, res);
+        }
+        return dispatch({
+          kind: 'command', intent: 'quote',
+          jobId: amendJobId,
+          amount: Number(updatedJob.quoted_amount),
+          items: updatedJob.quote_items || null,
+          lineItems: updatedJob.quote_line_items_json || null,
+          business,
+        }, res);
+      };
 
       if (currentState.pending?.field === 'choose') {
         const n = parseInt(trimmed, 10);
-        if (!n || n < 1 || n > 5) {
-          return twimlReply(res, `Reply with a number 1–5, or *cancel* to dismiss.`);
+        if (!n || n < 1 || n > 4) {
+          return twimlReply(res, `Reply with a number 1–4, or *cancel* to dismiss.`);
         }
         if (n === 1) {
           await clearConversationState(business.id);
@@ -1039,48 +1055,30 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           2: { field: 'description',      question: `What's the new scope of work?` },
           3: { field: 'customer_name',    question: `What's the new customer name?` },
           4: { field: 'customer_address', question: `What's the new address?\n\nReply *skip* to clear it.` },
-          5: { field: 'customer_phone',   question: `What's the new phone number? (e.g. 07700900123)\n\nReply *skip* to clear it.` },
         };
         const p = prompts[n];
         await setConversationState(business.id, { ...currentState, pending: { type: 'field', field: p.field } });
-        return twimlReply(res, `${p.question}\n\n(Reply *cancel* to go back)`);
+        return twimlReply(res, p.question);
       }
 
       if (currentState.pending?.field === 'description') {
         await db.updateJob(amendJobId, business.id, { description: trimmed });
-        await clearConversationState(business.id);
-        return twimlReply(res, `✅ Scope of work updated.\n\nResend the ${docLabel} when you're ready.`);
+        return resendDocument();
       }
 
       if (currentState.pending?.field === 'customer_name') {
         await db.updateCustomer(customerId, business.id, { name: trimmed });
-        await clearConversationState(business.id);
-        return twimlReply(res, `✅ Customer name updated to: ${trimmed}\n\nResend the ${docLabel} when you're ready.`);
+        return resendDocument();
       }
 
       if (currentState.pending?.field === 'customer_address') {
         const address = /^skip$/i.test(trimmed) ? null : trimmed;
         await db.updateCustomer(customerId, business.id, { address });
-        await clearConversationState(business.id);
-        return twimlReply(res, address
-          ? `✅ Address updated.\n\nResend the ${docLabel} when you're ready.`
-          : `✅ Address cleared.`);
-      }
-
-      if (currentState.pending?.field === 'customer_phone') {
-        if (/^skip$/i.test(trimmed)) {
-          await db.updateCustomer(customerId, business.id, { phone: null });
+        if (!address) {
           await clearConversationState(business.id);
-          return twimlReply(res, `✅ Phone cleared.`);
+          return twimlReply(res, `✅ Address cleared.`);
         }
-        const stripped = trimmed.replace(/[\s\-().]/g, '');
-        if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
-          return twimlReply(res, `That doesn't look like a valid UK mobile. Try again, e.g. *07700900123*\n\n(Reply *cancel* to go back)`);
-        }
-        const normed = normalisePhone(stripped);
-        await db.updateCustomer(customerId, business.id, { phone: normed });
-        await clearConversationState(business.id);
-        return twimlReply(res, `✅ Phone updated to: ${normed}`);
+        return resendDocument();
       }
 
       await clearConversationState(business.id);
@@ -1191,8 +1189,7 @@ async function routeAmend(jobId, business, res) {
     `1. Price / items\n` +
     `2. Scope of work\n` +
     `3. Customer name\n` +
-    `4. Customer address\n` +
-    `5. Customer phone\n\n` +
+    `4. Customer address\n\n` +
     `Reply with a number, or *cancel* to dismiss.`
   );
 }
