@@ -1250,7 +1250,8 @@ const ONBOARDING_STEPS = [
   { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?\n\nReply *skip* to do this later.` },
   { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
   { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
-  { key: 'bank',            label: 'Bank details',     required: false, prompt: `What's your sort code? This goes on your invoices so customers know where to pay.\n\nReply *skip* to do this later.` },
+  { key: 'bank',            label: 'Bank details',     required: false, prompt: `To include payment details on your invoices, what's your sort code?\n\nReply *skip* to do this later.` },
+  { key: 'payment_days',    label: 'Payment terms',    required: false, prompt: `How many days do you give customers to pay an invoice? (e.g. 14, 30)\n\nReply *skip* to use the default of 14 days.` },
   { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered?\n\nReply *yes*, *no*, or *skip* to do this later.` },
   { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
 ];
@@ -1300,13 +1301,34 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
       const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${trimmed}`;
       await db.updateBusiness(business.id, { payment_details: paymentDetails });
 
-    } else if (current.key === 'vat') {
-      const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
-      const isNo = /^(no|n|nope|nah)$/i.test(trimmed);
-      if (!isYes && !isNo) {
-        return twimlReply(res, `Reply *yes* if you're VAT registered, *no* if not, or *skip* to come back to this later.`);
+    } else if (current.key === 'payment_days') {
+      const days = parseInt(trimmed, 10);
+      if (isNaN(days) || days < 1 || days > 365) {
+        return twimlReply(res, `Please enter a number between 1 and 365, or reply *skip* to use 14 days.`);
       }
-      await db.updateBusiness(business.id, { vat_registered: isYes, vat_number: null });
+      await db.updateBusiness(business.id, { payment_days: days });
+
+    } else if (current.key === 'vat') {
+      // Sub-step: if we already know they're VAT registered, this reply is the VAT number
+      if (state.collected.vatRegistered) {
+        await db.updateBusiness(business.id, { vat_number: trimmed });
+        // Fall through to advance to next step
+      } else {
+        const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
+        const isNo = /^(no|n|nope|nah)$/i.test(trimmed);
+        if (!isYes && !isNo) {
+          return twimlReply(res, `Reply *yes* if you're VAT registered, *no* if not, or *skip* to come back to this later.`);
+        }
+        await db.updateBusiness(business.id, { vat_registered: isYes, vat_number: null });
+        if (isYes) {
+          // Ask for VAT number before advancing
+          await setConversationState(business.id, {
+            ...state,
+            collected: { ...state.collected, vatRegistered: true },
+          });
+          return twimlReply(res, `What's your VAT number?\n\nReply *skip* to add it later.`);
+        }
+      }
 
     } else if (current.key === 'logo') {
       if (!mediaUrl) {
@@ -1330,9 +1352,10 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
     }
   }
 
-  // Clear sortCode from state if we just finished the bank step
+  // Clear sub-step flags when advancing past their parent step
   const updatedCollected = { ...state.collected, onboardingStep: step + 1 };
   if (current.key === 'bank') delete updatedCollected.sortCode;
+  if (current.key === 'vat') delete updatedCollected.vatRegistered;
 
   // Advance to next step
   const nextStep = step + 1;
