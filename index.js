@@ -165,7 +165,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'choose') {
         const n = parseInt(trimmed, 10);
         if (!n || n < 1 || n > SETTINGS_FIELDS.length) {
-          return twimlReply(res, `Please reply with a number 1–${SETTINGS_FIELDS.length}, or *cancel*.`);
+          return twimlReply(res, `Pick a number from the list above, or say *cancel* to close.`);
         }
         const setting = SETTINGS_FIELDS[n - 1];
         await setConversationState(business.id, {
@@ -176,19 +176,18 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           options: [],
         });
         if (setting.type === 'vat') {
-          return twimlReply(res, `Are you VAT registered?\n\nReply *yes* or *no*. (Reply *cancel* to go back)`);
+          return twimlReply(res, `Are you VAT registered? Reply *yes* or *no*.`);
         }
         if (setting.type === 'bank') {
-          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)\n\n(Reply *cancel* to go back)`);
+          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)`);
         }
         if (setting.type === 'image') {
           if (business.logo_path) {
-            return twimlReply(res, `Send a new photo to replace your logo, or reply *remove* to delete it.\n\n(Reply *cancel* to go back)`);
+            return twimlReply(res, `Send a new photo to replace your logo, or reply *remove* to delete it.`);
           }
-          return twimlReply(res, `Send your logo as a photo or image. It will appear on all your quotes and invoices.\n\n(Reply *cancel* to go back)`);
+          return twimlReply(res, `Send your logo as a photo — it'll appear on all your quotes and invoices.`);
         }
-        const hint = setting.hint || '(Reply *cancel* to go back)';
-        return twimlReply(res, `What should I change *${setting.label}* to?\n\n${hint}`);
+        return twimlReply(res, `What should *${setting.label}* be?`);
       }
 
       if (currentState.pending?.field === 'value') {
@@ -202,8 +201,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             }
             if (!mediaUrl) {
               const hint = business.logo_path
-                ? `Send a new photo to replace it, or reply *remove* to delete it. (Reply *cancel* to go back)`
-                : `Please send your logo as a photo or image. (Reply *cancel* to go back)`;
+                ? `Send a new photo to replace it, or reply *remove* to delete it.`
+                : `Send your logo as a photo — it'll appear on all your quotes and invoices.`;
               return twimlReply(res, hint);
             }
             try {
@@ -255,11 +254,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           if (settingType === 'number') {
             const n = parseInt(trimmed, 10);
             if (!n || n < 1 || n > 365 || String(n) !== trimmed.trim()) {
-              return twimlReply(res, `Please enter a whole number of days, e.g. *14* or *30*. (Reply *cancel* to go back)`);
+              return twimlReply(res, `Enter a number of days, e.g. *14* or *30*.`);
             }
             await db.updateBusiness(business.id, { [settingKey]: n });
             await clearConversationState(business.id);
-            return twimlReply(res, `✅ *${settingLabel}* updated to: ${n} days`);
+            return twimlReply(res, `Done — payment terms set to ${n} days.`);
           }
 
           const isBoolean = settingType === 'boolean';
@@ -267,14 +266,14 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;
           await db.updateBusiness(business.id, { [settingKey]: value });
           await clearConversationState(business.id);
-          return twimlReply(res, `✅ *${settingLabel}* updated to: ${displayValue}`);
+          return twimlReply(res, `Done — ${settingLabel.toLowerCase()} updated.`);
         }
       }
 
       if (currentState.pending?.field === 'vat_number') {
         await db.updateBusiness(business.id, { vat_number: trimmed });
         await clearConversationState(business.id);
-        return twimlReply(res, `✅ VAT updated — registered, ${trimmed}.`);
+        return twimlReply(res, `Done — VAT registered, ${trimmed}.`);
       }
 
       if (currentState.pending?.field === 'account_number') {
@@ -282,7 +281,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${trimmed}`;
         await db.updateBusiness(business.id, { payment_details: paymentDetails });
         await clearConversationState(business.id);
-        return twimlReply(res, `✅ Bank details saved — sort code ${sortCode}, account number ${trimmed}.`);
+        return twimlReply(res, `Done — bank details saved. These will appear on all your invoices.`);
       }
 
       // Fallback — show menu again
@@ -317,7 +316,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           `1. Resend existing quote\n` +
           `2. Amend the quote\n` +
           `3. Start from scratch\n\n` +
-          `Reply *1*, *2*, or *3*, or *cancel* to dismiss.`
+          `Reply with 1, 2 or 3.`
         );
       }
 
@@ -332,8 +331,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         `📋 *${job.description}* — ${job.customer.name}\n\n` +
         `How do you want to quote this?\n\n` +
         `1. Quick — one price\n` +
-        `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
-        `Reply *1* or *2*, or *cancel* to dismiss.`
+        `2. Detailed — break it down (e.g. labour 250, parts 100)`
       );
     }
 
@@ -342,7 +340,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
-        return twimlReply(res, 'Quote cancelled.');
+        return twimlReply(res, 'No problem — quote dropped.');
       }
 
       if (isWorkflowInterrupt(intent)) {
@@ -353,7 +351,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'quote_mode') {
         const n = parseInt(trimmed, 10);
         if (!n || n < 1 || n > 3) {
-          return twimlReply(res, 'Reply *1*, *2*, or *3*, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply with 1, 2 or 3.');
         }
         if (n === 1) {
           // Resend existing quote as-is
@@ -393,8 +391,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res,
           `How do you want to quote this?\n\n` +
           `1. Quick — one price\n` +
-          `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
-          `Reply *1* or *2*, or *cancel* to dismiss.`
+          `2. Detailed — break it down (e.g. labour 250, parts 100)`
         );
       }
 
@@ -416,7 +413,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             await clearConversationState(business.id);
             return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(totalM[1]), items: null, lineItems: null, business }, res);
           }
-          return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
+          return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         }
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
@@ -425,7 +422,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'quote_type') {
         const n = parseInt(trimmed, 10);
         if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply *1* for a quick quote or *2* for a detailed breakdown, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply 1 for a quick quote or 2 to break it down.');
         }
         if (n === 1) {
           await setConversationState(business.id, {
@@ -433,20 +430,20 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             collected: { ...currentState.collected, quote_type: 'quick' },
             pending: { type: 'field', field: 'amount' },
           });
-          return twimlReply(res, 'Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).');
+          return twimlReply(res, 'What\'s the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).');
         } else {
           await setConversationState(business.id, {
             ...currentState,
             collected: { ...currentState.collected, quote_type: 'itemised' },
             pending: { type: 'field', field: 'items' },
           });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*\n\nSeparate each item with a comma.');
+          return twimlReply(res, 'List the items, separated by commas:\n\n*Boiler service 250, Parts 45, Callout fee 50*');
         }
       }
 
       if (currentState.pending?.field === 'amount') {
         const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, 'Please enter a number, e.g. *450*');
+        if (!m) return twimlReply(res, 'What\'s the price? (e.g. *450*)');
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.collected.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
       }
@@ -454,7 +451,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'items') {
         const lineItems = parseLineItems(trimmed);
         if (!lineItems) {
-          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250, Parts 45*\n\nEach item needs a description and an amount.");
+          return twimlReply(res, "Couldn't read those items — make sure each one has a description and a price:\n*Boiler service 250, Parts 45*");
         }
         const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
         await clearConversationState(business.id);
@@ -462,7 +459,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       await clearConversationState(business.id);
-      return twimlReply(res, 'Quote cancelled. Start again with *quote [job#]*.');
+      return twimlReply(res, 'No problem — quote dropped.');
     }
     // --- End quote guided workflow ---
 
@@ -543,7 +540,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
-        return twimlReply(res, 'Quote cancelled.');
+        return twimlReply(res, 'No problem — quote dropped.');
       }
 
       if (isWorkflowInterrupt(intent)) {
@@ -556,7 +553,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const n = parseInt(trimmed, 10);
         const jobs = c.jobs || [];
         if (!n || n < 1 || n > jobs.length) {
-          return twimlReply(res, `Reply with a number 1–${jobs.length}.`);
+          return twimlReply(res, `Pick a number from the list above.`);
         }
         const job = jobs[n - 1];
         await clearConversationState(business.id);
@@ -586,7 +583,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
         if (c.description) {
           await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
-          return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+          return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
         }
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
         return twimlReply(res, `What's the scope of work for ${c.customerName}?`);
@@ -598,7 +595,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           ...currentState,
           collected: { ...c, step: 'price', description: trimmed },
         });
-        return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+        return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
       }
 
       // Step: price or line items — detect format automatically
@@ -611,7 +608,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
         }
         const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, `Please enter a price, e.g. *450*, or itemised: *labour 250, parts 45*`);
+        if (!m) return twimlReply(res, `What's the price? (e.g. *450*, or itemised: *labour 250, parts 45*)`);
         const amount = parseFloat(m[1]);
         await clearConversationState(business.id);
         const { job } = await createCustomerAndJob(business.id, c);
@@ -632,7 +629,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
-        return twimlReply(res, 'Invoice cancelled.');
+        return twimlReply(res, 'No problem — invoice dropped.');
       }
 
       if (isWorkflowInterrupt(intent)) {
@@ -661,7 +658,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (c.step === 'description') {
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', description: trimmed } });
-        return twimlReply(res, `Enter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+        return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
       }
 
       if (c.step === 'price') {
@@ -673,7 +670,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
         }
         const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, `Please enter a price, e.g. *450*, or itemised: *labour 250, parts 45*`);
+        if (!m) return twimlReply(res, `What's the price? (e.g. *450*, or itemised: *labour 250, parts 45*)`);
         const amount = parseFloat(m[1]);
         await clearConversationState(business.id);
         const { job } = await createCustomerAndJob(business.id, c);
@@ -681,7 +678,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       await clearConversationState(business.id);
-      return twimlReply(res, 'Invoice cancelled.');
+      return twimlReply(res, 'No problem — invoice dropped.');
     }
     // --- End invoice flow ---
 
@@ -814,7 +811,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           `1. Invoice from quote (${quotedStr})\n` +
           `2. Amend before invoicing\n` +
           `3. Create manually\n\n` +
-          `Reply *1*, *2*, or *3*, or *cancel* to dismiss.`
+          `Reply with 1, 2 or 3.`
         );
       } else {
         await setConversationState(business.id, {
@@ -828,8 +825,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           `🧾 *${job.description}* — ${job.customer.name}\n\n` +
           `No quote on file. How would you like to invoice?\n\n` +
           `1. Quick — one amount\n` +
-          `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
-          `Reply *1* or *2*, or *cancel* to dismiss.`
+          `2. Detailed — break it down (e.g. labour 250, parts 100)`
         );
       }
     }
@@ -839,7 +835,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
-        return twimlReply(res, 'Invoice flow cancelled.');
+        return twimlReply(res, 'No problem — invoice dropped.');
       }
 
       if (isWorkflowInterrupt(intent)) {
@@ -851,7 +847,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'invoice_mode') {
         const n = parseInt(trimmed, 10);
         if (!n || n < 1 || n > 3) {
-          return twimlReply(res, 'Reply *1*, *2*, or *3*, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply with 1, 2 or 3.');
         }
         if (n === 1) {
           // Use quote as-is — handleSendInvoice will pick up the quoted amount
@@ -879,7 +875,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             ...currentState,
             pending: { type: 'field', field: 'manual_amount' },
           });
-          return twimlReply(res, 'What amount?\n\n(Or list items: *service 250, parts 45*)');
+          return twimlReply(res, 'What\'s the amount? You can also itemise — e.g. *service 250, parts 45*');
         }
       }
 
@@ -887,20 +883,20 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'invoice_mode_new') {
         const n = parseInt(trimmed, 10);
         if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply *1* for quick or *2* for a detailed breakdown, or *cancel* to dismiss.');
+          return twimlReply(res, 'Reply 1 for a quick invoice or 2 to break it down.');
         }
         if (n === 1) {
           await setConversationState(business.id, {
             ...currentState,
             pending: { type: 'field', field: 'manual_amount' },
           });
-          return twimlReply(res, 'What amount?');
+          return twimlReply(res, 'What\'s the amount?');
         } else {
           await setConversationState(business.id, {
             ...currentState,
             pending: { type: 'field', field: 'items' },
           });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*');
+          return twimlReply(res, 'List the items, separated by commas:\n\n*Boiler service 250, Parts 45, Callout fee 50*');
         }
       }
 
@@ -909,7 +905,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         let lineItems = parseLineItems(trimmed);
         if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) lineItems = null;
         const m = !lineItems && trimmed.match(/^(?:total\s+)?£?(\d+(?:\.\d{1,2})?)\s*$/i);
-        if (!lineItems && !m) return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
+        if (!lineItems && !m) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : parseFloat(m[1]);
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'amend_invoice', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
@@ -933,7 +929,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             await clearConversationState(business.id);
             return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount: parseFloat(totalM[1]), items: null, lineItems: null, business }, res);
           }
-          return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
+          return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         }
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
@@ -943,7 +939,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'items') {
         const lineItems = parseLineItems(trimmed);
         if (!lineItems) {
-          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250, Parts 45*\n\nEach item needs a description and an amount.");
+          return twimlReply(res, "Couldn't read those items — make sure each one has a description and a price:\n*Boiler service 250, Parts 45*");
         }
         const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
         await clearConversationState(business.id);
@@ -951,7 +947,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       await clearConversationState(business.id);
-      return twimlReply(res, 'Invoice flow cancelled. Start again with *invoice [job#]*.');
+      return twimlReply(res, 'No problem — invoice dropped.');
     }
     // --- End invoice guided workflow ---
 
@@ -1010,7 +1006,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           await clearConversationState(business.id);
           return routeAmend(jobs[n - 1].id, business, res);
         }
-        return twimlReply(res, `Reply with a number 1–${jobs.length}, or *cancel* to dismiss.`);
+        return twimlReply(res, `Pick a number from the list above.`);
       }
       return twimlReply(res, `Couldn't find a job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
     }
@@ -1045,7 +1041,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'choose') {
         const n = parseInt(trimmed, 10);
         if (!n || n < 1 || n > 4) {
-          return twimlReply(res, `Reply with a number 1–4, or *cancel* to dismiss.`);
+          return twimlReply(res, `Pick a number from the list above.`);
         }
         if (n === 1) {
           await clearConversationState(business.id);
@@ -1190,7 +1186,7 @@ async function routeAmend(jobId, business, res) {
     `2. Scope of work\n` +
     `3. Customer name\n` +
     `4. Customer address\n\n` +
-    `Reply with a number, or *cancel* to dismiss.`
+    `Pick a number from the list above, or say *cancel* to dismiss.`
   );
 }
 

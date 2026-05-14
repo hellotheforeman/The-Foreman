@@ -22,7 +22,7 @@ const SETTINGS_FIELDS = [
 ];
 
 function buildSettingsMenu(business) {
-  const lines = ['⚙️ *Business Settings*\n', 'Reply with a number to update:\n'];
+  const lines = ['⚙️ *Business Settings*\n', 'Which one do you want to update?\n'];
   SETTINGS_FIELDS.forEach((s, i) => {
     let display;
     if (s.type === 'vat') {
@@ -46,7 +46,7 @@ function buildSettingsMenu(business) {
     }
     lines.push(`${i + 1}. ${s.label}: ${display}`);
   });
-  lines.push('\nReply *cancel* to dismiss.');
+  lines.push('\nSay *cancel* to close.');
   return lines.join('\n');
 }
 
@@ -349,7 +349,7 @@ async function handleAmend(intent, res) {
     const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Reply *paid ${job.id}* when settled.`,
+      `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Just let me know when they've paid and I'll mark it off.`,
       pdfUrl
     );
   } catch (err) {
@@ -395,7 +395,7 @@ async function handleChase(intent, res) {
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
 
   const msg = templates.paymentReminder(job, invoice, job.customer, business);
-  messenger.twimlReply(res, `Here's a reminder you can send to ${job.customer.name}:\n\n${msg}`);
+  messenger.twimlReply(res, `Here's a reminder for ${job.customer.name} — forward it over when you're ready:\n\n${msg}`);
 }
 
 async function handleReview(intent, res) {
@@ -409,11 +409,11 @@ async function handleReview(intent, res) {
 
   messenger.twimlReply(
     res,
-    `⭐ Review request for ${job.customer.name} (${job.customer.phone}):\n` +
+    `⭐ Here's a review request for ${job.customer.name}${job.customer.phone ? ` (${job.customer.phone})` : ''}:\n` +
     `─────────────────\n` +
     `${msg}\n` +
     `─────────────────\n\n` +
-    `Copy and send this on WhatsApp.`
+    `Forward that over to them when you get a chance.`
   );
 }
 
@@ -436,7 +436,7 @@ async function handleAddNote(intent, res) {
   const job = await db.appendJobNote(intent.jobId, business.id, intent.note);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
-  messenger.twimlReply(res, `📝 Note added to ${db.formatJobId(intent.jobId)}.`);
+  messenger.twimlReply(res, `📝 Got it — note saved on ${db.formatJobId(intent.jobId)}.`);
 }
 
 async function handleSettings(intent, res) {
@@ -799,8 +799,7 @@ async function handleMarkComplete(intent, res) {
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id)} marked paid — ${job.customer.name}, ${toTitleCase(job.description)}.\n\n` +
-    `Reply *review ${job.id}* to request a review.`
+    `💰 ${db.formatJobId(job.id)} marked paid — ${job.customer.name}, ${toTitleCase(job.description)}. Nice one!\n\nIf the job went well, I can put together a review request for you — just ask.`
   );
 }
 
@@ -846,15 +845,15 @@ async function handleHelp(intent, res) {
 }
 
 async function handleConfirm(intent, res) {
-  messenger.twimlReply(res, `Nothing is awaiting confirmation right now.`);
+  messenger.twimlReply(res, `Nothing waiting on a confirmation from me right now.`);
 }
 
 async function handleCancel(intent, res) {
-  messenger.twimlReply(res, `Nothing to cancel right now.`);
+  messenger.twimlReply(res, `Nothing active to cancel right now.`);
 }
 
 async function handleUnknown(intent, res) {
-  messenger.twimlReply(res, `Didn't quite catch that — try rephrasing.`);
+  messenger.twimlReply(res, `Not sure what you mean — try saying it a different way.`);
 }
 
 // Builds a helpful "job not found" message with open jobs listed if available.
