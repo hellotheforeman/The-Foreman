@@ -125,6 +125,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     // --- Onboarding ---
     if (!business.onboarded) {
+      // Clear any stale non-onboarding state (e.g. from a restart mid-session)
+      const preOnboardState = await getConversationState(business.id);
+      if (preOnboardState && preOnboardState.workflow !== 'onboarding') {
+        await clearConversationState(business.id);
+      }
       return handleOnboarding({ business, body, mediaUrl, res });
     }
     // --- End onboarding ---
