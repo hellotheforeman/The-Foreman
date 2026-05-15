@@ -1248,13 +1248,13 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
 
 const ONBOARDING_STEPS = [
   { key: 'business_name',   label: 'Business name',   required: true,  prompt: `What's your business name?` },
-  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?\n\nReply *skip* to do this later.` },
-  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
-  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
-  { key: 'bank',            label: 'Bank details',     required: false, prompt: `To include payment details on your invoices, what's your sort code?\n\nReply *skip* to do this later.` },
-  { key: 'payment_days',    label: 'Payment terms',    required: false, prompt: `How many days do you give customers to pay an invoice? (e.g. 14, 30)\n\nReply *skip* to use the default of 14 days.` },
-  { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered?\n\nReply *yes*, *no*, or *skip* to do this later.` },
-  { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
+  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?` },
+  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.` },
+  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.` },
+  { key: 'bank',            label: 'Bank details',     required: false, prompt: `To include payment details on your invoices, what's your sort code?` },
+  { key: 'payment_days',    label: 'Payment terms',    required: false, prompt: `How many days do you give customers to pay an invoice? (e.g. 14 or 30 — default is 14)` },
+  { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered? Reply *yes* or *no*.` },
+  { key: 'logo',            label: 'Logo',             required: false, prompt: `Last one — send your business logo as a photo and it'll appear on all your quotes and invoices.` },
 ];
 
 const ONBOARDING_WELCOME = `*Welcome to The Foreman 👋*
@@ -1298,7 +1298,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
           ...state,
           collected: { ...state.collected, sortCode: trimmed },
         });
-        return twimlReply(res, `Got it. And the account number?\n\nReply *skip* to do this later.`);
+        return twimlReply(res, `Got it. And the account number?`);
       }
       // Have both — save and move on
       const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${trimmed}`;
@@ -1329,7 +1329,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
             ...state,
             collected: { ...state.collected, vatRegistered: true },
           });
-          return twimlReply(res, `What's your VAT number?\n\nReply *skip* to add it later.`);
+          return twimlReply(res, `What's your VAT number?`);
         }
       }
 
