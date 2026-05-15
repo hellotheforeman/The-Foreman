@@ -114,10 +114,10 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     const afterHeader = Math.max(leftY, rightY) + 16;
     drawRule(doc, afterHeader);
 
-    // ── BILL TO ────────────────────────────────────────────────
+    // ── BILL TO / QUOTE TO ─────────────────────────────────────
     const billY = afterHeader + 14;
     doc.font('Helvetica-Bold').fontSize(8).fillColor('#888888')
-      .text('BILL TO', L, billY);
+      .text(type === 'quote' ? 'QUOTE TO' : 'BILL TO', L, billY);
 
     doc.font('Helvetica-Bold').fontSize(11).fillColor('#111111')
       .text(customer.name, L, doc.y + 3);
