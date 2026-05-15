@@ -1242,7 +1242,7 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
 // ---------------------------------------------------------------------------
 
 const ONBOARDING_STEPS = [
-  { key: 'business_name',   label: 'Business name',   required: true,  prompt: `First up — what's your business name?` },
+  { key: 'business_name',   label: 'Business name',   required: true,  prompt: `What's your business name?` },
   { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?\n\nReply *skip* to do this later.` },
   { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
   { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.\n\nReply *skip* to do this later.` },
@@ -1252,9 +1252,11 @@ const ONBOARDING_STEPS = [
   { key: 'logo',            label: 'Logo',             required: false, prompt: `Finally — send your business logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.` },
 ];
 
-const ONBOARDING_WELCOME = `👋 Welcome to The Foreman — quotes, invoices and jobs, all from WhatsApp.
+const ONBOARDING_WELCOME = `*Welcome to The Foreman 👋*
 
-It's completely free. Let's get you set up in a couple of minutes — reply *skip* to anything you want to come back to later.`;
+Quotes, invoices and payment tracking — all sorted from WhatsApp, without the faff.
+
+Quick setup first. You can skip anything and come back to it later.`;
 
 async function handleOnboarding({ business, body, mediaUrl, res }) {
   const trimmed = (body || '').trim();
