@@ -177,7 +177,9 @@ async function handleQuote(intent, res) {
   job.quote_items = intent.items;
   job.quote_line_items_json = intent.lineItems || null;
 
-  const total = Number(intent.amount).toFixed(2);
+  const net = Number(intent.amount);
+  const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
   const label = isReQuote ? 'Re-quoted' : 'Quote';
 
   await setConversationState(business.id, {
@@ -192,7 +194,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 £${total} ${label.toLowerCase()} for ${job.customer.name} ready\nSend it when you're happy 👍`,
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\nSend it when you're happy 👍`,
       pdfUrl
     );
   } catch (err) {
@@ -200,7 +202,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 £${total} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
     );
   }
 }
@@ -293,11 +295,15 @@ async function handleSendInvoice(intent, res) {
     options: [],
   });
 
+  const invNet = Number(invoice.amount);
+  const invDisplay = business?.vat_registered ? (invNet * 1.20).toFixed(2) : invNet.toFixed(2);
+  const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 Invoice ${db.formatJobId(job.id)} — £${Number(invoice.amount).toFixed(2)} for ${job.customer.name}\n\nLet me know when they've paid up.`,
+      `🧾 Invoice ${db.formatJobId(job.id)} — £${invDisplay}${invVatSuffix} for ${job.customer.name}\n\nLet me know when they've paid up.`,
       pdfUrl
     );
   } catch (err) {
@@ -305,7 +311,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 Invoice ${db.formatJobId(job.id)} — £${Number(invoice.amount).toFixed(2)} for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nLet me know when they've paid up.`
+      `🧾 Invoice ${db.formatJobId(job.id)} — £${invDisplay}${invVatSuffix} for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nLet me know when they've paid up.`
     );
   }
 }

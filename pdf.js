@@ -193,7 +193,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
       doc.font('Helvetica').fontSize(10).fillColor('#555555')
         .text(`VAT (${Math.round(vat.rate * 100)}%)`, L, ty)
         .text(`£${vatAmount.toFixed(2)}`, L, ty, { width: R - L, align: 'right' });
-      ty += 8;
+      ty += 20;
 
       drawRule(doc, ty);
       ty += 10;
