@@ -208,6 +208,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_days INTEGER NOT NULL DEFAULT 14');
+  await pool.query('ALTER TABLE businesses ALTER COLUMN contact_name DROP NOT NULL');
   // Mark all existing businesses as already onboarded — new column, existing users should skip the wizard
   await pool.query("UPDATE businesses SET onboarded = true WHERE onboarded = false AND created_at < NOW() - INTERVAL '1 minute'");
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
@@ -272,8 +273,8 @@ async function createBusinessFromPhone(phone) {
   const existing = await getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
   if (existing) return existing;
   const { rows } = await pool.query(
-    `INSERT INTO businesses (business_name, phone, status, onboarded)
-     VALUES ($1, $2, 'active', false)
+    `INSERT INTO businesses (business_name, phone, status, onboarded, contact_name)
+     VALUES ($1, $2, 'active', false, '')
      RETURNING *`,
     [phone, phone]
   );
