@@ -272,8 +272,8 @@ async function createBusinessFromPhone(phone) {
   const existing = await getOne('SELECT * FROM businesses WHERE phone = $1', [phone]);
   if (existing) return existing;
   const { rows } = await pool.query(
-    `INSERT INTO businesses (name, business_name, phone, status, onboarded)
-     VALUES ($1, $1, $2, 'active', false)
+    `INSERT INTO businesses (business_name, phone, status, onboarded)
+     VALUES ($1, $2, 'active', false)
      RETURNING *`,
     [phone, phone]
   );
