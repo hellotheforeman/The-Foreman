@@ -1376,7 +1376,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
   // All steps done — mark as onboarded
   await db.updateBusiness(business.id, { onboarded: true });
   await clearConversationState(business.id);
-  return twimlReply(res, `That's you set up. 🎉\n\nWhenever you're ready, just tell me what you need — quote, invoice, job, whatever. I've got it.`);
+  return twimlReply(res, `That's you set up. 🎉\n\nWhenever you're ready, just tell me what you need — quote, invoice, chase payment, whatever you need, I got it!`);
 }
 
 // ---------------------------------------------------------------------------
