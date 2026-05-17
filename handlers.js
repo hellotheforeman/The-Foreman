@@ -551,26 +551,32 @@ function resolvePeriod(period) {
   return { start, end, label: 'This month' };
 }
 
+function vatScale(business) {
+  return business?.vat_registered ? 1.20 : 1;
+}
+
 async function handleEarnings(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
   const { start, end, label } = resolvePeriod(intent.period);
   const summary = await db.getEarningsSummary(business.id, start.toISOString(), end.toISOString());
+  const vat = vatScale(business);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
-  const invoiced = Number(summary.total_invoiced).toFixed(2);
-  const paid = Number(summary.total_paid).toFixed(2);
-  const unpaid = Number(summary.total_unpaid).toFixed(2);
-  const overdue = Number(summary.total_overdue);
+  const invoiced = (Number(summary.total_invoiced) * vat).toFixed(2);
+  const paid     = (Number(summary.total_paid)     * vat).toFixed(2);
+  const unpaid   = (Number(summary.total_unpaid)   * vat).toFixed(2);
+  const overdue  =  Number(summary.total_overdue)  * vat;
 
   let msg =
     `💰 *${label}*\n\n` +
-    `In the bank:    £${paid}\n` +
-    `Waiting for:    £${unpaid}\n` +
-    `Total invoiced: £${invoiced}`;
+    `In the bank:    £${paid}${vatSuffix}\n` +
+    `Waiting for:    £${unpaid}${vatSuffix}\n` +
+    `Total invoiced: £${invoiced}${vatSuffix}`;
 
   if (overdue > 0) {
-    msg += `\n\n⚠️ £${overdue.toFixed(2)} is overdue (over ${business.payment_days || 14} days). Say *unpaid* to see who owes you.`;
+    msg += `\n\n⚠️ £${overdue.toFixed(2)}${vatSuffix} is overdue (over ${business.payment_days || 14} days). Say *unpaid* to see who owes you.`;
   }
 
   messenger.twimlReply(res, msg);
@@ -592,9 +598,12 @@ async function handleFinancialSummary(intent, res) {
     db.getAvgPaymentTime(business.id, startIso, endIso),
   ]);
 
-  const paid = Number(earnings.total_paid).toFixed(2);
-  const owed = unpaidInvoices.reduce((sum, i) => sum + Number(i.amount), 0).toFixed(2);
-  const quotesValue = Number(quotesOut.total_value).toFixed(2);
+  const vat = vatScale(business);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+
+  const paid = (Number(earnings.total_paid) * vat).toFixed(2);
+  const owed = (unpaidInvoices.reduce((sum, i) => sum + Number(i.amount), 0) * vat).toFixed(2);
+  const quotesValue = (Number(quotesOut.total_value) * vat).toFixed(2);
   const quotesCount = Number(quotesOut.count);
 
   const totalJobs = Number(conversion.total_jobs);
@@ -613,9 +622,9 @@ async function handleFinancialSummary(intent, res) {
 
   const lines = [
     `📊 *${label}*\n`,
-    `💰 Collected: £${paid}`,
-    `⏳ Outstanding: £${owed}`,
-    `📋 Quotes out: ${quotesCount > 0 ? `${quotesCount} worth £${quotesValue}` : 'none'}`,
+    `💰 Collected: £${paid}${vatSuffix}`,
+    `⏳ Outstanding: £${owed}${vatSuffix}`,
+    `📋 Quotes out: ${quotesCount > 0 ? `${quotesCount} worth £${quotesValue}${vatSuffix}` : 'none'}`,
     ``,
     `📈 Conversion: ${conversionStr}`,
     `⏱ Payment time: ${paymentTimeStr}`,
@@ -681,15 +690,17 @@ async function handleUnpaid(intent, res) {
   const invoices = await db.getUnpaidInvoices(business.id);
   if (!invoices.length) return messenger.twimlReply(res, `No unpaid invoices. 🎉`);
 
-  const total = invoices.reduce((sum, i) => sum + Number(i.amount), 0);
+  const vat = vatScale(business);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+  const total = invoices.reduce((sum, i) => sum + Number(i.amount), 0) * vat;
   const lines = invoices.map((i) => {
     const days = Math.floor((Date.now() - new Date(i.sent_at).getTime()) / 86400000);
-    return `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}, sent ${days} day${days === 1 ? '' : 's'} ago`;
+    return `• ${i.customer_name} — £${(Number(i.amount) * vat).toFixed(2)}${vatSuffix}, sent ${days} day${days === 1 ? '' : 's'} ago`;
   });
 
   messenger.twimlReply(
     res,
-    `💷 *${invoices.length} unpaid — £${total.toFixed(2)} outstanding*\n\n${lines.join('\n\n')}\n\nI'll let you know as soon as anything goes overdue.`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}\n\nI'll let you know as soon as anything goes overdue.`
   );
 }
 
