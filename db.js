@@ -757,7 +757,9 @@ async function hasProcessedMessage(messageSid) {
   return !!row;
 }
 
-async function getStaleQuotes(daysOld) {
+async function getStaleQuotes(daysOld, businessId = null) {
+  const extra = businessId ? 'AND j.business_id = $2' : '';
+  const params = businessId ? [daysOld, businessId] : [daysOld];
   return getAll(
     `SELECT j.*, c.name AS customer_name, b.phone AS business_phone
      FROM jobs j
@@ -767,12 +769,15 @@ async function getStaleQuotes(daysOld) {
        AND j.quoted_amount IS NOT NULL
        AND j.created_at < NOW() - ($1 * INTERVAL '1 day')
        AND j.created_at >= NOW() - (($1 + 1) * INTERVAL '1 day')
-       AND b.status = 'active'`,
-    [daysOld]
+       AND b.status = 'active'
+       ${extra}`,
+    params
   );
 }
 
-async function getInvoicesDueToday() {
+async function getInvoicesDueToday(businessId = null) {
+  const extra = businessId ? 'AND i.business_id = $1' : '';
+  const params = businessId ? [businessId] : [];
   return getAll(
     `SELECT i.*, j.description, c.name AS customer_name, b.phone AS business_phone, b.id AS business_id
      FROM invoices i
@@ -782,7 +787,22 @@ async function getInvoicesDueToday() {
      WHERE i.status = 'SENT'
        AND i.sent_at IS NOT NULL
        AND DATE(i.sent_at) + (b.payment_days || ' days')::INTERVAL = CURRENT_DATE
-       AND b.status = 'active'`
+       AND b.status = 'active'
+       ${extra}`,
+    params
+  );
+}
+
+async function getOverdueInvoices(businessId) {
+  return getAll(
+    `SELECT i.*, j.description, c.name AS customer_name
+     FROM invoices i
+     JOIN jobs j ON j.id = i.job_id
+     JOIN customers c ON c.id = j.customer_id
+     WHERE i.business_id = $1
+       AND i.status = 'OVERDUE'
+     ORDER BY i.sent_at`,
+    [businessId]
   );
 }
 
@@ -832,6 +852,7 @@ module.exports = {
   hasProcessedMessage,
   getStaleQuotes,
   getInvoicesDueToday,
+  getOverdueInvoices,
   getConversionRate,
   getAvgPaymentTime,
   getQuotesOutstandingValue,

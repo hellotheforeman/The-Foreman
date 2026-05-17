@@ -247,10 +247,12 @@ async function handlePaid(intent, res) {
         : `No invoice found for ${db.formatJobId(intent.jobId)}. Send one first with *invoice ${intent.jobId}*.`
     );
   }
-  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ Already marked as paid.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `Already marked as paid.`);
+  if (!['SENT', 'OVERDUE'].includes(invoice.status)) return messenger.twimlReply(res, `Can't mark that as paid right now.`);
 
+  const paidJob = await db.getJobWithCustomer(intent.jobId, business.id);
   await db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `💰 ${db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
+  messenger.twimlReply(res, `💰 ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
 }
 
 async function handleSendInvoice(intent, res) {

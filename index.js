@@ -1017,6 +1017,31 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End amend with context ---
 
+    // --- Morning briefing workflow ---
+    // User replies with a number from the morning briefing to chase or mark paid.
+    if (currentState?.workflow === 'morning_briefing') {
+      const n = parseInt(trimmed, 10);
+      const items = currentState.collected?.items || [];
+      const item = items.find(i => i.n === n);
+
+      if (!item) {
+        // Not a number — let natural language fall through to normal dispatch
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
+      await clearConversationState(business.id);
+
+      if (item.type === 'invoice_due' || item.type === 'invoice_overdue') {
+        return dispatch({ kind: 'command', intent: 'chase', jobId: item.jobId, business }, res);
+      }
+
+      if (item.type === 'stale_quote') {
+        return dispatch({ kind: 'command', intent: 'quote', jobId: item.jobId, amount: null, business }, res);
+      }
+    }
+    // --- End morning briefing workflow ---
+
     // --- Amend menu workflow ---
     if (currentState?.workflow === 'amend_menu') {
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {

@@ -1,6 +1,7 @@
 const cron = require('node-cron');
 const db = require('./db');
 const messenger = require('./messenger');
+const { setConversationState } = require('./conversation-state');
 
 const TZ = { timezone: 'Europe/London' };
 
@@ -9,78 +10,87 @@ function toTitleCase(str) {
 }
 
 function start() {
-  // Alert tradesperson when an invoice is due today — 8am daily
+  // Single 8am morning briefing — due today, overdue invoices, stale quotes
   cron.schedule('0 8 * * *', async () => {
-    try {
-      const due = await db.getInvoicesDueToday();
-      for (const inv of due) {
-        try {
-          await messenger.sendToForeman(
-            `📅 ${inv.customer_name}'s invoice for £${Number(inv.amount).toFixed(2)} is due today — worth a nudge if you haven't heard from them. Let me know when they pay up.`,
-            { businessId: inv.business_id, businessPhone: inv.business_phone }
-          );
-        } catch (err) {
-          console.error(`Due-today alert failed for invoice ${inv.id}:`, err.message);
-        }
-      }
-    } catch (err) {
-      console.error('Due-today check failed:', err.message);
-    }
-  }, TZ);
-
-  // Nudge tradesperson when a quote has been out for 7 days with no response — 9am daily
-  cron.schedule('0 9 * * *', async () => {
-    try {
-      const staleQuotes = await db.getStaleQuotes(7);
-      for (const job of staleQuotes) {
-        try {
-          const amount = job.quoted_amount ? ` — £${Number(job.quoted_amount).toFixed(2)}` : '';
-          await messenger.sendToForeman(
-            `📋 Your quote for ${job.customer_name} (${toTitleCase(job.description)}${amount}) has been out for 7 days with no response — worth a follow-up?`,
-            { businessId: job.business_id, businessPhone: job.business_phone }
-          );
-        } catch (err) {
-          console.error(`Quote follow-up failed for job ${job.id}:`, err.message);
-        }
-      }
-    } catch (err) {
-      console.error('Quote follow-up check failed:', err.message);
-    }
-  }, TZ);
-
-  // Mark invoices unpaid for 14+ days as OVERDUE and alert the tradesperson — 10am daily
-  cron.schedule('0 10 * * *', async () => {
     try {
       await db.markAllOverdueInvoices();
 
       const businesses = await db.listBusinesses();
-      const active = businesses.filter((b) => b.status === 'active');
+      const active = businesses.filter(b => b.status === 'active' && b.onboarded);
 
       for (const business of active) {
-        const unpaid = await db.getUnpaidInvoices(business.id);
-        const overdue = unpaid.filter((i) => i.status === 'OVERDUE');
+        try {
+          const [dueToday, overdue, staleQuotes] = await Promise.all([
+            db.getInvoicesDueToday(business.id),
+            db.getOverdueInvoices(business.id),
+            db.getStaleQuotes(7, business.id),
+          ]);
 
-        for (const inv of overdue) {
-          try {
-            const days = inv.sent_at
-              ? Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000)
-              : null;
-            const daysStr = days !== null ? `${days} days overdue` : 'overdue';
-            await messenger.sendToForeman(
-              `⚠️ ${db.formatJobId(inv.job_id)} (${inv.customer_name}, £${Number(inv.amount).toFixed(2)}) is ${daysStr}.\n\nReply *chase ${inv.job_id}* to send a reminder.`,
-              { businessId: business.id, businessPhone: business.phone }
-            );
-          } catch (err) {
-            console.error(`Overdue reminder failed for invoice ${inv.id}:`, err.message);
+          if (!dueToday.length && !overdue.length && !staleQuotes.length) continue;
+
+          const items = [];
+          const lines = ['🌅 *Morning update*'];
+          let n = 1;
+
+          if (dueToday.length) {
+            lines.push('', '📅 *Due today*');
+            for (const inv of dueToday) {
+              const net = Number(inv.amount);
+              const display = business.vat_registered ? `£${(net * 1.20).toFixed(2)} inc. VAT` : `£${net.toFixed(2)}`;
+              lines.push(`${n}. ${inv.customer_name} — ${display}`);
+              items.push({ n, type: 'invoice_due', invoiceId: inv.id, jobId: inv.job_id, customerName: inv.customer_name });
+              n++;
+            }
           }
+
+          if (overdue.length) {
+            lines.push('', '⚠️ *Overdue*');
+            for (const inv of overdue) {
+              const days = inv.sent_at
+                ? Math.floor((Date.now() - new Date(inv.sent_at).getTime()) / 86400000)
+                : null;
+              const daysStr = days !== null ? ` (${days} days)` : '';
+              const net = Number(inv.amount);
+              const display = business.vat_registered ? `£${(net * 1.20).toFixed(2)} inc. VAT` : `£${net.toFixed(2)}`;
+              lines.push(`${n}. ${inv.customer_name} — ${display}${daysStr}`);
+              items.push({ n, type: 'invoice_overdue', invoiceId: inv.id, jobId: inv.job_id, customerName: inv.customer_name });
+              n++;
+            }
+          }
+
+          if (staleQuotes.length) {
+            lines.push('', '📋 *Quotes with no response*');
+            for (const job of staleQuotes) {
+              const days = Math.floor((Date.now() - new Date(job.created_at).getTime()) / 86400000);
+              const desc = toTitleCase(job.description);
+              const amount = job.quoted_amount ? ` — £${Number(job.quoted_amount).toFixed(2)}` : '';
+              lines.push(`${n}. ${job.customer_name} — ${desc}${amount} (${days} days)`);
+              items.push({ n, type: 'stale_quote', jobId: job.id, customerName: job.customer_name });
+              n++;
+            }
+          }
+
+          lines.push('', 'Let me know if any of these have paid or if you need me to draft a chaser.');
+
+          await messenger.sendToForeman(lines.join('\n'), { businessId: business.id, businessPhone: business.phone });
+
+          await setConversationState(business.id, {
+            workflow: 'morning_briefing',
+            focus: {},
+            collected: { items },
+            pending: { type: 'selection', field: 'action' },
+            options: [],
+          });
+        } catch (err) {
+          console.error(`Morning briefing failed for business ${business.id}:`, err.message);
         }
       }
     } catch (err) {
-      console.error('Overdue check failed:', err.message);
+      console.error('Morning briefing failed:', err.message);
     }
   }, TZ);
 
-  console.log('⏰ Scheduler started (due-today alerts, overdue invoice checks, quote follow-ups)');
+  console.log('⏰ Scheduler started (8am morning briefing)');
 }
 
 module.exports = { start };
