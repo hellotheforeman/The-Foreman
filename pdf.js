@@ -56,7 +56,7 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
     // Logo — rendered above business name if present
     if (logoBuffer) {
       try {
-        const MAX_LOGO_HEIGHT = 50;
+        const MAX_LOGO_HEIGHT = 80;
         const MAX_LOGO_WIDTH = mid - L - 20;
         doc.image(logoBuffer, L, headerTopY, { fit: [MAX_LOGO_WIDTH, MAX_LOGO_HEIGHT], align: 'left' });
         headerTopY += MAX_LOGO_HEIGHT + 8;
