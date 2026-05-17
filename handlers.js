@@ -166,6 +166,21 @@ async function handleQuote(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
+  // Once an invoice exists, the quote fields are read-only — redirect to invoice amendment
+  if (intent.intent === 'amend_quote') {
+    const existingInvoice = await db.getInvoiceByJob(job.id, business.id);
+    if (existingInvoice) {
+      if (existingInvoice.status === 'PAID') {
+        return messenger.twimlReply(res, `That invoice is already paid — nothing to amend.`);
+      }
+      // If they've supplied a new amount/items, apply it straight to the invoice
+      if (intent.amount && Number(intent.amount) > 0) {
+        return dispatch({ ...intent, intent: 'amend_invoice' }, res);
+      }
+      return messenger.twimlReply(res, `There's already an invoice out for ${job.customer.name} — use *amend invoice* to change it.`);
+    }
+  }
+
   if (!intent.amount || Number(intent.amount) <= 0) {
     return messenger.twimlReply(res, `That doesn't look right — what's the price?`);
   }
