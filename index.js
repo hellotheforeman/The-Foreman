@@ -1013,7 +1013,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         return twimlReply(res, `Pick a number from the list above.`);
       }
-      return twimlReply(res, `Couldn't find a job for "${trimmed}". Try a customer name or say *jobs* to see what's on.`);
+      return twimlReply(res, `Can't find a job for "${trimmed}" — say *jobs* if you want to see what's on.`);
     }
     // --- End amend with context ---
 
