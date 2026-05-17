@@ -137,7 +137,7 @@ INTENT GUIDE:
 - paid: "paid 14", "job 14 paid", "mark 14 as paid", "Joe Duck paid", "Joe Duck now paid" (extract name)
 - chase: "chase 14", "send reminder for job 14"
 - review: "review 14", "ask Patel for a review"
-- cancel_job: "cancel job 14"
+- cancel_job: "cancel job 14", "cancel the quote for Mrs Smith", "cancel quote for Bob", "lost the Smith job", "didn't get that one", "not getting the boiler job", "drop the quote for Patel" — use jobRef for name references
 - mark_complete: "complete 14", "done 14", "mark job 14 as done"
 - add_note: "note on job 14: customer wants callback"
 - update_customer: "update Patel's phone to 07700900456"

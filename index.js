@@ -184,7 +184,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `Are you VAT registered? Reply *yes* or *no*.`);
         }
         if (setting.type === 'bank') {
-          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)`);
+          return twimlReply(res, `What's your sort code? I'll grab the account number straight after. (e.g. 12-34-56)`);
         }
         if (setting.type === 'image') {
           if (business.logo_path) {
@@ -268,10 +268,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
           const isBoolean = settingType === 'boolean';
           const value = isBoolean ? /^(yes|y|true|1)$/i.test(trimmed) : trimmed;
-          const displayValue = isBoolean ? (value ? 'Yes' : 'No') : trimmed;
           await db.updateBusiness(business.id, { [settingKey]: value });
           await clearConversationState(business.id);
-          return twimlReply(res, `Done — ${settingLabel.toLowerCase()} updated.`);
+          let confirmMsg;
+          if (settingKey === 'business_name') confirmMsg = `Got it — trading as ${value} from now on.`;
+          else if (settingKey === 'trade') confirmMsg = `Got it — I'll use that on your quotes and invoices.`;
+          else if (settingKey === 'email') confirmMsg = `Got it — ${value} is on your quotes and invoices.`;
+          else if (settingKey === 'address') confirmMsg = `Done — address updated.`;
+          else confirmMsg = `Done — ${settingLabel.toLowerCase()} updated.`;
+          return twimlReply(res, confirmMsg);
         }
       }
 
@@ -1016,6 +1021,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Can't find a job for "${trimmed}" — say *jobs* if you want to see what's on.`);
     }
     // --- End amend with context ---
+
+    // --- Feedback pending ---
+    if (currentState?.workflow === 'feedback_pending') {
+      await clearConversationState(business.id);
+      const recentMessages = await db.getRecentMessages(business.id, 5);
+      await db.saveFeedback(business.id, trimmed, recentMessages.reverse());
+      return twimlReply(res, `Thanks — feedback noted! 👍`);
+    }
+    // --- End feedback pending ---
 
     // --- Morning briefing workflow ---
     // User replies with a number from the morning briefing to chase or mark paid.

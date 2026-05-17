@@ -64,7 +64,12 @@ function start() {
               const days = Math.floor((Date.now() - new Date(job.created_at).getTime()) / 86400000);
               const desc = toTitleCase(job.description);
               const amount = job.quoted_amount ? ` — £${Number(job.quoted_amount).toFixed(2)}` : '';
-              lines.push(`${n}. ${job.customer_name} — ${desc}${amount} (${days} days)`);
+              let ageStr;
+              if (days >= 21) ageStr = `${days} days — going cold`;
+              else if (days >= 14) ageStr = `2 weeks — worth a nudge?`;
+              else if (days >= 7) ageStr = `1 week, no reply`;
+              else ageStr = `${days} days`;
+              lines.push(`${n}. ${job.customer_name} — ${desc}${amount} (${ageStr})`);
               items.push({ n, type: 'stale_quote', jobId: job.id, customerName: job.customer_name });
               n++;
             }

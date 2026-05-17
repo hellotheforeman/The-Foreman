@@ -167,7 +167,7 @@ async function handleQuote(intent, res) {
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
   if (!intent.amount || Number(intent.amount) <= 0) {
-    return messenger.twimlReply(res, `❌ Amount must be greater than £0.`);
+    return messenger.twimlReply(res, `That doesn't look right — what's the price?`);
   }
 
   const isReQuote = !!job.quoted_amount;
@@ -220,8 +220,9 @@ async function handlePaid(intent, res) {
 
       if (matched.length === 1) {
         const m = matched[0];
+        const vatDisplay = business?.vat_registered ? (Number(m.amount) * 1.20).toFixed(2) : Number(m.amount).toFixed(2);
         await db.markInvoicePaid(m.id);
-        return messenger.twimlReply(res, `💰 ${m.customer_name} — £${Number(m.amount).toFixed(2)} marked as paid. Nice one!`);
+        return messenger.twimlReply(res, `💰 £${vatDisplay} from ${m.customer_name} marked as paid. Nice one!`);
       }
 
       if (matched.length > 1) {
@@ -251,8 +252,9 @@ async function handlePaid(intent, res) {
   if (!['SENT', 'OVERDUE'].includes(invoice.status)) return messenger.twimlReply(res, `Can't mark that as paid right now.`);
 
   const paidJob = await db.getJobWithCustomer(intent.jobId, business.id);
+  const paidVatDisplay = business?.vat_registered ? (Number(invoice.amount) * 1.20).toFixed(2) : Number(invoice.amount).toFixed(2);
   await db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `💰 ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} — invoice marked as paid. Nice one!`);
+  messenger.twimlReply(res, `💰 £${paidVatDisplay} from ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} marked as paid. Nice one!`);
 }
 
 async function handleSendInvoice(intent, res) {
@@ -268,7 +270,7 @@ async function handleSendInvoice(intent, res) {
 
     if (intent.amount != null) {
       if (Number(intent.amount) <= 0) {
-        return messenger.twimlReply(res, `❌ Amount must be greater than £0.`);
+        return messenger.twimlReply(res, `That doesn't look right — what's the price?`);
       }
       // Amount given explicitly in command
       amount = intent.amount;
@@ -434,12 +436,31 @@ async function handleCancelJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const job = await db.getJob(intent.jobId, business.id);
+  if (!intent.jobId && intent.jobRef) {
+    const openJobs = await db.getOpenJobs(business.id);
+    const ref = intent.jobRef.toLowerCase();
+    const matched = openJobs.filter(j =>
+      j.customer_name.toLowerCase().includes(ref) ||
+      j.description.toLowerCase().includes(ref)
+    );
+    if (!matched.length) {
+      return messenger.twimlReply(res, `Can't find an open quote or invoice for "${intent.jobRef}".`);
+    }
+    if (matched.length > 1) {
+      const list = matched.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+      return messenger.twimlReply(res, `Found a few matches — which one did you mean?\n\n${list}\n\nBe more specific, e.g. *cancel quote for ${matched[0].customer_name}*.`);
+    }
+    await db.cancelJob(matched[0].id, business.id);
+    return messenger.twimlReply(res, `Dropped — ${matched[0].customer_name} won't show up in future reminders.`);
+  }
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (job.status === 'cancelled') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already cancelled.`);
+  if (job.status === 'cancelled') return messenger.twimlReply(res, `That one's already cancelled.`);
 
   await db.cancelJob(intent.jobId, business.id);
-  messenger.twimlReply(res, `🚫 ${db.formatJobId(intent.jobId)} cancelled.`);
+  const name = job.customer?.name || db.formatJobId(intent.jobId);
+  messenger.twimlReply(res, `Dropped — ${name} won't show up in future reminders.`);
 }
 
 async function handleAddNote(intent, res) {
@@ -812,7 +833,7 @@ async function handleMarkComplete(intent, res) {
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
     res,
-    `💰 ${db.formatJobId(job.id)} marked paid — ${job.customer.name}, ${toTitleCase(job.description)}. Nice one!\n\nIf the job went well, I can put together a review request for you — just ask.`
+    `💰 ${job.customer.name} marked paid. Nice one!\n\nIf the work went well, I can put together a review request — just ask.`
   );
 }
 
@@ -829,7 +850,14 @@ async function handleFeedback(intent, res) {
   if (!business) return;
 
   if (!intent.message) {
-    return messenger.twimlReply(res, `What's your feedback? Just add it after the word — e.g. *Feedback the invoice layout is confusing*`);
+    await setConversationState(business.id, {
+      workflow: 'feedback_pending',
+      focus: {},
+      collected: {},
+      pending: { type: 'field', field: 'message' },
+      options: [],
+    });
+    return messenger.twimlReply(res, `What's on your mind? Just type it.`);
   }
 
   const recentMessages = await db.getRecentMessages(business.id, 5);

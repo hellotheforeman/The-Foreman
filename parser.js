@@ -285,10 +285,21 @@ function parse(raw) {
     if (jobId) return { kind: 'command', intent: 'mark_complete', jobId };
   }
 
-  // --- Cancel job ---
-  const cancelJobMatch = lower.match(/^cancel(?:\s+job)?\s+#?(\d+)\s*$/);
-  if (cancelJobMatch) {
-    return { kind: 'command', intent: 'cancel_job', jobId: parseInt(cancelJobMatch[1], 10) };
+  // --- Cancel job / quote / invoice ---
+  // By ID: "cancel 14", "cancel job 14", "cancel quote 14", "cancel invoice 14"
+  const cancelJobIdMatch = lower.match(/^cancel\s+(?:job|quote|invoice)?\s*#?(\d+)\s*$/);
+  if (cancelJobIdMatch) {
+    return { kind: 'command', intent: 'cancel_job', jobId: parseInt(cancelJobIdMatch[1], 10) };
+  }
+  // By name: "cancel quote for Mrs Smith", "cancel the Smith job", "cancel invoice for Bob"
+  const cancelJobNameMatch = text.match(/^cancel\s+(?:the\s+)?(?:job|quote|invoice)\s+(?:for\s+)?(?!#?\d)(.+)$/i);
+  if (cancelJobNameMatch) {
+    return { kind: 'command', intent: 'cancel_job', jobRef: cancelJobNameMatch[1].trim() };
+  }
+  // Lost / didn't win: "lost the Smith quote", "didn't get the boiler job"
+  const lostJobMatch = text.match(/^(?:lost|didn'?t\s+get|not\s+getting)\s+(?:the\s+)?(.+?)(?:\s+(?:job|quote|contract|one))?\s*$/i);
+  if (lostJobMatch) {
+    return { kind: 'command', intent: 'cancel_job', jobRef: lostJobMatch[1].trim() };
   }
 
   // --- Business settings menu ---
