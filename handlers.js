@@ -660,14 +660,14 @@ async function handleOpenJobs(intent, res) {
   if (!business) return;
 
   const jobs = await db.getOpenJobs(business.id);
-  if (!jobs.length) return messenger.twimlReply(res, `No open jobs. 📭`);
+  if (!jobs.length) return messenger.twimlReply(res, `Nothing open right now. 📭`);
 
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
     return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary} (${db.deriveStatus(j)})`;
   });
-  messenger.twimlReply(res, `📋 *${jobs.length} Open Jobs*\n\n${lines.join('\n')}`);
+  messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}`);
 }
 
 async function handleListCustomers(intent, res) {
@@ -777,7 +777,7 @@ async function handleJobsByStatus(intent, res) {
   const jobs = await db.getJobsByStatus(business.id, intent.status);
   const label = intent.status.charAt(0).toUpperCase() + intent.status.slice(1);
 
-  if (!jobs.length) return messenger.twimlReply(res, `No ${intent.status} jobs. 📭`);
+  if (!jobs.length) return messenger.twimlReply(res, `Nothing ${intent.status} right now. 📭`);
 
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
@@ -795,7 +795,7 @@ async function handleJobsByStatus(intent, res) {
     ? '\n\nLet me know if you want to chase or cancel any of these.'
     : '';
 
-  messenger.twimlReply(res, `📋 *${label} jobs (${jobs.length})*\n\n${lines.join('\n')}${footer}`);
+  messenger.twimlReply(res, `📋 *${label} (${jobs.length})*\n\n${lines.join('\n')}${footer}`);
 }
 
 async function handleMarkComplete(intent, res) {

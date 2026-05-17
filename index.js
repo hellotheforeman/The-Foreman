@@ -574,7 +574,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             ...currentState,
             collected: { step: 'description', customerId: existing.id, customerName: existing.name },
           });
-          return twimlReply(res, `Got it — what's the job for ${existing.name}?`);
+          return twimlReply(res, `Got it — what's the work for ${existing.name}?`);
         }
         await setConversationState(business.id, {
           ...currentState,
@@ -704,7 +704,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
       }
-      return twimlReply(res, `I couldn't find an open job for "${intent.jobRef}". Say *jobs* to see what's on.`);
+      return twimlReply(res, `Can't find anything for "${intent.jobRef}" — say *jobs* to see what's on.`);
     }
 
     if (currentState?.workflow === 'invoice_pick') {
@@ -723,8 +723,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (intent.intent === 'send_invoice' && !intent.jobId && !intent.jobRef) {
         const suggestion = await openJobsSuggestion(business.id);
         return twimlReply(res, suggestion
-          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
+          ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Who do you want to invoice? Type a name or say *jobs* to see what's on.`
         );
       }
       // Numeric selection from a presented list
@@ -782,8 +782,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           options: [],
         });
         return twimlReply(res, suggestion
-          ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
+          ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Who do you want to invoice? Type a name or say *jobs* to see what's on.`
         );
       }
 
@@ -1166,14 +1166,14 @@ function toTitleCase(str) {
 // Shows the amend menu — user picks what they want to change.
 async function routeAmend(jobId, business, res) {
   const job = await db.getJobWithCustomer(jobId, business.id);
-  if (!job) return twimlReply(res, `Couldn't find that job. Say *jobs* to see what's on.`);
+  if (!job) return twimlReply(res, `Couldn't find that one — say *jobs* to see what's on.`);
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
   if (invoice?.status === 'PAID') {
     return twimlReply(res, `❌ ${db.formatJobId(job.id)} is already paid — can't amend it.`);
   }
   if (!job.quoted_amount && !invoice) {
-    return twimlReply(res, `${db.formatJobId(job.id)} doesn't have a quote yet. Say *quote ${job.id}* to create one.`);
+    return twimlReply(res, `No quote on file for ${job.customer?.name || db.formatJobId(job.id)} yet — send one first and then you can amend it.`);
   }
 
   await setConversationState(business.id, {
