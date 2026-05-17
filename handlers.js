@@ -347,20 +347,25 @@ async function handleAmend(intent, res) {
     line_items_json: intent.lineItems || null,
   });
 
-  // Re-fetch to get updated values with db-generated fields
+  // Re-fetch so we have db-generated fields; keep line_items_json from intent
+  // so the PDF uses the structured array rather than whatever the DB returns
   const updatedInvoice = await db.getInvoiceByJob(job.id, business.id);
-  updatedInvoice.line_items_json = intent.lineItems || null;
+  if (intent.lineItems) updatedInvoice.line_items_json = intent.lineItems;
+
+  const net = Number(intent.amount);
+  const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
   try {
     const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}\n\nUpdated PDF attached. Just let me know when they've paid and I'll mark it off.`,
+      `🧾 £${displayTotal}${vatSuffix} invoice for ${job.customer.name} updated\n\nUpdated PDF attached. Let me know when they've paid up.`,
       pdfUrl
     );
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message);
-    messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} updated — £${Number(intent.amount).toFixed(2)}`);
+    messenger.twimlReply(res, `🧾 £${displayTotal}${vatSuffix} invoice for ${job.customer.name} updated`);
   }
 }
 
