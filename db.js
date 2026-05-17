@@ -521,6 +521,19 @@ async function updateInvoice(jobId, businessId, fields) {
     `UPDATE invoices SET ${updates.join(', ')} WHERE job_id = $${i++} AND business_id = $${i} AND status != 'PAID' RETURNING *`,
     values
   );
+
+  // Keep job table in sync with the updated invoice values
+  const jobCols = [];
+  const jobVals = [];
+  let j = 1;
+  if ('amount' in fields)        { jobCols.push(`quoted_amount = $${j++}`);          jobVals.push(fields.amount); }
+  if ('line_items' in fields)    { jobCols.push(`quote_items = $${j++}`);             jobVals.push(fields.line_items); }
+  if ('line_items_json' in fields) { jobCols.push(`quote_line_items_json = $${j++}`); jobVals.push(fields.line_items_json === null ? null : JSON.stringify(fields.line_items_json)); }
+  if (jobCols.length) {
+    jobVals.push(jobId, businessId);
+    await pool.query(`UPDATE jobs SET ${jobCols.join(', ')} WHERE id = $${j++} AND business_id = $${j}`, jobVals);
+  }
+
   return rows[0] || null;
 }
 
