@@ -772,6 +772,20 @@ async function getStaleQuotes(daysOld) {
   );
 }
 
+async function getInvoicesDueToday() {
+  return getAll(
+    `SELECT i.*, j.description, c.name AS customer_name, b.phone AS business_phone, b.id AS business_id
+     FROM invoices i
+     JOIN jobs j ON j.id = i.job_id
+     JOIN customers c ON c.id = j.customer_id
+     JOIN businesses b ON b.id = i.business_id
+     WHERE i.status = 'SENT'
+       AND i.sent_at IS NOT NULL
+       AND DATE(i.sent_at) + (b.payment_days || ' days')::INTERVAL = CURRENT_DATE
+       AND b.status = 'active'`
+  );
+}
+
 async function logMessage(direction, participant, body, { businessId, customerId, jobId, whatsappMessageId } = {}) {
   await run(
     'INSERT INTO message_log (business_id, direction, participant, customer_id, job_id, body, whatsapp_message_id) VALUES ($1, $2, $3, $4, $5, $6, $7)',
@@ -817,6 +831,7 @@ module.exports = {
   markAllOverdueInvoices,
   hasProcessedMessage,
   getStaleQuotes,
+  getInvoicesDueToday,
   getConversionRate,
   getAvgPaymentTime,
   getQuotesOutstandingValue,

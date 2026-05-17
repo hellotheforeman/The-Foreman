@@ -9,6 +9,25 @@ function toTitleCase(str) {
 }
 
 function start() {
+  // Alert tradesperson when an invoice is due today — 8am daily
+  cron.schedule('0 8 * * *', async () => {
+    try {
+      const due = await db.getInvoicesDueToday();
+      for (const inv of due) {
+        try {
+          await messenger.sendToForeman(
+            `📅 ${inv.customer_name}'s invoice for £${Number(inv.amount).toFixed(2)} is due today — worth a nudge if you haven't heard from them. Let me know when they pay up.`,
+            { businessId: inv.business_id, businessPhone: inv.business_phone }
+          );
+        } catch (err) {
+          console.error(`Due-today alert failed for invoice ${inv.id}:`, err.message);
+        }
+      }
+    } catch (err) {
+      console.error('Due-today check failed:', err.message);
+    }
+  }, TZ);
+
   // Nudge tradesperson when a quote has been out for 7 days with no response — 9am daily
   cron.schedule('0 9 * * *', async () => {
     try {
@@ -61,7 +80,7 @@ function start() {
     }
   }, TZ);
 
-  console.log('⏰ Scheduler started (overdue invoice checks, quote follow-ups)');
+  console.log('⏰ Scheduler started (due-today alerts, overdue invoice checks, quote follow-ups)');
 }
 
 module.exports = { start };
