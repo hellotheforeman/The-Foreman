@@ -303,7 +303,7 @@ async function handleSendInvoice(intent, res) {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 Invoice ${db.formatJobId(job.id)} — £${invDisplay}${invVatSuffix} for ${job.customer.name}\n\nLet me know when they've paid up.`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\nLet me know when they've paid up.`,
       pdfUrl
     );
   } catch (err) {
@@ -311,7 +311,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 Invoice ${db.formatJobId(job.id)} — £${invDisplay}${invVatSuffix} for ${job.customer.name} (${job.customer.phone}):\n\n${msg}\n\nLet me know when they've paid up.`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\nLet me know when they've paid up.`
     );
   }
 }
