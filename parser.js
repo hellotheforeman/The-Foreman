@@ -403,7 +403,10 @@ function parse(raw) {
 // Parses comma-separated items: "boiler service 250, parts 45"
 // Returns [{description, amount}] or null if any part fails to parse.
 function parseLineItems(str) {
-  const parts = str.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
+  // Strip trailing punctuation then collapse thousands-separator commas (£1,200 → £1200)
+  // before splitting on commas, so we don't split mid-number.
+  const normalised = str.replace(/[.;]+$/, '').replace(/(\d),(\d{3})\b/g, '$1$2');
+  const parts = normalised.split(/\s*,\s*/).map((s) => s.trim()).filter(Boolean);
   const items = [];
   for (const part of parts) {
     // Match: "description £?amount" — number at the end
