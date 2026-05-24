@@ -28,7 +28,8 @@ function parse(raw) {
   }
 
   // --- Cancel pending action ---
-  if (/^(no|nah|cancel|skip|nope|don'?t)$/i.test(lower)) {
+  // Note: "skip" intentionally excluded — workflow handlers catch it on raw body
+  if (/^(no|nah|cancel|nope|don'?t)$/i.test(lower)) {
     return { kind: 'continuation', intent: 'cancel' };
   }
 
