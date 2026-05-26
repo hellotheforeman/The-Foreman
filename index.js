@@ -729,7 +729,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const suggestion = await openJobsSuggestion(business.id);
         return twimlReply(res, suggestion
           ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Who do you want to invoice? Type a name or say *jobs* to see what's on.`
+          : `Who do you want to invoice? Type a name or say *open* to see what's on.`
         );
       }
       // Numeric selection from a presented list
@@ -788,7 +788,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, suggestion
           ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Who do you want to invoice? Type a name or say *jobs* to see what's on.`
+          : `Who do you want to invoice? Type a name or say *open* to see what's on.`
         );
       }
 
