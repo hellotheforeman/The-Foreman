@@ -8,6 +8,10 @@ function toTitleCase(str) {
   return String(str).replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
 
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
+
 // --- Settings helpers (menu shown by handleSettings; flow processed in index.js) ---
 
 const SETTINGS_FIELDS = [
@@ -209,7 +213,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\nSend it when you're happy 👍`,
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}`,
       pdfUrl
     );
   } catch (err) {
@@ -237,7 +241,7 @@ async function handlePaid(intent, res) {
         const m = matched[0];
         const vatDisplay = business?.vat_registered ? (Number(m.amount) * 1.20).toFixed(2) : Number(m.amount).toFixed(2);
         await db.markInvoicePaid(m.id);
-        return messenger.twimlReply(res, `💰 £${vatDisplay} from ${m.customer_name} marked as paid. Nice one!`);
+        return messenger.twimlReply(res, `💰 £${vatDisplay} from ${m.customer_name} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
       }
 
       if (matched.length > 1) {
@@ -269,7 +273,7 @@ async function handlePaid(intent, res) {
   const paidJob = await db.getJobWithCustomer(intent.jobId, business.id);
   const paidVatDisplay = business?.vat_registered ? (Number(invoice.amount) * 1.20).toFixed(2) : Number(invoice.amount).toFixed(2);
   await db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `💰 £${paidVatDisplay} from ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} marked as paid. Nice one!`);
+  messenger.twimlReply(res, `💰 £${paidVatDisplay} from ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
 }
 
 async function handleSendInvoice(intent, res) {
@@ -322,7 +326,7 @@ async function handleSendInvoice(intent, res) {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\nLet me know when they've paid up.`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`,
       pdfUrl
     );
   } catch (err) {
@@ -330,7 +334,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\nLet me know when they've paid up.`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
     );
   }
 }
@@ -859,16 +863,29 @@ async function handleMarkComplete(intent, res) {
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
     res,
-    `💰 ${job.customer.name} marked paid. Nice one!\n\nIf the work went well, I can put together a review request — just ask.`
+    `💰 ${job.customer.name} marked paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}\n\nIf the work went well, I can put together a review request — just ask.`
   );
 }
 
 async function handleGreeting(intent, res) {
-  messenger.twimlReply(res, `Alright 👍 What do you need?`);
+  const hour = new Date().getHours();
+  const timeGreeting = hour < 12 ? 'Morning' : hour < 17 ? 'Afternoon' : 'Evening';
+  const replies = [
+    `${timeGreeting} 👍 What do you need?`,
+    `${timeGreeting}! What can I sort for you?`,
+    `${timeGreeting} — what's on?`,
+  ];
+  messenger.twimlReply(res, replies[Math.floor(Math.random() * replies.length)]);
 }
 
 async function handleThanks(intent, res) {
-  messenger.twimlReply(res, `No problem. 👍`);
+  const replies = [
+    `No problem. 👍`,
+    `Any time.`,
+    `You're welcome — shout if you need anything else.`,
+    `Easy. Let me know when you need me.`,
+  ];
+  messenger.twimlReply(res, replies[Math.floor(Math.random() * replies.length)]);
 }
 
 async function handleFeedback(intent, res) {
@@ -920,7 +937,12 @@ async function handleCancel(intent, res) {
 }
 
 async function handleUnknown(intent, res) {
-  messenger.twimlReply(res, `Not sure what you mean — try saying it a different way.`);
+  const replies = [
+    `Not quite sure what you mean — try *help* to see what I can do.`,
+    `Didn't get that one. Say *help* if you need a hand.`,
+    `Not sure about that — try rephrasing, or say *help* to see your options.`,
+  ];
+  messenger.twimlReply(res, replies[Math.floor(Math.random() * replies.length)]);
 }
 
 // Builds a helpful "job not found" message with open jobs listed if available.
