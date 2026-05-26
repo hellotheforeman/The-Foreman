@@ -71,12 +71,6 @@ function generatePdf({ type, docNumber, date, business, customer, lineItems, pay
 
     let leftY = doc.y;
 
-    if (business?.trade) {
-      doc.font('Helvetica').fontSize(10).fillColor('#666666')
-        .text(business.trade, L, leftY, { width: mid - L - 10 });
-      leftY = doc.y;
-    }
-
     const contactLine = [business?.email, business?.phone].filter(Boolean).join('  ·  ');
     if (contactLine) {
       doc.font('Helvetica').fontSize(9).fillColor('#888888')
