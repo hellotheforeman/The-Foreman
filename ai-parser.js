@@ -141,7 +141,7 @@ INTENT GUIDE:
 - mark_complete: "complete 14", "done 14", "mark job 14 as done"
 - add_note: "note on job 14: customer wants callback"
 - update_customer: "update Patel's phone to 07700900456"
-- unpaid: "unpaid", "outstanding invoices"
+- unpaid: "unpaid", "outstanding invoices", "how many days ago did I invoice [name]", "how long since I sent [name]'s invoice", "when did I invoice [name]", "how many days ago" (when asking about invoice age) — use jobRef for name references
 - open_jobs: "jobs", "open jobs", "pipeline"
 - jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs", "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "what's been invoiced", "invoices out" → status=invoiced
 - view_job: "job 14", "show me job 3"
