@@ -156,7 +156,7 @@ async function handleNewJob(intent, res) {
   const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
   messenger.twimlReply(
     res,
-    `✅ ${db.formatJobId(job.id)} created\n` +
+    `✅ Added\n` +
     `👤 ${customer.name} — ${details}\n` +
     `🔧 ${toTitleCase(job.description)}\n\n` +
     `Let me know when you're ready to put a quote together.`
@@ -245,7 +245,7 @@ async function handlePaid(intent, res) {
       }
 
       if (matched.length > 1) {
-        const list = matched.map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`).join('\n');
+        const list = matched.map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
         return messenger.twimlReply(res, `Which invoice for ${intent.name}?\n\n${list}`);
       }
     }
@@ -253,7 +253,7 @@ async function handlePaid(intent, res) {
     if (!allUnpaid.length) return messenger.twimlReply(res, `No unpaid invoices. 🎉`);
 
     const list = allUnpaid.slice(0, 5)
-      .map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`)
+      .map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`)
       .join('\n');
     return messenger.twimlReply(res, `Which invoice got paid?\n\n${list}`);
   }
@@ -263,8 +263,8 @@ async function handlePaid(intent, res) {
     const suggestion = await unpaidSuggestion(business.id);
     return messenger.twimlReply(res,
       suggestion
-        ? `No invoice found for ${db.formatJobId(intent.jobId)}. Here's what's outstanding:\n\n${suggestion}`
-        : `No invoice found for ${db.formatJobId(intent.jobId)}. Send one first with *invoice ${intent.jobId}*.`
+        ? `No invoice found. Here's what's outstanding:\n\n${suggestion}`
+        : `No invoice found. Send one first with *invoice ${intent.jobId}*.`
     );
   }
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `Already marked as paid.`);
@@ -273,7 +273,7 @@ async function handlePaid(intent, res) {
   const paidJob = await db.getJobWithCustomer(intent.jobId, business.id);
   const paidVatDisplay = business?.vat_registered ? (Number(invoice.amount) * 1.20).toFixed(2) : Number(invoice.amount).toFixed(2);
   await db.markInvoicePaid(invoice.id);
-  messenger.twimlReply(res, `💰 £${paidVatDisplay} from ${paidJob?.customer?.name || db.formatJobId(intent.jobId)} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
+  messenger.twimlReply(res, `💰 £${paidVatDisplay} from ${paidJob?.customer?.name || 'that one'} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
 }
 
 async function handleSendInvoice(intent, res) {
@@ -303,7 +303,7 @@ async function handleSendInvoice(intent, res) {
     } else {
       return messenger.twimlReply(
         res,
-        `❌ No amount set for ${db.formatJobId(job.id)}.\n\nUse: *invoice ${job.id} 450 description*`
+        `❌ No amount set for ${job.customer?.name || 'that one'}.\n\nUse: *invoice ${job.id} 450 description*`
       );
     }
 
@@ -351,11 +351,11 @@ async function handleAmend(intent, res) {
     const suggestion = await unpaidSuggestion(business.id);
     return messenger.twimlReply(res,
       suggestion
-        ? `No invoice found for ${db.formatJobId(intent.jobId)}. Here's what's outstanding:\n\n${suggestion}`
-        : `No invoice found for ${db.formatJobId(intent.jobId)}. Send one first with *invoice ${intent.jobId}*.`
+        ? `No invoice found. Here's what's outstanding:\n\n${suggestion}`
+        : `No invoice found. Send one first with *invoice ${intent.jobId}*.`
     );
   }
-  if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is already paid — can't amend it.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `❌ That invoice is already paid — can't amend it.`);
 
   if (intent.amount == null || Number(intent.amount) <= 0) {
     return messenger.twimlReply(
@@ -414,7 +414,7 @@ async function handleChase(intent, res) {
       }
 
       if (matched.length > 1) {
-        const list = matched.map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`).join('\n');
+        const list = matched.map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
         return messenger.twimlReply(res, `Which invoice for ${ref}?\n\n${list}`);
       }
     }
@@ -425,8 +425,8 @@ async function handleChase(intent, res) {
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
-  if (!invoice) return messenger.twimlReply(res, `No invoice found for ${db.formatJobId(job.id)}. Send one first.`);
-  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${db.formatJobId(job.id)} is already paid.`);
+  if (!invoice) return messenger.twimlReply(res, `No invoice found for ${job.customer.name}. Send one first.`);
+  if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${job.customer.name} is already paid.`);
 
   const msg = templates.paymentReminder(job, invoice, job.customer, business);
   messenger.twimlReply(res, `Here's a reminder for ${job.customer.name} — forward it over when you're ready:\n\n${msg}`);
@@ -478,7 +478,7 @@ async function handleCancelJob(intent, res) {
   if (job.status === 'cancelled') return messenger.twimlReply(res, `That one's already cancelled.`);
 
   await db.cancelJob(intent.jobId, business.id);
-  const name = job.customer?.name || db.formatJobId(intent.jobId);
+  const name = job.customer?.name || 'that one';
   messenger.twimlReply(res, `Dropped — ${name} won't show up in future reminders.`);
 }
 
@@ -489,7 +489,7 @@ async function handleAddNote(intent, res) {
   const job = await db.appendJobNote(intent.jobId, business.id, intent.note);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
-  messenger.twimlReply(res, `📝 Got it — note saved on ${db.formatJobId(intent.jobId)}.`);
+  messenger.twimlReply(res, `📝 Got it — note saved on ${job?.customer?.name || 'that one'}.`);
 }
 
 async function handleSettings(intent, res) {
@@ -718,7 +718,7 @@ async function handleOpenJobs(intent, res) {
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
-    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary} (${db.deriveStatus(j)})`;
+    return `• ${j.customer_name} — ${summary} (${db.deriveStatus(j)})`;
   });
   messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}`);
 }
@@ -769,7 +769,7 @@ async function handleFind(intent, res) {
       const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
       const date = formatShortDate(j.sort_date);
-      return `  - ${date} ${db.formatJobId(j.id)}: ${toTitleCase(j.description)}${amount} (${status})`;
+      return `  - ${date} ${toTitleCase(j.description)}${amount} (${status})`;
     });
     const contactParts = [c.phone, c.email, c.address].filter(Boolean);
     results.push(
@@ -791,7 +791,7 @@ async function handleViewJob(intent, res) {
   const invoice = await db.getInvoiceByJob(intent.jobId, business.id);
 
   const c = job.customer;
-  const lines = [`*${db.formatJobId(job.id)} — ${toTitleCase(job.description)}*`];
+  const lines = [`*${job.customer.name} — ${toTitleCase(job.description)}*`];
 
   const contactParts = [c.phone, c.email, c.address].filter(Boolean);
   lines.push(`${c.name}${contactParts.length ? ' · ' + contactParts.join(' · ') : ''}`);
@@ -841,7 +841,7 @@ async function handleJobsByStatus(intent, res) {
       const datePart = days !== null ? ` (${days} day${days === 1 ? '' : 's'} ago)` : '';
       return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
     }
-    return `• ${db.formatJobId(j.id)} — ${j.customer_name}, ${summary}`;
+    return `• ${j.customer_name} — ${summary}`;
   });
 
   const footer = intent.status === 'quoted'
@@ -857,8 +857,8 @@ async function handleMarkComplete(intent, res) {
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
-  if (job.status === 'paid') return messenger.twimlReply(res, `${db.formatJobId(intent.jobId)} is already paid.`);
-  if (job.status === 'cancelled') return messenger.twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} is cancelled.`);
+  if (job.status === 'paid') return messenger.twimlReply(res, `${job.customer.name} is already paid.`);
+  if (job.status === 'cancelled') return messenger.twimlReply(res, `❌ ${job.customer.name} is cancelled.`);
 
   await db.markJobComplete(intent.jobId, business.id);
   messenger.twimlReply(
@@ -947,11 +947,10 @@ async function handleUnknown(intent, res) {
 
 // Builds a helpful "job not found" message with open jobs listed if available.
 async function jobNotFoundMsg(jobId, business) {
-  const label = db.formatJobId(jobId);
   const suggestion = await openJobsSuggestion(business.id);
   return suggestion
-    ? `${label} not found. Here are your open jobs:\n\n${suggestion}`
-    : `${label} not found. Say *jobs* to see what's on.`;
+    ? `Couldn't find that one. Here are your open ones:\n\n${suggestion}`
+    : `Couldn't find that one. Say *jobs* to see what's on.`;
 }
 
 // Returns a formatted list of unpaid invoices, or null if none.
@@ -959,7 +958,7 @@ async function unpaidSuggestion(businessId) {
   const invoices = await db.getUnpaidInvoices(businessId);
   if (!invoices.length) return null;
   return invoices.slice(0, 5)
-    .map(i => `• ${db.formatJobId(i.job_id)} — ${i.customer_name}, £${Number(i.amount).toFixed(2)}`)
+    .map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`)
     .join('\n');
 }
 

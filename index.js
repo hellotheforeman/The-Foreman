@@ -304,7 +304,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Guides the user through quick vs itemised, then dispatches to handleQuote.
     if (!currentState && intent.intent === 'quote' && intent.jobId && intent.amount == null) {
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+      if (!job) return twimlReply(res, `❌ Couldn't find that one.`);
 
       if (job.quoted_amount) {
         const quotedStr = `£${Number(job.quoted_amount).toFixed(2)}`;
@@ -773,6 +773,53 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice by name ---
 
+    // --- View job by name ---
+    if (!currentState && intent.intent === 'view_job' && !intent.jobId && intent.jobRef) {
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
+      if (resolved.status === 'resolved') {
+        return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
+      }
+      if (resolved.status === 'multiple') {
+        const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        await setConversationState(business.id, {
+          workflow: 'view_job_pick',
+          focus: {},
+          collected: { jobs: resolved.jobs.slice(0, 5) },
+          pending: { type: 'selection', field: 'jobId' },
+          options: resolved.jobs.slice(0, 5),
+        });
+        return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
+      }
+      return twimlReply(res, `Can't find anything for "${intent.jobRef}" — say *jobs* to see what's on.`);
+    }
+
+    if (currentState?.workflow === 'view_job_pick') {
+      const trimmed = body.trim();
+      const jobs = currentState.collected?.jobs || [];
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      if (intent.kind === 'command') {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+      if (jobs.length) {
+        const n = parseInt(trimmed, 10);
+        if (n >= 1 && n <= jobs.length) {
+          await clearConversationState(business.id);
+          return dispatch({ kind: 'query', intent: 'view_job', jobId: jobs[n - 1].id, business }, res);
+        }
+      }
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
+      if (resolved.status === 'resolved') {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'query', intent: 'view_job', jobId: resolved.job.id, business }, res);
+      }
+      return twimlReply(res, `Pick a number from the list above, or say *cancel*.`);
+    }
+    // --- End view job by name ---
+
     // --- Invoice guided workflow ---
     // Triggered when: "invoice 14" — no amount provided.
     // Checks for existing quote and guides accordingly.
@@ -793,7 +840,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+      if (!job) return twimlReply(res, `❌ Couldn't find that one.`);
 
       // If invoice already exists, just resend it — no need to guide
       const existingInvoice = await db.getInvoiceByJob(job.id, business.id);
@@ -1018,7 +1065,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         return twimlReply(res, `Pick a number from the list above.`);
       }
-      return twimlReply(res, `Can't find a job for "${trimmed}" — say *jobs* if you want to see what's on.`);
+      return twimlReply(res, `Can't find anything for "${trimmed}" — say *jobs* if you want to see what's on.`);
     }
     // --- End amend with context ---
 
@@ -1209,10 +1256,10 @@ async function routeAmend(jobId, business, res) {
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
   if (invoice?.status === 'PAID') {
-    return twimlReply(res, `❌ ${db.formatJobId(job.id)} is already paid — can't amend it.`);
+    return twimlReply(res, `❌ ${job.customer?.name || 'That one'} is already paid — can't amend it.`);
   }
   if (!job.quoted_amount && !invoice) {
-    return twimlReply(res, `No quote on file for ${job.customer?.name || db.formatJobId(job.id)} yet — send one first and then you can amend it.`);
+    return twimlReply(res, `No quote on file for ${job.customer?.name || 'that one'} yet — send one first and then you can amend it.`);
   }
 
   await setConversationState(business.id, {
@@ -1237,7 +1284,7 @@ async function routeAmend(jobId, business, res) {
 // Routes directly to price/items amendment (skips menu — used when option 1 is selected).
 async function routeAmendPrice(jobId, business, res) {
   const job = await db.getJobWithCustomer(jobId, business.id);
-  if (!job) return twimlReply(res, `Couldn't find that job.`);
+  if (!job) return twimlReply(res, `Couldn't find that one.`);
 
   const invoice = await db.getInvoiceByJob(job.id, business.id);
   if (invoice) {

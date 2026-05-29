@@ -244,7 +244,7 @@ async function run(sql, params = []) {
 }
 
 function formatJobId(id) {
-  return `Job ${id}`;
+  return `#${String(id).padStart(4, '0')}`;
 }
 
 // --- Customer queries ---
