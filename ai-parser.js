@@ -144,7 +144,7 @@ INTENT GUIDE:
 - unpaid: "unpaid", "outstanding invoices", "how many days ago did I invoice [name]", "how long since I sent [name]'s invoice", "when did I invoice [name]", "how many days ago" (when asking about invoice age) — use jobRef for name references
 - open_jobs: "jobs", "open jobs", "pipeline"
 - jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs", "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "what's been invoiced", "invoices out" → status=invoiced; "completed jobs", "done jobs", "finished jobs", "show me my completed jobs", "what jobs have I finished", "jobs I've done" → status=paid
-- view_job: "job 14", "show me job 3", "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "show me the Smith job", "details for Darren" — use jobRef for name references
+- view_job: "job 14", "show me job 3", "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "show me the Smith job", "details for Darren", "show me Darren's quote", "show me the quote for Smith", "show me Darren's invoice", "what's the quote for Patel", "pull up the invoice for Mrs Smith" — use jobRef for name references
 - find: "find Mrs Patel", "look up Smith", "search for Patel", "do I have a customer called Smith", "have I worked for Darren before"
 - list_customers: "customers", "all my customers", "show me my customers"
 - earnings: "earnings", "how much have I made this month", "what have I turned over", "how much has come in this week", "what did I earn last month", "how much did I make this year"
