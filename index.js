@@ -775,7 +775,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     // --- View job by name ---
     if (!currentState && intent.intent === 'view_job' && !intent.jobId && intent.jobRef) {
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
         return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
       }
@@ -811,7 +811,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return dispatch({ kind: 'query', intent: 'view_job', jobId: jobs[n - 1].id, business }, res);
         }
       }
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
         await clearConversationState(business.id);
         return dispatch({ kind: 'query', intent: 'view_job', jobId: resolved.job.id, business }, res);

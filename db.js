@@ -479,6 +479,45 @@ async function findLikelyOpenJobs(businessId, query) {
   });
 }
 
+async function findAllJobsByCustomerName(businessId, query) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND LOWER(c.name) LIKE '%' || LOWER($2) || '%'
+     ORDER BY j.created_at DESC LIMIT 10`,
+    [businessId, query]
+  );
+}
+
+async function findAllJobsByDescription(businessId, query) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+     FROM jobs j JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1 AND j.status != 'cancelled'
+       AND LOWER(j.description) LIKE '%' || LOWER($2) || '%'
+     ORDER BY j.created_at DESC LIMIT 10`,
+    [businessId, query]
+  );
+}
+
+async function findLikelyAnyJobs(businessId, query) {
+  const trimmed = (query || '').trim();
+  if (!trimmed) return [];
+
+  const [byName, byDescription] = await Promise.all([
+    findAllJobsByCustomerName(businessId, trimmed),
+    findAllJobsByDescription(businessId, trimmed),
+  ]);
+
+  const seen = new Set();
+  return [...byName, ...byDescription].filter((job) => {
+    if (seen.has(job.id)) return false;
+    seen.add(job.id);
+    return true;
+  });
+}
+
 // --- Invoice queries ---
 
 async function createInvoice(businessId, jobId, amount, lineItems, lineItemsJson) {
@@ -848,6 +887,9 @@ module.exports = {
   findOpenJobsByCustomerName,
   findJobsByDescription,
   findLikelyOpenJobs,
+  findAllJobsByCustomerName,
+  findAllJobsByDescription,
+  findLikelyAnyJobs,
   createInvoice,
   updateInvoice,
   getInvoiceByJob,

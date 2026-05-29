@@ -29,15 +29,17 @@ function rankCandidateJobs(jobs, query) {
   });
 }
 
-async function findCandidateJobs({ businessId, query }) {
+async function findCandidateJobs({ businessId, query, includeAll = false }) {
   const trimmed = (query || '').trim();
   if (!trimmed) return [];
 
-  const jobs = await db.findLikelyOpenJobs(businessId, trimmed);
+  const jobs = includeAll
+    ? await db.findLikelyAnyJobs(businessId, trimmed)
+    : await db.findLikelyOpenJobs(businessId, trimmed);
   return rankCandidateJobs(jobs, trimmed);
 }
 
-async function resolveSingleJobReference({ businessId, parsedIntent, raw, state }) {
+async function resolveSingleJobReference({ businessId, parsedIntent, raw, state, includeAll = false }) {
   if (parsedIntent?.jobId) {
     const job = await db.getJobWithCustomer(parsedIntent.jobId, businessId);
     return job ? { status: 'resolved', job } : { status: 'missing', job: null, jobs: [] };
@@ -49,7 +51,7 @@ async function resolveSingleJobReference({ businessId, parsedIntent, raw, state 
   }
 
   const query = extractReferenceText({ parsedIntent, raw, state });
-  const candidates = await findCandidateJobs({ businessId, query });
+  const candidates = await findCandidateJobs({ businessId, query, includeAll });
 
   if (candidates.length === 1) {
     return { status: 'resolved', job: candidates[0] };
