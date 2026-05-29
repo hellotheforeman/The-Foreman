@@ -134,20 +134,20 @@ INTENT GUIDE:
 - send_invoice: "invoice job 14", "invoice Mrs Patel 450"
 - amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote"
 - amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14"
-- paid: "paid 14", "job 14 paid", "mark 14 as paid", "Joe Duck paid", "Joe Duck now paid" (extract name)
-- chase: "chase 14", "send reminder for job 14"
+- paid: "paid 14", "job 14 paid", "mark 14 as paid", "Joe Duck paid", "Joe Duck now paid", "Darren's paid up", "just got paid by Smith", "payment received from Patel", "money's in from Darren" — extract name into jobRef where given
+- chase: "chase 14", "send reminder for job 14", "chase Darren", "send Darren a reminder", "nudge Smith about his invoice", "follow up with Patel", "chase up Mrs Smith" — use jobRef for name references
 - review: "review 14", "ask Patel for a review"
 - cancel_job: "cancel job 14", "cancel the quote for Mrs Smith", "cancel quote for Bob", "lost the Smith job", "didn't get that one", "not getting the boiler job", "drop the quote for Patel" — use jobRef for name references
-- mark_complete: "complete 14", "done 14", "mark job 14 as done"
-- add_note: "note on job 14: customer wants callback"
+- mark_complete: "complete 14", "done 14", "mark job 14 as done", "Darren's done", "finished the boiler job", "all done for Smith", "wrapped up with Patel", "job's done for Mrs Smith" — use jobRef for name references
+- add_note: "note on job 14: customer wants callback", "add a note for Darren", "make a note on Smith's job", "note for Patel: wants early start", "add a note: customer called" — use jobRef for name references, put note text in note field
 - update_customer: "update Patel's phone to 07700900456"
 - unpaid: "unpaid", "outstanding invoices", "how many days ago did I invoice [name]", "how long since I sent [name]'s invoice", "when did I invoice [name]", "how many days ago" (when asking about invoice age) — use jobRef for name references
 - open_jobs: "jobs", "open jobs", "pipeline"
 - jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs", "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "what's been invoiced", "invoices out" → status=invoiced
-- view_job: "job 14", "show me job 3"
-- find: "find Mrs Patel", "look up Smith"
+- view_job: "job 14", "show me job 3", "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "show me the Smith job", "details for Darren" — use jobRef for name references
+- find: "find Mrs Patel", "look up Smith", "search for Patel", "do I have a customer called Smith", "have I worked for Darren before"
 - list_customers: "customers", "all my customers", "show me my customers"
-- earnings: "earnings", "how much have I made this month"
+- earnings: "earnings", "how much have I made this month", "what have I turned over", "how much has come in this week", "what did I earn last month", "how much did I make this year"
 - financial_summary: "how's business", "stats", "how am I doing", "give me an overview", "how have I done in last 3 months" — overview of all stats for a period; set period accordingly
 - conversion_rate: "what's my conversion rate", "how many quotes am I winning", "how many quotes convert"
 - avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
