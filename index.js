@@ -299,187 +299,13 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End settings workflow ---
 
-    // --- Quote guided workflow ---
-    // Triggered when: "quote 14" — job ID known but no amount/items provided.
-    // Guides the user through quick vs itemised, then dispatches to handleQuote.
-    if (!currentState && intent.intent === 'quote' && intent.jobId && intent.amount == null) {
-      const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ Couldn't find that one.`);
-
-      if (job.quoted_amount) {
-        const quotedStr = `£${Number(job.quoted_amount).toFixed(2)}`;
-        await setConversationState(business.id, {
-          workflow: 'quote_guided',
-          focus: { jobId: job.id },
-          collected: {
-            jobId: job.id,
-            quoted_amount: Number(job.quoted_amount),
-            quote_items: job.quote_items || null,
-            quote_line_items_json: job.quote_line_items_json || null,
-          },
-          pending: { type: 'choice', field: 'quote_mode' },
-          options: [],
-        });
-        return twimlReply(res,
-          `📋 *${job.description}* — ${job.customer.name}\n\n` +
-          `There's already a quote for *${quotedStr}*. What would you like to do?\n\n` +
-          `1. Resend existing quote\n` +
-          `2. Amend the quote\n` +
-          `3. Start from scratch\n\n` +
-          `Reply with 1, 2 or 3.`
-        );
-      }
-
-      await setConversationState(business.id, {
-        workflow: 'quote_guided',
-        focus: { jobId: job.id },
-        collected: { jobId: job.id },
-        pending: { type: 'choice', field: 'quote_type' },
-        options: [],
-      });
-      return twimlReply(res,
-        `📋 *${job.description}* — ${job.customer.name}\n\n` +
-        `How do you want to quote this?\n\n` +
-        `1. Quick — one price\n` +
-        `2. Detailed — break it down (e.g. labour 250, parts 100)`
-      );
-    }
-
-    if (currentState?.workflow === 'quote_guided') {
-      const trimmed = body.trim();
-
-      if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
-        await clearConversationState(business.id);
-        return twimlReply(res, 'No problem — quote dropped.');
-      }
-
-      if (isWorkflowInterrupt(intent)) {
-        await clearConversationState(business.id);
-        return dispatch({ ...intent, business }, res);
-      }
-
-      if (currentState.pending?.field === 'quote_mode') {
-        const n = parseInt(trimmed, 10);
-        if (!n || n < 1 || n > 3) {
-          return twimlReply(res, 'Reply with 1, 2 or 3.');
-        }
-        if (n === 1) {
-          // Resend existing quote as-is
-          await clearConversationState(business.id);
-          return dispatch({
-            kind: 'command', intent: 'quote',
-            jobId: currentState.focus.jobId,
-            amount: currentState.collected.quoted_amount,
-            items: currentState.collected.quote_items || null,
-            lineItems: currentState.collected.quote_line_items_json || null,
-            business,
-          }, res);
-        }
-        if (n === 2) {
-          // Amend — show existing items for easy editing
-          const currentItemsStr = formatItemsForCopy(
-            currentState.collected.quote_line_items_json,
-            currentState.collected.quote_items,
-            currentState.collected.quoted_amount
-          );
-          await setConversationState(business.id, {
-            ...currentState,
-            pending: { type: 'field', field: 'amend_items' },
-          });
-          return twimlReplyPair(
-            res,
-            `What do you want to change it to? It currently shows:`,
-            currentItemsStr
-          );
-        }
-        // Option 3 — start fresh
-        await setConversationState(business.id, {
-          ...currentState,
-          collected: { jobId: currentState.focus.jobId },
-          pending: { type: 'choice', field: 'quote_type' },
-        });
-        return twimlReply(res,
-          `How do you want to quote this?\n\n` +
-          `1. Quick — one price\n` +
-          `2. Detailed — break it down (e.g. labour 250, parts 100)`
-        );
-      }
-
-      if (currentState.pending?.field === 'amend_items') {
-        let lineItems = parseLineItems(trimmed);
-        if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) {
-          lineItems = null; // "Total £480" copy-back — treat as plain amount
-        }
-        if (lineItems) {
-          const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
-          await clearConversationState(business.id);
-          return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: trimmed, lineItems, business }, res);
-        }
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) {
-          // Try stripping a leading "Total" label: "Total £480" or "Total 480"
-          const totalM = trimmed.match(/^total\s+£?(\d+(?:\.\d{1,2})?)\s*$/i);
-          if (totalM) {
-            await clearConversationState(business.id);
-            return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(totalM[1]), items: null, lineItems: null, business }, res);
-          }
-          return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
-        }
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
-      }
-
-      if (currentState.pending?.field === 'quote_type') {
-        const n = parseInt(trimmed, 10);
-        if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply 1 for a quick quote or 2 to break it down.');
-        }
-        if (n === 1) {
-          await setConversationState(business.id, {
-            ...currentState,
-            collected: { ...currentState.collected, quote_type: 'quick' },
-            pending: { type: 'field', field: 'amount' },
-          });
-          return twimlReply(res, 'What\'s the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).');
-        } else {
-          await setConversationState(business.id, {
-            ...currentState,
-            collected: { ...currentState.collected, quote_type: 'itemised' },
-            pending: { type: 'field', field: 'items' },
-          });
-          return twimlReply(res, 'List the items, separated by commas:\n\n*Boiler service 250, Parts 45, Callout fee 50*');
-        }
-      }
-
-      if (currentState.pending?.field === 'amount') {
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, 'What\'s the price? (e.g. *450*)');
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.collected.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
-      }
-
-      if (currentState.pending?.field === 'items') {
-        const lineItems = parseLineItems(trimmed);
-        if (!lineItems) {
-          return twimlReply(res, "Couldn't read those items — make sure each one has a description and a price:\n*Boiler service 250, Parts 45*");
-        }
-        const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.collected.jobId, amount, items: trimmed, lineItems, business }, res);
-      }
-
-      await clearConversationState(business.id);
-      return twimlReply(res, 'No problem — quote dropped.');
-    }
-    // --- End quote guided workflow ---
-
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.
     // If the user was mid-way through an unrelated flow (e.g. new_customer), clear it so
     // the quote flow can start fresh rather than falling through to the workflow engine.
     if (intent.intent === 'quote' && !intent.jobId && intent.amount == null
-        && currentState && !['quote_flow', 'quote_guided', 'quote_focus'].includes(currentState.workflow)) {
+        && currentState && !['quote_flow', 'quote_focus'].includes(currentState.workflow)) {
       await clearConversationState(business.id);
       currentState = null;
     }
@@ -981,6 +807,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return dispatch({ kind: 'command', intent: 'amend_invoice', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
       }
 
+      // Amend existing quote price — re-dispatches to quote handler
+      if (currentState.pending?.field === 'amend_existing_quote') {
+        let lineItems = parseLineItems(trimmed);
+        if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) lineItems = null;
+        const m = !lineItems && trimmed.match(/^(?:total\s+)?£?(\d+(?:\.\d{1,2})?)\s*$/i);
+        if (!lineItems && !m) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
+        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : parseFloat(m[1]);
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
+      }
+
       // Collect amount for amend or manual (accepts single amount or line items)
       if (currentState.pending?.field === 'amend_items' || currentState.pending?.field === 'manual_amount') {
         let lineItems = parseLineItems(trimmed);
@@ -1314,7 +1151,7 @@ async function routeAmendPrice(jobId, business, res) {
 
   const currentItemsStr = formatItemsForCopy(job.quote_line_items_json, job.quote_items, job.quoted_amount);
   await setConversationState(business.id, {
-    workflow: 'quote_guided',
+    workflow: 'invoice_guided',
     focus: { jobId: job.id },
     collected: {
       jobId: job.id,
@@ -1322,7 +1159,7 @@ async function routeAmendPrice(jobId, business, res) {
       quote_items: job.quote_items || null,
       quote_line_items_json: job.quote_line_items_json || null,
     },
-    pending: { type: 'field', field: 'amend_items' },
+    pending: { type: 'field', field: 'amend_existing_quote' },
     options: [],
   });
   return twimlReplyPair(res, `What do you want to change it to? It currently shows:`, currentItemsStr);
