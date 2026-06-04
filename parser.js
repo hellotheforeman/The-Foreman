@@ -95,63 +95,6 @@ function parse(raw) {
   // Normalise "requote", "re-quote", "update quote" → treated identically to "quote"
   const normalisedForQuote = text.replace(/^(?:re-?quote|update\s+quote)\s+/i, 'quote ');
 
-  // Quick: "quote 42 85" or "quote job 42 £85 boiler service"
-  const quoteQuickMatch = normalisedForQuote.match(
-    /^quote\s+(?:job\s+)?#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(?:for\s+)?(.*)$/i
-  );
-  if (quoteQuickMatch) {
-    const desc = quoteQuickMatch[3].trim();
-    const amount = parseFloat(quoteQuickMatch[2]);
-    const lineItems = desc ? [{ description: desc, amount }] : null;
-    return {
-      kind: 'command',
-      intent: 'quote',
-      jobId: parseInt(quoteQuickMatch[1], 10),
-      amount,
-      items: desc || null,
-      lineItems,
-    };
-  }
-
-  // Itemised: "quote 14 boiler service 250 | parts 45" or "quote job 14 service 250"
-  const quoteItemisedMatch = normalisedForQuote.match(/^quote\s+(?:job\s+)?#?(\d+)\s+(.+)$/i);
-  if (quoteItemisedMatch) {
-    const itemsStr = quoteItemisedMatch[2].trim();
-    const lineItems = parseLineItems(itemsStr);
-    if (lineItems) {
-      return {
-        kind: 'command',
-        intent: 'quote',
-        jobId: parseInt(quoteItemisedMatch[1], 10),
-        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
-        items: itemsStr,
-        lineItems,
-      };
-    }
-    // Has job ID but no parseable amounts — workflow will prompt for amount
-    return {
-      kind: 'command',
-      intent: 'quote',
-      jobId: parseInt(quoteItemisedMatch[1], 10),
-      amount: null,
-      items: itemsStr,
-      lineItems: null,
-    };
-  }
-
-  // Job ID only — no amount or items: "quote 14" or "quote job 14" → triggers guided workflow
-  const quoteJustIdMatch = normalisedForQuote.toLowerCase().match(/^quote\s+(?:job\s+)?#?(\d+)\s*$/);
-  if (quoteJustIdMatch) {
-    return {
-      kind: 'command',
-      intent: 'quote',
-      jobId: parseInt(quoteJustIdMatch[1], 10),
-      amount: null,
-      items: null,
-      lineItems: null,
-    };
-  }
-
   // "create a quote for Mrs Smith", "quote for Mrs Smith", "send a quote to Mrs Smith"
   const quoteForMatch = normalisedForQuote.match(/^(?:create\s+a?\s*quote\s+(?:for|to)|quote\s+for|send\s+a?\s*quote\s+(?:for|to))\s+(.+)$/i);
   if (quoteForMatch) {
@@ -166,38 +109,24 @@ function parse(raw) {
     };
   }
 
-  // Name/partial reference: "quote wood" — workflow engine resolves to a job
+  // "quote Mrs Smith" or bare "quote"
   const quoteNameMatch = normalisedForQuote.match(/^quote\s+(.+)$/i);
   if (quoteNameMatch) {
     return {
       kind: 'command',
       intent: 'quote',
       jobId: null,
+      jobRef: quoteNameMatch[1].trim(),
       amount: null,
-      items: quoteNameMatch[1].trim(),
+      items: null,
       lineItems: null,
     };
   }
-
-  // --- Schedule / Book ---
-  // "schedule 42 thursday 9am", "book 14 friday at 10", "book job 14 for 2 days from tuesday"
-  const scheduleMatch = text.match(
-    /^(?:book(?:\s+job)?|schedule)\s+#?(\d+)\s+(.+)$/i
-  );
-  if (scheduleMatch) {
-    const { date, time, duration, durationUnit } = parseDatetime(scheduleMatch[2].trim());
-    return {
-      kind: 'command',
-      intent: 'schedule',
-      jobId: parseInt(scheduleMatch[1], 10),
-      date,
-      time,
-      duration: duration || null,
-      durationUnit: durationUnit || null,
-      raw: scheduleMatch[2].trim(),
-    };
+  if (/^quote\s*$/i.test(normalisedForQuote)) {
+    return { kind: 'command', intent: 'quote', jobId: null, jobRef: null, amount: null, items: null, lineItems: null };
   }
 
+  // --- Schedule / Book ---
   // "schedule thursday 9am", "schedule Mrs Patel thursday", "book boiler service friday 2pm"
   const scheduleNoIdMatch = text.match(/^(?:book(?:\s+job)?|schedule)\s+(.+)$/i);
   if (scheduleNoIdMatch) {
@@ -236,116 +165,55 @@ function parse(raw) {
   }
 
   // --- Paid ---
-  // "paid 42" or "paid #0042"
-  const paidMatch = lower.match(/^paid\s+#?(\d+)\s*$/);
-  if (paidMatch) {
-    return { kind: 'command', intent: 'paid', jobId: parseInt(paidMatch[1], 10) };
+  // "[name] paid" — "John Smith paid" or "John Smith has paid"
+  const paidSuffixMatch = text.match(/^(.+?)\s+(?:has\s+)?paid(?:\s+up|me)?\s*\.?\s*$/i);
+  if (paidSuffixMatch) {
+    return { kind: 'command', intent: 'paid', jobRef: paidSuffixMatch[1].trim(), jobId: null };
+  }
+  // "paid John Smith"
+  const paidNameMatch = lower.match(/^paid\s+(.+)$/);
+  if (paidNameMatch) {
+    return { kind: 'command', intent: 'paid', jobRef: paidNameMatch[1].trim(), jobId: null };
+  }
+  // bare "paid" — show unpaid list
+  if (/^paid\s*$/.test(lower)) {
+    return { kind: 'command', intent: 'paid', jobRef: null, jobId: null };
   }
 
   // --- Invoice (send) ---
-  // Quick with amount: "invoice 14 450" or "invoice 14 450 boiler service"
-  const invoiceQuickMatch = text.match(/^(?:send\s+)?invoice\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
-  if (invoiceQuickMatch) {
-    const desc = invoiceQuickMatch[3].trim();
-    const amount = parseFloat(invoiceQuickMatch[2]);
-    const lineItems = desc ? [{ description: desc, amount }] : null;
+  // "invoice John Smith" or "send invoice to John Smith"
+  const invoiceNameMatch = text.match(/^(?:send\s+)?invoice(?:\s+(?:for|to))?\s+(.+)$/i);
+  if (invoiceNameMatch) {
     return {
       kind: 'command',
       intent: 'send_invoice',
-      jobId: parseInt(invoiceQuickMatch[1], 10),
-      amount,
-      items: desc || null,
-      lineItems,
+      jobId: null,
+      jobRef: invoiceNameMatch[1].trim(),
+      amount: null,
+      items: null,
+      lineItems: null,
     };
   }
-
-  // Itemised: "invoice 14 boiler service 250 | parts 45"
-  const invoiceItemisedMatch = text.match(/^(?:send\s+)?invoice\s+#?(\d+)\s+(.+)$/i);
-  if (invoiceItemisedMatch) {
-    const itemsStr = invoiceItemisedMatch[2].trim();
-    const lineItems = parseLineItems(itemsStr);
-    if (lineItems) {
-      return {
-        kind: 'command',
-        intent: 'send_invoice',
-        jobId: parseInt(invoiceItemisedMatch[1], 10),
-        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
-        items: itemsStr,
-        lineItems,
-      };
-    }
-  }
-
-  // Simple: "invoice 42" or "send invoice 42" — creates from existing quote
-  const invoiceMatch = lower.match(/^(?:send\s+)?invoice\s+#?(\d+)\s*$/);
-  if (invoiceMatch) {
-    return { kind: 'command', intent: 'send_invoice', jobId: parseInt(invoiceMatch[1], 10) };
-  }
-
-  // --- Amend invoice ---
-  // "amend 14 450" or "amend 14 450 boiler service" or "amend 14 service 250 | parts 45"
-  const amendQuickMatch = text.match(/^amend(?:\s+invoice)?\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
-  if (amendQuickMatch) {
-    const desc = amendQuickMatch[3].trim();
-    const amount = parseFloat(amendQuickMatch[2]);
-    const lineItems = desc ? [{ description: desc, amount }] : null;
-    return {
-      kind: 'command',
-      intent: 'amend_invoice',
-      jobId: parseInt(amendQuickMatch[1], 10),
-      amount,
-      items: desc || null,
-      lineItems,
-    };
-  }
-
-  const amendItemisedMatch = text.match(/^amend(?:\s+invoice)?\s+#?(\d+)\s+(.+)$/i);
-  if (amendItemisedMatch) {
-    const itemsStr = amendItemisedMatch[2].trim();
-    const lineItems = parseLineItems(itemsStr);
-    if (lineItems) {
-      return {
-        kind: 'command',
-        intent: 'amend_invoice',
-        jobId: parseInt(amendItemisedMatch[1], 10),
-        amount: lineItems.reduce((sum, i) => sum + i.amount, 0),
-        items: itemsStr,
-        lineItems,
-      };
-    }
+  // bare "invoice"
+  if (/^(?:send\s+)?invoice\s*$/i.test(lower)) {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
   }
 
   // --- Chase ---
-  // "chase 42"
-  const chaseMatch = lower.match(/^chase\s+#?(\d+)\s*$/);
-  if (chaseMatch) {
-    return { kind: 'command', intent: 'chase', jobId: parseInt(chaseMatch[1], 10) };
+  // "chase John Smith"
+  const chaseNameMatch = text.match(/^chase(?:\s+up)?\s+(.+)$/i);
+  if (chaseNameMatch) {
+    return { kind: 'command', intent: 'chase', jobRef: chaseNameMatch[1].trim(), jobId: null };
   }
 
-  // --- Review request (ask customer for a review after job complete) ---
-  // "review 42", "follow up 42", "ask for review 42"
-  const reviewMatch = lower.match(/^(?:review|follow\s*up|ask\s+for\s+review)\s+#?(\d+)\s*$/);
-  if (reviewMatch) {
-    return { kind: 'command', intent: 'review', jobId: parseInt(reviewMatch[1], 10) };
+  // --- Review request ---
+  // "review John Smith", "follow up John Smith", "ask for review John Smith"
+  const reviewNameMatch = text.match(/^(?:review|follow\s*up|ask\s+for\s+review)\s+(.+)$/i);
+  if (reviewNameMatch) {
+    return { kind: 'command', intent: 'review', jobRef: reviewNameMatch[1].trim(), jobId: null };
   }
 
   // --- Reschedule ---
-  // "reschedule 14 to thursday 9am", "reschedule job 14 to Thursday at 9"
-  const rescheduleMatch = text.match(/^(?:reschedule|rebook|move)\s+(?:job\s+)?#?(\d+)\s+(?:to\s+)?(.+)$/i);
-  if (rescheduleMatch) {
-    const { date, time, duration, durationUnit } = parseDatetime(rescheduleMatch[2].trim());
-    return {
-      kind: 'command',
-      intent: 'reschedule',
-      jobId: parseInt(rescheduleMatch[1], 10),
-      date,
-      time,
-      duration: duration || null,
-      durationUnit: durationUnit || null,
-      raw: rescheduleMatch[2].trim(),
-    };
-  }
-
   // "reschedule Mrs Patel to friday", "move boiler service thursday 9am"
   const rescheduleNoIdMatch = text.match(/^(?:reschedule|rebook|move)\s+(?:job\s+)?(.+)$/i);
   if (rescheduleNoIdMatch) {

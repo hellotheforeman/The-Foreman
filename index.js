@@ -12,7 +12,7 @@ const workflowEngine = require('./workflow-engine');
 const templates = require('./templates');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
 const { parseWithAI } = require('./ai-parser');
-const { resolveSingleJobReference } = require('./entity-resolver');
+const { resolveSingleJobReference, extractReferenceText } = require('./entity-resolver');
 
 const twilio = require('twilio');
 const https = require('https');
@@ -294,195 +294,31 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End settings workflow ---
 
-    // --- Quote guided workflow ---
-    // Triggered when: "quote 14" — job ID known but no amount/items provided.
-    // Guides the user through quick vs itemised, then dispatches to handleQuote.
-    if (!currentState && intent.intent === 'quote' && intent.jobId && intent.amount == null) {
-      const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+    // --- Quote from scratch ---
+    // Triggered by any quote intent without a job ID — resolves customer/job by name.
+    // Guides through: (name →) phone → description → quick/detailed → amount.
+    if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.amount == null) {
+      const refText = intent.jobRef || extractReferenceText({ parsedIntent: intent, raw: body, state: null });
 
-      if (job.quoted_amount) {
-        const quotedStr = `£${Number(job.quoted_amount).toFixed(2)}`;
+      if (!refText) {
+        // Bare "quote" with no name — ask who
         await setConversationState(business.id, {
-          workflow: 'quote_guided',
-          focus: { jobId: job.id },
-          collected: {
-            jobId: job.id,
-            quoted_amount: Number(job.quoted_amount),
-            quote_items: job.quote_items || null,
-            quote_line_items_json: job.quote_line_items_json || null,
-          },
-          pending: { type: 'choice', field: 'quote_mode' },
+          workflow: 'quote_from_scratch',
+          focus: {},
+          collected: { step: 'customerName' },
+          pending: { type: 'field', field: 'customerName' },
           options: [],
         });
-        return twimlReply(res,
-          `📋 *${job.description}* — ${job.customer.name}\n\n` +
-          `There's already a quote for *${quotedStr}*. What would you like to do?\n\n` +
-          `1. Resend existing quote\n` +
-          `2. Amend the quote\n` +
-          `3. Start from scratch\n\n` +
-          `Reply *1*, *2*, or *3*, or *cancel* to dismiss.`
-        );
+        return twimlReply(res, `Who's the quote for?`);
       }
 
-      await setConversationState(business.id, {
-        workflow: 'quote_guided',
-        focus: { jobId: job.id },
-        collected: { jobId: job.id },
-        pending: { type: 'choice', field: 'quote_type' },
-        options: [],
-      });
-      return twimlReply(res,
-        `📋 *${job.description}* — ${job.customer.name}\n\n` +
-        `How do you want to quote this?\n\n` +
-        `1. Quick — one price\n` +
-        `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
-        `Reply *1* or *2*, or *cancel* to dismiss.`
-      );
-    }
-
-    if (currentState?.workflow === 'quote_guided') {
-      const trimmed = body.trim();
-
-      if (/^(cancel|no|back|exit|quit)$/i.test(trimmed)) {
-        await clearConversationState(business.id);
-        return twimlReply(res, 'Quote cancelled.');
-      }
-
-      if (isWorkflowInterrupt(intent)) {
-        await clearConversationState(business.id);
-        return dispatch({ ...intent, business }, res);
-      }
-
-      if (currentState.pending?.field === 'quote_mode') {
-        const n = parseInt(trimmed, 10);
-        if (!n || n < 1 || n > 3) {
-          return twimlReply(res, 'Reply *1*, *2*, or *3*, or *cancel* to dismiss.');
-        }
-        if (n === 1) {
-          // Resend existing quote as-is
-          await clearConversationState(business.id);
-          return dispatch({
-            kind: 'command', intent: 'quote',
-            jobId: currentState.focus.jobId,
-            amount: currentState.collected.quoted_amount,
-            items: currentState.collected.quote_items || null,
-            lineItems: currentState.collected.quote_line_items_json || null,
-            business,
-          }, res);
-        }
-        if (n === 2) {
-          // Amend — show existing items for easy editing
-          const currentItemsStr = formatItemsForCopy(
-            currentState.collected.quote_line_items_json,
-            currentState.collected.quote_items,
-            currentState.collected.quoted_amount
-          );
-          await setConversationState(business.id, {
-            ...currentState,
-            pending: { type: 'field', field: 'amend_items' },
-          });
-          return twimlReplyPair(
-            res,
-            `What should the quote show instead? Currently:`,
-            currentItemsStr
-          );
-        }
-        // Option 3 — start fresh
-        await setConversationState(business.id, {
-          ...currentState,
-          collected: { jobId: currentState.focus.jobId },
-          pending: { type: 'choice', field: 'quote_type' },
-        });
-        return twimlReply(res,
-          `How do you want to quote this?\n\n` +
-          `1. Quick — one price\n` +
-          `2. Detailed — break it down (e.g. labour 250, parts 100)\n\n` +
-          `Reply *1* or *2*, or *cancel* to dismiss.`
-        );
-      }
-
-      if (currentState.pending?.field === 'amend_items') {
-        let lineItems = parseLineItems(trimmed);
-        if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) {
-          lineItems = null; // "Total £480" copy-back — treat as plain amount
-        }
-        if (lineItems) {
-          const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
-          await clearConversationState(business.id);
-          return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: trimmed, lineItems, business }, res);
-        }
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) {
-          // Try stripping a leading "Total" label: "Total £480" or "Total 480"
-          const totalM = trimmed.match(/^total\s+£?(\d+(?:\.\d{1,2})?)\s*$/i);
-          if (totalM) {
-            await clearConversationState(business.id);
-            return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(totalM[1]), items: null, lineItems: null, business }, res);
-          }
-          return twimlReply(res, 'Please enter an amount, e.g. *450*, or items: *service 250, parts 45*');
-        }
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
-      }
-
-      if (currentState.pending?.field === 'quote_type') {
-        const n = parseInt(trimmed, 10);
-        if (n !== 1 && n !== 2) {
-          return twimlReply(res, 'Reply *1* for a quick quote or *2* for a detailed breakdown, or *cancel* to dismiss.');
-        }
-        if (n === 1) {
-          await setConversationState(business.id, {
-            ...currentState,
-            collected: { ...currentState.collected, quote_type: 'quick' },
-            pending: { type: 'field', field: 'amount' },
-          });
-          return twimlReply(res, 'What price should I use?');
-        } else {
-          await setConversationState(business.id, {
-            ...currentState,
-            collected: { ...currentState.collected, quote_type: 'itemised' },
-            pending: { type: 'field', field: 'items' },
-          });
-          return twimlReply(res, 'List your items:\n\n*Boiler service 250, Parts 45, Callout fee 50*\n\nSeparate each item with a comma.');
-        }
-      }
-
-      if (currentState.pending?.field === 'amount') {
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, 'Please enter a number, e.g. *450*');
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.collected.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
-      }
-
-      if (currentState.pending?.field === 'items') {
-        const lineItems = parseLineItems(trimmed);
-        if (!lineItems) {
-          return twimlReply(res, "I couldn't parse those items. Try:\n*Boiler service 250, Parts 45*\n\nEach item needs a description and an amount.");
-        }
-        const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
-        await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.collected.jobId, amount, items: trimmed, lineItems, business }, res);
-      }
-
-      await clearConversationState(business.id);
-      return twimlReply(res, 'Quote cancelled. Start again with *quote [job#]*.');
-    }
-    // --- End quote guided workflow ---
-
-    // --- Quote from scratch ---
-    // Triggered when: "create a quote for Mrs Smith" — no job ID, name reference only.
-    // If the customer/job can't be resolved, guides through: phone → description → quick/detailed → amount.
-    if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.jobRef && intent.amount == null) {
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: refText }, raw: body, state: null });
 
       if (resolved.status === 'resolved') {
-        // Job found — hand off to the normal quote guided flow
         return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
       }
 
       if (resolved.status === 'multiple') {
-        // Ambiguous — show picker
         const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
         await setConversationState(business.id, {
           workflow: 'quote_from_scratch',
@@ -494,8 +330,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
       }
 
-      // Missing — check if customer exists at all (just no open job)
-      const existingCustomers = await db.findCustomerByName(business.id, intent.jobRef);
+      // No open job — check if customer exists at all
+      const existingCustomers = await db.findCustomerByName(business.id, refText);
       if (existingCustomers.length === 1) {
         const c = existingCustomers[0];
         await setConversationState(business.id, {
@@ -508,15 +344,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, `Got it — what's the job for ${c.name}?`);
       }
 
-      // Truly new — need phone number first
+      // Truly new customer
       await setConversationState(business.id, {
         workflow: 'quote_from_scratch',
         focus: {},
-        collected: { step: 'phone', customerName: intent.jobRef },
+        collected: { step: 'phone', customerName: refText },
         pending: { type: 'field', field: 'phone' },
         options: [],
       });
-      return twimlReply(res, `I don't have ${intent.jobRef} on the system yet. What's their phone number?`);
+      return twimlReply(res, `I don't have ${refText} on the system yet. What's their phone number? (Or *skip* if you don't have it.)`);
     }
 
     if (currentState?.workflow === 'quote_from_scratch') {
@@ -545,13 +381,39 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: null, items: null, lineItems: null, business }, res);
       }
 
+      // Step: collect customer name (bare "quote" with no name given)
+      if (c.step === 'customerName') {
+        if (!trimmed || trimmed.length < 2) {
+          return twimlReply(res, `What's their name?`);
+        }
+        const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+        if (existingCustomers.length === 1) {
+          const customer = existingCustomers[0];
+          await setConversationState(business.id, {
+            ...currentState,
+            focus: { customerId: customer.id, customerName: customer.name },
+            collected: { step: 'description', customerId: customer.id, customerName: customer.name },
+            pending: { type: 'field', field: 'description' },
+            options: [],
+          });
+          return twimlReply(res, `Got it — what's the job for ${customer.name}?`);
+        }
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { step: 'phone', customerName: trimmed },
+          pending: { type: 'field', field: 'phone' },
+        });
+        return twimlReply(res, `I don't have ${trimmed} on the system yet. What's their phone number? (Or *skip* if you don't have it.)`);
+      }
+
       // Step: collect phone number for new customer
       if (c.step === 'phone') {
+        const isSkip = /^skip/i.test(trimmed);
         const stripped = trimmed.replace(/[\s\-().]/g, '');
-        if (!/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
-          return twimlReply(res, `That doesn't look like a valid UK mobile. What's their phone number?`);
+        if (!isSkip && !/^(\+44|0044|44|0)7\d{8,9}$/.test(stripped)) {
+          return twimlReply(res, `That doesn't look like a valid UK mobile. What's their phone number? (Or *skip* to continue without one.)`);
         }
-        const phone = normalisePhone(stripped);
+        const phone = isSkip ? null : normalisePhone(stripped);
         await setConversationState(business.id, {
           ...currentState,
           collected: { ...c, step: 'description', phone },
@@ -618,11 +480,28 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- End quote from scratch ---
 
     // --- Invoice guided workflow ---
-    // Triggered when: "invoice 14" — no amount provided.
-    // Checks for existing quote and guides accordingly.
+    // Triggered when "invoice [name]" — no amount provided.
+    // Resolves customer/job by name, then guides through quote-based or manual invoicing.
     if (!currentState && intent.intent === 'send_invoice' && intent.amount == null) {
-      const job = await db.getJobWithCustomer(intent.jobId, business.id);
-      if (!job) return twimlReply(res, `❌ ${db.formatJobId(intent.jobId)} not found.`);
+      let job;
+      if (intent.jobId) {
+        job = await db.getJobWithCustomer(intent.jobId, business.id);
+        if (!job) return twimlReply(res, `Job not found. Say *jobs* to see what's on.`);
+      } else {
+        if (!intent.jobRef) {
+          return twimlReply(res, `Who are you invoicing? Say *invoice John Smith*.`);
+        }
+        const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
+        if (resolved.status === 'multiple') {
+          const lines = resolved.jobs.slice(0, 5).map(j => `• ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+          return twimlReply(res, `Found a few open jobs — which one?\n\n${lines}\n\nBe more specific: *invoice John Smith extension*.`);
+        }
+        if (resolved.status !== 'resolved') {
+          return twimlReply(res, `No open job found for "${intent.jobRef}". Say *jobs* to see what's on.`);
+        }
+        job = await db.getJobWithCustomer(resolved.job.id, business.id);
+        if (!job) return twimlReply(res, `Job not found. Say *jobs* to see what's on.`);
+      }
 
       // If invoice already exists, just resend it — no need to guide
       const existingInvoice = await db.getInvoiceByJob(job.id, business.id);
@@ -776,7 +655,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       await clearConversationState(business.id);
-      return twimlReply(res, 'Invoice flow cancelled. Start again with *invoice [job#]*.');
+      return twimlReply(res, 'Invoice cancelled.');
     }
     // --- End invoice guided workflow ---
 
