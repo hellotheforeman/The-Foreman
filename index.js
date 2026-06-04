@@ -476,6 +476,13 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.
+    // If the user was mid-way through an unrelated flow (e.g. new_customer), clear it so
+    // the quote flow can start fresh rather than falling through to the workflow engine.
+    if (intent.intent === 'quote' && !intent.jobId && intent.amount == null
+        && currentState && !['quote_flow', 'quote_guided', 'quote_focus'].includes(currentState.workflow)) {
+      await clearConversationState(business.id);
+      currentState = null;
+    }
     if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.amount == null) {
       const { customerRef, prefilledDescription } = extractQuoteParts(intent);
 
@@ -693,6 +700,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- End invoice flow ---
 
     // --- Invoice by name ---
+    // Same guard — clear stale unrelated state so the invoice flow isn't bypassed.
+    if (intent.intent === 'send_invoice' && !intent.jobId
+        && currentState && !['invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus'].includes(currentState.workflow)) {
+      await clearConversationState(business.id);
+      currentState = null;
+    }
     if (!currentState && intent.intent === 'send_invoice' && !intent.jobId && intent.jobRef) {
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
       if (resolved.status === 'resolved') {
@@ -1479,7 +1492,16 @@ function formatAddress(raw) {
 //   intent.items is a plain name ("quote Mrs Smith")
 //   intent.items is a natural language sentence ("quote me a job for Mrs Smith to fit a kitchen")
 function extractQuoteParts(intent) {
-  if (intent.jobRef) return { customerRef: intent.jobRef, prefilledDescription: null };
+  if (intent.jobRef) {
+    // Strip "a new customer/client" prefix — users often say "quote for a new customer John Smith..."
+    const cleaned = intent.jobRef.replace(/^(?:a\s+)?new\s+(?:customer|client)\s+/i, '').trim();
+    // Extract name (1–3 title-case words) before a verb or preposition like "wants", "needs", "for", "who"
+    const verbSplit = cleaned.match(/^([A-Z][a-zA-Z'-]+(?:\s+[A-Z][a-zA-Z'-]+){0,2})\s+(?:wants?|needs?|who\s|to\s|for\s)/i);
+    if (verbSplit) {
+      return { customerRef: verbSplit[1].trim(), prefilledDescription: cleaned.slice(verbSplit[0].length).trim() };
+    }
+    return { customerRef: cleaned, prefilledDescription: null };
+  }
 
   if (!intent.items || parseLineItems(intent.items)) return { customerRef: null, prefilledDescription: null };
 
