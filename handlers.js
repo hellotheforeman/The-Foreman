@@ -323,19 +323,21 @@ async function handleSendInvoice(intent, res) {
   const invDisplay = business?.vat_registered ? (invNet * 1.20).toFixed(2) : invNet.toFixed(2);
   const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
+  const bankNudge = business?.payment_details ? '' : `\n\n⚠️ No bank details set — your customer won't know how to pay. Say *settings* to add them.`;
+
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`,
       pdfUrl
     );
   } catch (err) {
-    console.error('Invoice PDF generation failed:', err.message);
+    console.error('Invoice PDF generation failed:', err.message, err.cause || '');
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`
     );
   }
 }

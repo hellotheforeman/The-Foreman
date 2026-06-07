@@ -1183,28 +1183,21 @@ function formatItemsForCopy(lineItemsJson, quoteItems, quotedAmount) {
 // ---------------------------------------------------------------------------
 
 const ONBOARDING_STEPS = [
-  { key: 'business_name',   label: 'Business name',   required: true,  prompt: `What's your business name?` },
-  { key: 'trade',           label: 'Trade',            required: false, prompt: `What's your trade?` },
-  { key: 'email',           label: 'Email',            required: false, prompt: `What's your business email? This goes on your quotes and invoices.` },
-  { key: 'address',         label: 'Address',          required: false, prompt: `What's your business address? This goes on your quotes and invoices.` },
-  { key: 'bank',            label: 'Bank details',     required: false, prompt: `To include payment details on your invoices, what's your sort code?` },
-  { key: 'payment_days',    label: 'Payment terms',    required: false, prompt: `How many days do you give customers to pay an invoice? (e.g. 14 or 30 — default is 14)` },
-  { key: 'vat',             label: 'VAT',              required: false, prompt: `Are you VAT registered? Reply *yes* or *no*.` },
-  { key: 'logo',            label: 'Logo',             required: false, prompt: `Last one — send your business logo as a photo and it'll appear on all your quotes and invoices.` },
+  { key: 'business_name', label: 'Business name', required: true, prompt: `What's your business name?` },
 ];
 
 const ONBOARDING_WELCOME = `*Welcome to The Foreman 👋*
 
-Quotes, invoices and payment tracking — all sorted from WhatsApp, without the faff.
+Free WhatsApp assistant for tradespeople — send quotes and invoices, track jobs and chase payments, all from this chat.
 
-Quick setup first. You can skip anything and come back to it later.`;
+No app to download, no subscription.`;
 
 async function handleOnboarding({ business, body, mediaUrl, res }) {
   const trimmed = (body || '').trim();
   const state = await getConversationState(business.id);
   const step = state?.collected?.onboardingStep || 0;
 
-  // First ever message — show welcome and start step 0
+  // First ever message — send welcome and first question as two separate messages
   if (!state || state.workflow !== 'onboarding') {
     await setConversationState(business.id, {
       workflow: 'onboarding',
@@ -1213,7 +1206,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
       pending: { type: 'field', field: 'onboarding' },
       options: [],
     });
-    return twimlReply(res, `${ONBOARDING_WELCOME}\n\n${ONBOARDING_STEPS[0].prompt}`);
+    return twimlReplyPair(res, ONBOARDING_WELCOME, ONBOARDING_STEPS[0].prompt);
   }
 
   const current = ONBOARDING_STEPS[step];
@@ -1312,7 +1305,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
   // All steps done — mark as onboarded
   await db.updateBusiness(business.id, { onboarded: true });
   await clearConversationState(business.id);
-  return twimlReply(res, `That's you set up. 🎉\n\nWhenever you're ready, just tell me what you need — quote, invoice, chase payment, whatever you need, I got it!`);
+  return twimlReply(res, `Got it — you're all set. 🎉\n\nJust tell me what you need. To send a quote say *Quote*, for an invoice say *Invoice*, or say *Help* to see everything I can do.`);
 }
 
 // ---------------------------------------------------------------------------
