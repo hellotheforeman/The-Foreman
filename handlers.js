@@ -107,6 +107,7 @@ const queryHandlers = {
   avg_payment_time: handleAvgPaymentTime,
   settings: handleSettings,
   help: handleHelp,
+  pricing: handlePricing,
   greeting: handleGreeting,
   thanks: handleThanks,
 };
@@ -906,6 +907,13 @@ async function handleFeedback(intent, res) {
   const recentMessages = await db.getRecentMessages(business.id, 5);
   await db.saveFeedback(business.id, intent.message, recentMessages.reverse());
   messenger.twimlReply(res, `Thanks — feedback noted! 👍`);
+}
+
+async function handlePricing(intent, res) {
+  messenger.twimlReply(
+    res,
+    `💷 *The Foreman is completely free.*\n\nNo subscription, no hidden charges.\n\nTo get started, just say *Quote*, *Invoice*, or *Help* to see everything it can do.`
+  );
 }
 
 async function handleHelp(intent, res) {

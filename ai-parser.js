@@ -37,7 +37,7 @@ const DISPATCH_TOOL = {
             'unpaid', 'open_jobs',
             'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings',
             'financial_summary', 'conversion_rate', 'avg_payment_time',
-            'settings', 'help',
+            'settings', 'help', 'pricing',
             'greeting', 'thanks',
           ],
           description: 'The specific intent identified from the message.',
@@ -153,7 +153,8 @@ INTENT GUIDE:
 - avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
 PERIOD EXAMPLES: "last 3 months" → last_3_months, "last 90 days" → last_90_days, "last quarter" → last_3_months, "this year" → year, "this week" → week
 - settings: "settings", "change my business name"
-- help: "help", "what can you do"`;
+- help: "help", "what can you do"
+- pricing: "how much does this cost", "is this free", "what's the price", "how much is The Foreman", "does it cost money", "is there a subscription", "do I have to pay"`;
 }
 
 async function parseWithAI(rawMessage) {
