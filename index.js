@@ -302,6 +302,67 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End settings workflow ---
 
+    // --- VAT gate ---
+    // If VAT status has never been set, collect it before creating any financial document.
+    if ((business.vat_registered === null || business.vat_registered === undefined)
+        && (intent.intent === 'quote' || intent.intent === 'send_invoice')
+        && currentState?.workflow !== 'vat_gate'
+        && !['quote_flow', 'quote_focus', 'invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus'].includes(currentState?.workflow)) {
+      await setConversationState(business.id, {
+        workflow: 'vat_gate',
+        focus: {},
+        collected: {
+          pendingIntent: {
+            kind: intent.kind, intent: intent.intent,
+            jobId: intent.jobId || null, jobRef: intent.jobRef || null,
+            amount: intent.amount != null ? intent.amount : null,
+            items: intent.items || null, lineItems: intent.lineItems || null,
+            name: intent.name || null,
+          },
+        },
+        pending: { type: 'field', field: 'vat_registered' },
+        options: [],
+      });
+      return twimlReply(res, `Quick one before I put this together — are you VAT registered? Reply *yes* or *no*.`);
+    }
+
+    if (currentState?.workflow === 'vat_gate') {
+      const trimmed = body.trim();
+
+      if (currentState.pending?.field === 'vat_registered') {
+        const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
+        const isNo = /^(no|n|nope|nah)$/i.test(trimmed);
+        if (!isYes && !isNo) {
+          return twimlReply(res, `Reply *yes* if you're VAT registered, or *no* if not.`);
+        }
+        await db.updateBusiness(business.id, { vat_registered: isYes, ...(isNo && { vat_number: null }) });
+        business = { ...business, vat_registered: isYes };
+        if (isYes) {
+          await setConversationState(business.id, {
+            ...currentState,
+            pending: { type: 'field', field: 'vat_number' },
+          });
+          return twimlReply(res, `What's your VAT number? Reply *skip* to continue without it for now.`);
+        }
+        const pending = currentState.collected?.pendingIntent;
+        await clearConversationState(business.id);
+        return pending ? dispatch({ ...pending, business }, res) : twimlReply(res, `Got it — not VAT registered.`);
+      }
+
+      if (currentState.pending?.field === 'vat_number') {
+        const isSkip = /^skip$/i.test(trimmed);
+        if (!isSkip) await db.updateBusiness(business.id, { vat_number: trimmed });
+        business = { ...business, vat_number: isSkip ? null : trimmed };
+        const pending = currentState.collected?.pendingIntent;
+        await clearConversationState(business.id);
+        return pending ? dispatch({ ...pending, business }, res) : twimlReply(res, `Got it — VAT number saved.`);
+      }
+
+      await clearConversationState(business.id);
+      return twimlReply(res, `Something went wrong — what did you need?`);
+    }
+    // --- End VAT gate ---
+
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.

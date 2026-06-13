@@ -164,6 +164,12 @@ async function handleNewJob(intent, res) {
   );
 }
 
+function getQuoteProfileNudge(business) {
+  if (!business.trade) return `\n\n💡 Add your trade (e.g. Plumber, Electrician) and it'll appear on all your quotes — say *settings* to update.`;
+  if (!business.logo_path) return `\n\n💡 Upload a logo to make your quotes look more professional — say *settings* to add one.`;
+  return '';
+}
+
 async function handleQuote(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
@@ -201,6 +207,7 @@ async function handleQuote(intent, res) {
   const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
   const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
   const label = isReQuote ? 'Re-quoted' : 'Quote';
+  const profileNudge = isReQuote ? '' : getQuoteProfileNudge(business);
 
   await setConversationState(business.id, {
     workflow: 'quote_focus',
@@ -214,7 +221,7 @@ async function handleQuote(intent, res) {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}`,
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}${profileNudge}`,
       pdfUrl
     );
   } catch (err) {
@@ -222,7 +229,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍${profileNudge}`
     );
   }
 }
@@ -324,13 +331,12 @@ async function handleSendInvoice(intent, res) {
   const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
   const bankNudge = business?.payment_details ? '' : `\n\n⚠️ No bank details set — your customer won't know how to pay. Say *settings* to add them.`;
-  const vatNudge = (business?.vat_registered !== null && business?.vat_registered !== undefined) ? '' : `\n\n💡 VAT status not set — say *settings* to confirm whether you're VAT registered so invoices show the right figures.`;
 
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}${vatNudge}`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`,
       pdfUrl
     );
   } catch (err) {
@@ -338,7 +344,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}${vatNudge}`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`
     );
   }
 }
