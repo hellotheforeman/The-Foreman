@@ -208,6 +208,7 @@ async function init() {
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS payment_days INTEGER NOT NULL DEFAULT 14');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS profile_setup_prompted BOOLEAN NOT NULL DEFAULT false');
   await pool.query('ALTER TABLE businesses ALTER COLUMN contact_name DROP NOT NULL');
   // Mark all existing businesses as already onboarded — new column, existing users should skip the wizard
   await pool.query("UPDATE businesses SET onboarded = true WHERE onboarded = false AND created_at < NOW() - INTERVAL '1 minute'");
@@ -608,6 +609,10 @@ async function getUnpaidInvoices(businessId) {
 
 // --- Update helpers ---
 
+async function markProfileSetupPrompted(id) {
+  await pool.query('UPDATE businesses SET profile_setup_prompted = true, updated_at = NOW() WHERE id = $1', [id]);
+}
+
 async function updateBusiness(id, fields) {
   const allowed = ['name', 'business_name', 'trade', 'email', 'phone', 'address', 'payment_details', 'contact_name', 'logo_path', 'vat_registered', 'vat_number', 'onboarded', 'payment_days'];
   const updates = [];
@@ -900,6 +905,7 @@ module.exports = {
   getUnpaidInvoices,
   getEarningsSummary,
   updateBusiness,
+  markProfileSetupPrompted,
   updateJob,
   appendJobNote,
   updateCustomer,

@@ -164,10 +164,12 @@ async function handleNewJob(intent, res) {
   );
 }
 
-function getProfileNudge(business) {
-  if (!business.trade) return `\n\n💡 Add your trade (e.g. Plumber, Electrician) and it'll appear on all your quotes and invoices — say *settings* to update.`;
-  if (!business.logo_path) return `\n\n💡 Upload a logo to make your documents look more professional — say *settings* to add one.`;
-  return '';
+function pendingSetupFields(business) {
+  return ['trade', 'email', 'address', 'logo_path'].filter(f => !business[f]);
+}
+
+function hasProfileGaps(business) {
+  return pendingSetupFields(business).length > 0;
 }
 
 async function handleQuote(intent, res) {
@@ -207,9 +209,16 @@ async function handleQuote(intent, res) {
   const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
   const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
   const label = isReQuote ? 'Re-quoted' : 'Quote';
-  const profileNudge = isReQuote ? '' : getProfileNudge(business);
 
-  await setConversationState(business.id, {
+  const shouldOfferSetup = !isReQuote && !business.profile_setup_prompted && hasProfileGaps(business);
+
+  await setConversationState(business.id, shouldOfferSetup ? {
+    workflow: 'profile_setup_offered',
+    focus: {},
+    collected: { fields: pendingSetupFields(business) },
+    pending: { type: 'field', field: 'response' },
+    options: [],
+  } : {
     workflow: 'quote_focus',
     focus: { jobId: job.id },
     collected: {},
@@ -217,11 +226,19 @@ async function handleQuote(intent, res) {
     options: [],
   });
 
+  if (shouldOfferSetup) {
+    await db.markProfileSetupPrompted(business.id);
+    messenger.sendToForeman(
+      `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
+      { businessId: business.id, businessPhone: business.phone }
+    ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+  }
+
   try {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}${profileNudge}`,
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}`,
       pdfUrl
     );
   } catch (err) {
@@ -229,7 +246,7 @@ async function handleQuote(intent, res) {
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(
       res,
-      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍${profileNudge}`
+      `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
     );
   }
 }
@@ -335,7 +352,15 @@ async function handleSendInvoice(intent, res) {
     invoice = await db.createInvoice(business.id, job.id, amount, lineItemsStr, lineItemsJson);
   }
 
-  await setConversationState(business.id, {
+  const shouldOfferSetup = isNewInvoice && !business.profile_setup_prompted && hasProfileGaps(business);
+
+  await setConversationState(business.id, shouldOfferSetup ? {
+    workflow: 'profile_setup_offered',
+    focus: {},
+    collected: { fields: pendingSetupFields(business) },
+    pending: { type: 'field', field: 'response' },
+    options: [],
+  } : {
     workflow: 'invoice_focus',
     focus: { jobId: job.id },
     collected: {},
@@ -343,16 +368,23 @@ async function handleSendInvoice(intent, res) {
     options: [],
   });
 
+  if (shouldOfferSetup) {
+    await db.markProfileSetupPrompted(business.id);
+    messenger.sendToForeman(
+      `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
+      { businessId: business.id, businessPhone: business.phone }
+    ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+  }
+
   const invNet = Number(invoice.amount);
   const invDisplay = business?.vat_registered ? (invNet * 1.20).toFixed(2) : invNet.toFixed(2);
   const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
-  const profileNudge = isNewInvoice ? getProfileNudge(business) : '';
 
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${profileNudge}`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`,
       pdfUrl
     );
   } catch (err) {
@@ -360,7 +392,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${profileNudge}`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
     );
   }
 }

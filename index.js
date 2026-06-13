@@ -87,6 +87,13 @@ app.get('/', (req, res) => {
  * The bot never messages customers — it drafts messages for the
  * tradesperson to copy and send from their own WhatsApp.
  */
+const SETUP_QUESTIONS = {
+  trade:    `What's your trade? (e.g. Plumber, Electrician, Builder)\n\nReply *skip* to do this later.`,
+  email:    `What's your email address?\n\nReply *skip* to do this later.`,
+  address:  `What's your business address?\n\nReply *skip* to do this later.`,
+  logo_path: `Last one — send your logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.`,
+};
+
 app.post('/webhook', validateTwilioSignature, async (req, res) => {
   try {
     const from = (req.body.From || '').replace('whatsapp:', '');
@@ -389,6 +396,81 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Something went wrong — what did you need?`);
     }
     // --- End bank details gate ---
+
+    // --- Profile setup offered ---
+    // Sent as a proactive second message after first quote/invoice. Handles the yes/skip response.
+    if (currentState?.workflow === 'profile_setup_offered') {
+      const trimmed = body.trim();
+      const fields = currentState.collected?.fields || [];
+
+      if (/^(yes|y|yep|yeah)$/i.test(trimmed)) {
+        await setConversationState(business.id, {
+          workflow: 'profile_setup',
+          focus: {},
+          collected: { fields },
+          pending: { type: 'field', field: fields[0] },
+          options: [],
+        });
+        return twimlReply(res, SETUP_QUESTIONS[fields[0]]);
+      }
+
+      await clearConversationState(business.id);
+      if (/^(skip|no|nope|later|not now)$/i.test(trimmed)) {
+        return twimlReply(res, `No problem — you can update your profile any time by saying *settings*.`);
+      }
+      // Any other message (e.g. "jobs", "quote for Smith") — dispatch it normally
+      return dispatch({ ...intent, business }, res);
+    }
+
+    // --- Profile setup flow ---
+    if (currentState?.workflow === 'profile_setup') {
+      const trimmed = body.trim();
+      const fields = currentState.collected?.fields || [];
+      const currentField = fields[0];
+
+      if (!currentField) {
+        await clearConversationState(business.id);
+        return twimlReply(res, `All set — your profile is updated. 🎉 It'll show on all your quotes and invoices.`);
+      }
+
+      const isSkip = /^skip$/i.test(trimmed);
+
+      if (currentField === 'logo_path') {
+        if (!isSkip && !mediaUrl) {
+          return twimlReply(res, `Please send your logo as a photo, or say *skip* to do it later.`);
+        }
+        if (!isSkip && mediaUrl) {
+          try {
+            const buffer = await downloadToBuffer(mediaUrl);
+            const ext = detectImageExt(buffer);
+            if (!ext) {
+              return twimlReply(res, `That file type isn't supported — please send a JPEG or PNG, or say *skip*.`);
+            }
+            const logoUrl = await uploadLogo(business.id, buffer, ext);
+            await db.updateBusiness(business.id, { logo_path: logoUrl });
+          } catch (err) {
+            console.error('Profile setup logo upload failed:', err);
+            return twimlReply(res, `Couldn't save that image — try again or say *skip*.`);
+          }
+        }
+      } else if (!isSkip) {
+        await db.updateBusiness(business.id, { [currentField]: trimmed });
+      }
+
+      const remaining = fields.slice(1);
+      if (!remaining.length) {
+        await clearConversationState(business.id);
+        return twimlReply(res, `All set — your profile is updated. 🎉 It'll show on all your quotes and invoices.`);
+      }
+
+      await setConversationState(business.id, {
+        ...currentState,
+        collected: { fields: remaining },
+        pending: { type: 'field', field: remaining[0] },
+      });
+      return twimlReply(res, SETUP_QUESTIONS[remaining[0]]);
+    }
+    // --- End profile setup ---
 
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
