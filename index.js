@@ -363,6 +363,33 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End VAT gate ---
 
+    // --- Bank details gate ---
+    if (currentState?.workflow === 'bank_gate') {
+      const trimmed = body.trim();
+
+      if (currentState.pending?.field === 'sort_code') {
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { ...currentState.collected, sortCode: trimmed },
+          pending: { type: 'field', field: 'account_number' },
+        });
+        return twimlReply(res, `And the account number?`);
+      }
+
+      if (currentState.pending?.field === 'account_number') {
+        const { sortCode, pendingIntent } = currentState.collected;
+        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${trimmed}`;
+        await db.updateBusiness(business.id, { payment_details: paymentDetails });
+        business = { ...business, payment_details: paymentDetails };
+        await clearConversationState(business.id);
+        return pendingIntent ? dispatch({ ...pendingIntent, business }, res) : twimlReply(res, `Bank details saved.`);
+      }
+
+      await clearConversationState(business.id);
+      return twimlReply(res, `Something went wrong — what did you need?`);
+    }
+    // --- End bank details gate ---
+
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.

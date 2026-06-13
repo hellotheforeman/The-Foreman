@@ -164,9 +164,9 @@ async function handleNewJob(intent, res) {
   );
 }
 
-function getQuoteProfileNudge(business) {
-  if (!business.trade) return `\n\n💡 Add your trade (e.g. Plumber, Electrician) and it'll appear on all your quotes — say *settings* to update.`;
-  if (!business.logo_path) return `\n\n💡 Upload a logo to make your quotes look more professional — say *settings* to add one.`;
+function getProfileNudge(business) {
+  if (!business.trade) return `\n\n💡 Add your trade (e.g. Plumber, Electrician) and it'll appear on all your quotes and invoices — say *settings* to update.`;
+  if (!business.logo_path) return `\n\n💡 Upload a logo to make your documents look more professional — say *settings* to add one.`;
   return '';
 }
 
@@ -207,7 +207,7 @@ async function handleQuote(intent, res) {
   const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
   const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
   const label = isReQuote ? 'Re-quoted' : 'Quote';
-  const profileNudge = isReQuote ? '' : getQuoteProfileNudge(business);
+  const profileNudge = isReQuote ? '' : getProfileNudge(business);
 
   await setConversationState(business.id, {
     workflow: 'quote_focus',
@@ -291,7 +291,26 @@ async function handleSendInvoice(intent, res) {
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
+  // Gate: bank details required before creating an invoice
+  if (!business.payment_details) {
+    await setConversationState(business.id, {
+      workflow: 'bank_gate',
+      focus: {},
+      collected: {
+        pendingIntent: {
+          kind: 'command', intent: 'send_invoice',
+          jobId: intent.jobId, amount: intent.amount != null ? intent.amount : null,
+          items: intent.items || null, lineItems: intent.lineItems || null,
+        },
+      },
+      pending: { type: 'field', field: 'sort_code' },
+      options: [],
+    });
+    return messenger.twimlReply(res, `Before I create this invoice — what's your sort code? (e.g. 12-34-56)\n\nYour customers need your bank details to pay you.`);
+  }
+
   let invoice = await db.getInvoiceByJob(job.id, business.id);
+  const isNewInvoice = !invoice;
   if (!invoice) {
     let amount, lineItemsStr, lineItemsJson;
 
@@ -299,12 +318,10 @@ async function handleSendInvoice(intent, res) {
       if (Number(intent.amount) <= 0) {
         return messenger.twimlReply(res, `That doesn't look right — what's the price?`);
       }
-      // Amount given explicitly in command
       amount = intent.amount;
       lineItemsStr = intent.items || null;
       lineItemsJson = intent.lineItems || null;
     } else if (job.quoted_amount) {
-      // Invoice from existing quote — copy quote data
       amount = job.quoted_amount;
       lineItemsStr = job.quote_items || job.description;
       lineItemsJson = job.quote_line_items_json || null;
@@ -329,14 +346,13 @@ async function handleSendInvoice(intent, res) {
   const invNet = Number(invoice.amount);
   const invDisplay = business?.vat_registered ? (invNet * 1.20).toFixed(2) : invNet.toFixed(2);
   const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
-
-  const bankNudge = business?.payment_details ? '' : `\n\n⚠️ No bank details set — your customer won't know how to pay. Say *settings* to add them.`;
+  const profileNudge = isNewInvoice ? getProfileNudge(business) : '';
 
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
     messenger.twimlReplyWithMedia(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`,
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${profileNudge}`,
       pdfUrl
     );
   } catch (err) {
@@ -344,7 +360,7 @@ async function handleSendInvoice(intent, res) {
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
     messenger.twimlReply(
       res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${bankNudge}`
+      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}${profileNudge}`
     );
   }
 }
