@@ -140,7 +140,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     let intent = parse(body);
     if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending')) {
-      const aiResult = await parseWithAI(body);
+      const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
       if (aiResult) {
         if (aiResult.type === 'reply') return twimlReply(res, aiResult.message);
         intent = aiResult;

@@ -127,7 +127,7 @@ const REPLY_TOOL = {
   },
 };
 
-function buildSystemPrompt(today) {
+function buildSystemPrompt(today, userStatus = 'Unknown.') {
   return `You are an intent parser for The Foreman — a WhatsApp business assistant for UK sole traders (plumbers, electricians, builders, decorators etc.).
 
 Today's date is ${today}. The week starts on Monday.
@@ -183,11 +183,17 @@ TOOL CHOICE:
 - Use reply_directly ONLY for open-ended product questions or general conversation that don't map to any intent above — e.g. "how does quoting work?", "can you send invoices to customers?", "what's the point of this?", "who is this for?". Never give tax or legal advice. Never compare to competitors.
 
 PRODUCT CONTEXT (for reply_directly only):
-${FOREMAN_CONTEXT}`;
+${FOREMAN_CONTEXT}
+
+USER STATUS:
+${userStatus}`;
 }
 
-async function parseWithAI(rawMessage) {
+async function parseWithAI(rawMessage, userContext = {}) {
   const today = new Date().toISOString().split('T')[0];
+  const userStatus = userContext.onboarded
+    ? `Already set up on The Foreman as "${userContext.businessName}". If they ask how to get started or sign up, tell them they're already set up and point them to what they can do instead (e.g. quote, invoice, jobs, help).`
+    : 'Not yet set up.';
 
   try {
     const openai = getClient();
@@ -195,7 +201,7 @@ async function parseWithAI(rawMessage) {
     const response = await openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: buildSystemPrompt(today) },
+        { role: 'system', content: buildSystemPrompt(today, userStatus) },
         { role: 'user', content: rawMessage },
       ],
       tools: [DISPATCH_TOOL, REPLY_TOOL],

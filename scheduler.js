@@ -5,6 +5,15 @@ const { setConversationState } = require('./conversation-state');
 
 const TZ = { timezone: 'Europe/London' };
 
+function getProfileTip(business) {
+  if (!business.trade) return `Tip: add your trade (e.g. Plumber, Electrician) so it appears on your quotes and invoices — say *settings*.`;
+  if (!business.email) return `Tip: add your email address so it appears on your documents — say *settings*.`;
+  if (!business.address) return `Tip: add your business address so it appears on your quotes and invoices — say *settings*.`;
+  if (!business.logo_path) return `Tip: upload a logo to make your quotes and invoices look more professional — say *settings*.`;
+  if (!business.payment_days) return `Tip: set your payment terms (e.g. 14 days) so invoices show when payment is due — say *settings*.`;
+  return null;
+}
+
 function toTitleCase(str) {
   return (str || '').replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
 }
@@ -76,6 +85,9 @@ function start() {
           }
 
           lines.push('', 'Let me know if any of these have paid or if you need me to draft a chaser.');
+
+          const profileTip = getProfileTip(business);
+          if (profileTip) lines.push('', `💡 ${profileTip}`);
 
           await messenger.sendToForeman(lines.join('\n'), { businessId: business.id, businessPhone: business.phone });
 
