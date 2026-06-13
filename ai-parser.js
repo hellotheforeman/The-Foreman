@@ -1,4 +1,8 @@
 const OpenAI = require('openai');
+const fs = require('fs');
+const path = require('path');
+
+const FOREMAN_CONTEXT = fs.readFileSync(path.join(__dirname, 'foreman-context.md'), 'utf8');
 
 let client = null;
 
@@ -105,6 +109,24 @@ const DISPATCH_TOOL = {
   },
 };
 
+const REPLY_TOOL = {
+  type: 'function',
+  function: {
+    name: 'reply_directly',
+    description: 'Send a plain-English reply to a general question about The Foreman (what it does, pricing, features, how to sign up, etc.). Only use this when the message cannot be mapped to a specific intent.',
+    parameters: {
+      type: 'object',
+      properties: {
+        message: {
+          type: 'string',
+          description: 'The reply to send to the tradesperson. Keep it brief and friendly.',
+        },
+      },
+      required: ['message'],
+    },
+  },
+};
+
 function buildSystemPrompt(today) {
   return `You are an intent parser for The Foreman — a WhatsApp business assistant for UK sole traders (plumbers, electricians, builders, decorators etc.).
 
@@ -154,7 +176,14 @@ INTENT GUIDE:
 PERIOD EXAMPLES: "last 3 months" → last_3_months, "last 90 days" → last_90_days, "last quarter" → last_3_months, "this year" → year, "this week" → week
 - settings: "settings", "change my business name"
 - help: "help", "what can you do"
-- pricing: "how much does this cost", "is this free", "what's the price", "how much is The Foreman", "does it cost money", "is there a subscription", "do I have to pay"`;
+- pricing: "how much does this cost", "is this free", "what's the price", "how much is The Foreman", "does it cost money", "is there a subscription", "do I have to pay"
+
+TOOL CHOICE:
+- Use dispatch_intent for anything the tradesperson wants to DO or QUERY (actions, data lookups, settings, help, pricing).
+- Use reply_directly ONLY for open-ended product questions or general conversation that don't map to any intent above — e.g. "how does quoting work?", "can you send invoices to customers?", "what's the point of this?", "who is this for?". Never give tax or legal advice. Never compare to competitors.
+
+PRODUCT CONTEXT (for reply_directly only):
+${FOREMAN_CONTEXT}`;
 }
 
 async function parseWithAI(rawMessage) {
@@ -169,8 +198,8 @@ async function parseWithAI(rawMessage) {
         { role: 'system', content: buildSystemPrompt(today) },
         { role: 'user', content: rawMessage },
       ],
-      tools: [DISPATCH_TOOL],
-      tool_choice: { type: 'function', function: { name: 'dispatch_intent' } },
+      tools: [DISPATCH_TOOL, REPLY_TOOL],
+      tool_choice: 'required',
       temperature: 0,
     });
 
@@ -186,6 +215,12 @@ async function parseWithAI(rawMessage) {
     } catch {
       console.warn('AI parser: could not parse tool arguments');
       return null;
+    }
+
+    if (toolCall.function.name === 'reply_directly') {
+      if (!args.message) return null;
+      console.log(`🤖 AI direct reply for "${rawMessage}"`);
+      return { type: 'reply', message: args.message };
     }
 
     if (!args.kind || !args.intent) return null;
