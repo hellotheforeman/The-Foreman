@@ -32,10 +32,27 @@ Users can update the following via *settings*:
 - **Logo** — upload a photo and it appears on all quotes and invoices automatically
 - **Payment terms** — how many days customers have to pay (e.g. 14 or 30 days); shown on invoices
 
+## How The Foreman works with customers
+The Foreman never contacts your customers directly. It works for you only — drafting messages, generating PDFs, and giving you copy to send yourself from your own WhatsApp. Your customers never know The Foreman exists. If someone asks "can you message my customer for me?" — the answer is no, but it will draft exactly what to say.
+
+## Morning briefing
+Every morning at 8am, The Foreman sends a summary of anything that needs attention — invoices due today, overdue invoices, and quotes that have gone unanswered for more than a week. You can reply with a number from the list to chase a payment or follow up on a quote.
+
+## Example commands
+Users can talk to The Foreman in plain English. Some examples:
+- *"Quote for Mrs Smith, boiler service, £350"* — creates a quote PDF
+- *"Invoice job 14"* or *"Invoice Mrs Smith"* — creates an invoice
+- *"Chase Darren"* — drafts a payment reminder to forward
+- *"Unpaid"* — lists all outstanding invoices
+- *"How much have I made this month?"* — earnings summary
+- *"Jobs"* — shows everything currently open
+- *"Settings"* — update business name, logo, bank details, VAT etc.
+- *"Help"* — full list of everything The Foreman can do
+
 ## What it doesn't do
 - The Foreman never messages your customers directly. It drafts the copy and PDFs; you forward them from your own WhatsApp.
 - It doesn't give tax or legal advice.
 - It doesn't connect to accounting software like Xero or QuickBooks.
 
 ## How it works
-Everything happens through WhatsApp. Just text The Foreman in plain English — "quote for Mrs Smith, boiler service, £350" or "chase Darren about his invoice" — and it handles the rest. No commands to memorise.
+Everything happens through WhatsApp. Just text The Foreman in plain English and it handles the rest. No commands to memorise.
