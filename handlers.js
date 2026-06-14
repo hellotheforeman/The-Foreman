@@ -81,6 +81,7 @@ const commandHandlers = {
   new_customer: handleNewCustomer,
   new_job: handleNewJob,
   quote: handleQuote,
+  resend_quote: handleResendQuote,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   amend_quote: handleQuote,
@@ -247,6 +248,41 @@ async function handleQuote(intent, res) {
     messenger.twimlReply(
       res,
       `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n\n${msg}\nSend it when you're happy 👍`
+    );
+  }
+}
+
+async function handleResendQuote(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
+
+  if (!job.quoted_amount || Number(job.quoted_amount) <= 0) {
+    return messenger.twimlReply(
+      res,
+      `No quote on file for ${job.customer.name}. To create one: *quote ${job.id} 450 description*`
+    );
+  }
+
+  const net = Number(job.quoted_amount);
+  const displayTotal = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+
+  try {
+    const pdfUrl = await generateQuotePdf(job, job.customer, business);
+    messenger.twimlReplyWithMedia(
+      res,
+      `📋 £${displayTotal}${vatSuffix} quote for ${job.customer.name} — here you go.`,
+      pdfUrl
+    );
+  } catch (err) {
+    console.error('Quote PDF regeneration failed:', err.message);
+    const msg = templates.quoteMessage(job, job.customer, business);
+    messenger.twimlReply(
+      res,
+      `📋 £${displayTotal}${vatSuffix} quote for ${job.customer.name}\n\n${msg}`
     );
   }
 }

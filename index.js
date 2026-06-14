@@ -785,6 +785,48 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice by name ---
 
+    // --- Resend quote by name ---
+    if (!currentState && intent.intent === 'resend_quote' && !intent.jobId && intent.jobRef) {
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
+      if (resolved.status === 'resolved') {
+        return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
+      }
+      if (resolved.status === 'multiple') {
+        const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        await setConversationState(business.id, {
+          workflow: 'resend_quote_pick',
+          focus: {},
+          collected: { jobs: resolved.jobs.slice(0, 5) },
+          pending: { type: 'selection', field: 'jobId' },
+          options: resolved.jobs.slice(0, 5),
+        });
+        return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
+      }
+      return twimlReply(res, `Can't find anything for "${intent.jobRef}" — say *jobs* to see what's on.`);
+    }
+
+    if (currentState?.workflow === 'resend_quote_pick') {
+      const trimmed = body.trim();
+      const jobs = currentState.collected?.jobs || [];
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      if (intent.kind === 'command') {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+      if (jobs.length) {
+        const n = parseInt(trimmed, 10);
+        if (n >= 1 && n <= jobs.length) {
+          await clearConversationState(business.id);
+          return dispatch({ kind: 'command', intent: 'resend_quote', jobId: jobs[n - 1].id, business }, res);
+        }
+      }
+      return twimlReply(res, `Pick a number from the list above, or say *cancel*.`);
+    }
+    // --- End resend quote by name ---
+
     // --- View job by name ---
     if (!currentState && intent.intent === 'view_job' && !intent.jobId && intent.jobRef) {
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });

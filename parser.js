@@ -290,6 +290,28 @@ function parse(raw) {
     return { kind: 'query', intent: 'unpaid' };
   }
 
+  // "resend the quote for Daniel", "send me the invoice for Bob", "give me the quote for Mrs Smith", "return the invoice for Patel"
+  const resendDocForMatch = text.match(/^(?:resend\s+|re-send\s+|send\s+(?:me\s+)?(?:the\s+)?|give\s+me\s+(?:the\s+)?|return\s+(?:the\s+)?)(?:the\s+)?(quote|invoice)\s+for\s+(.+)$/i);
+  if (resendDocForMatch) {
+    const docType = resendDocForMatch[1].toLowerCase();
+    const ref = resendDocForMatch[2].trim();
+    if (docType === 'invoice') {
+      return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: ref, amount: null };
+    }
+    return { kind: 'command', intent: 'resend_quote', jobRef: ref };
+  }
+
+  // "give me Daniel Harper's invoice", "resend Mrs Smith's quote", "return Patel's invoice"
+  const resendDocPossessiveMatch = text.match(/^(?:resend|re-send|send\s+(?:me\s+)?|give\s+me\s+|return\s+)(.+?)'?s\s+(quote|invoice)$/i);
+  if (resendDocPossessiveMatch) {
+    const ref = resendDocPossessiveMatch[1].trim();
+    const docType = resendDocPossessiveMatch[2].toLowerCase();
+    if (docType === 'invoice') {
+      return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: ref, amount: null };
+    }
+    return { kind: 'command', intent: 'resend_quote', jobRef: ref };
+  }
+
   // "show me the quote/invoice for Daniel Harper", "pull up the invoice for Smith", "what's the quote for Patel"
   const viewDocForMatch = text.match(/^(?:show\s+(?:me\s+)?(?:the\s+)?|pull\s+up\s+(?:the\s+)?|view\s+(?:the\s+)?|what'?s\s+(?:the\s+)?)(?:quote|invoice)\s+for\s+(.+)$/i);
   if (viewDocForMatch) {
