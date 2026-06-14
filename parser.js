@@ -290,8 +290,8 @@ function parse(raw) {
     return { kind: 'query', intent: 'unpaid' };
   }
 
-  // "resend the quote for Daniel", "send me the invoice for Bob", "give me the quote for Mrs Smith", "return the invoice for Patel"
-  const resendDocForMatch = text.match(/^(?:resend\s+|re-send\s+|send\s+(?:me\s+)?(?:the\s+)?|give\s+me\s+(?:the\s+)?|return\s+(?:the\s+)?)(?:the\s+)?(quote|invoice)\s+for\s+(.+)$/i);
+  // "resend/send me/give me/show me/return [the] quote/invoice for [name]"
+  const resendDocForMatch = text.match(/^(?:resend\s+|re-send\s+|send\s+(?:me\s+)?(?:the\s+)?|give\s+me\s+(?:the\s+)?|return\s+(?:the\s+)?|show\s+(?:me\s+)?(?:the\s+)?)(?:the\s+)?(quote|invoice)\s+for\s+(.+)$/i);
   if (resendDocForMatch) {
     const docType = resendDocForMatch[1].toLowerCase();
     const ref = resendDocForMatch[2].trim();
@@ -301,8 +301,8 @@ function parse(raw) {
     return { kind: 'command', intent: 'resend_quote', jobRef: ref };
   }
 
-  // "give me Daniel Harper's invoice", "resend Mrs Smith's quote", "return Patel's invoice"
-  const resendDocPossessiveMatch = text.match(/^(?:resend|re-send|send\s+(?:me\s+)?|give\s+me\s+|return\s+)(.+?)'?s\s+(quote|invoice)$/i);
+  // "give me/show me/resend/return [name]'s quote/invoice"
+  const resendDocPossessiveMatch = text.match(/^(?:resend|re-send|send\s+(?:me\s+)?|give\s+me\s+|return\s+|show\s+(?:me\s+)?)(.+?)'?s\s+(quote|invoice)$/i);
   if (resendDocPossessiveMatch) {
     const ref = resendDocPossessiveMatch[1].trim();
     const docType = resendDocPossessiveMatch[2].toLowerCase();
@@ -312,14 +312,14 @@ function parse(raw) {
     return { kind: 'command', intent: 'resend_quote', jobRef: ref };
   }
 
-  // "show me the quote/invoice for Daniel Harper", "pull up the invoice for Smith", "what's the quote for Patel"
-  const viewDocForMatch = text.match(/^(?:show\s+(?:me\s+)?(?:the\s+)?|pull\s+up\s+(?:the\s+)?|view\s+(?:the\s+)?|what'?s\s+(?:the\s+)?)(?:quote|invoice)\s+for\s+(.+)$/i);
+  // "pull up the quote/invoice for Smith", "what's the quote for Patel" — show job details
+  const viewDocForMatch = text.match(/^(?:pull\s+up\s+(?:the\s+)?|view\s+(?:the\s+)?|what'?s\s+(?:the\s+)?)(?:quote|invoice)\s+for\s+(.+)$/i);
   if (viewDocForMatch) {
     return { kind: 'query', intent: 'view_job', jobRef: viewDocForMatch[1].trim() };
   }
 
-  // "show me Darren's quote", "pull up Smith's invoice"
-  const viewDocPossessiveMatch = text.match(/^(?:show\s+(?:me\s+)?|pull\s+up\s+)(.+?)'?s\s+(?:quote|invoice)$/i);
+  // "pull up Smith's invoice" — show job details
+  const viewDocPossessiveMatch = text.match(/^pull\s+up\s+(.+?)'?s\s+(?:quote|invoice)$/i);
   if (viewDocPossessiveMatch) {
     return { kind: 'query', intent: 'view_job', jobRef: viewDocPossessiveMatch[1].trim() };
   }
