@@ -290,8 +290,21 @@ function parse(raw) {
     return { kind: 'query', intent: 'unpaid' };
   }
 
+  // "show me the quote/invoice for Daniel Harper", "pull up the invoice for Smith", "what's the quote for Patel"
+  const viewDocForMatch = text.match(/^(?:show\s+(?:me\s+)?(?:the\s+)?|pull\s+up\s+(?:the\s+)?|view\s+(?:the\s+)?|what'?s\s+(?:the\s+)?)(?:quote|invoice)\s+for\s+(.+)$/i);
+  if (viewDocForMatch) {
+    return { kind: 'query', intent: 'view_job', jobRef: viewDocForMatch[1].trim() };
+  }
+
+  // "show me Darren's quote", "pull up Smith's invoice"
+  const viewDocPossessiveMatch = text.match(/^(?:show\s+(?:me\s+)?|pull\s+up\s+)(.+?)'?s\s+(?:quote|invoice)$/i);
+  if (viewDocPossessiveMatch) {
+    return { kind: 'query', intent: 'view_job', jobRef: viewDocPossessiveMatch[1].trim() };
+  }
+
   // --- Quotes out ---
-  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower)) {
+  // Exclude "quote for [name]" — those are view_job requests, not list requests
+  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower) && !/\bquote\s+for\s+\w/.test(lower)) {
     return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
   }
 
