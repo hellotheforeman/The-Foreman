@@ -21,6 +21,17 @@ Just text this WhatsApp number. The Foreman will ask for your business name and 
 - **Payment stats** — see your average payment time, quote conversion rate, and an overall financial summary.
 - **Job tracking** — view all open jobs, pull up the details on any job, mark jobs as paid or complete, add notes.
 
+## Settings
+Users can update the following via *settings*:
+- **Business name** — the trading name shown on all documents
+- **Trade** — e.g. Plumber, Electrician, Builder — shown on quotes and invoices
+- **Email** — contact email shown on documents
+- **Address** — business address shown on documents
+- **Bank details** — sort code and account number, shown on invoices so customers know where to pay
+- **VAT** — whether the business is VAT registered, and the VAT number if so; affects totals shown on quotes and invoices
+- **Logo** — upload a photo and it appears on all quotes and invoices automatically
+- **Payment terms** — how many days customers have to pay (e.g. 14 or 30 days); shown on invoices
+
 ## What it doesn't do
 - The Foreman never messages your customers directly. It drafts the copy and PDFs; you forward them from your own WhatsApp.
 - It doesn't give tax or legal advice.
