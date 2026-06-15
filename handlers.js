@@ -502,8 +502,9 @@ async function handleChase(intent, res) {
         const job = await db.getJobWithCustomer(m.job_id, business.id);
         const invoice = await db.getInvoiceByJob(job.id, business.id);
         const msg = templates.paymentReminder(job, invoice, job.customer, business);
-        return messenger.twimlReply(res,
-          `Here's a reminder you can send to ${job.customer.name}:\n\n${msg}`
+        return messenger.twimlReplyPair(res,
+          `Here's a reminder you can send to ${job.customer.name}:`,
+          msg
         );
       }
 
@@ -523,7 +524,7 @@ async function handleChase(intent, res) {
   if (invoice.status === 'PAID') return messenger.twimlReply(res, `✅ ${job.customer.name} is already paid.`);
 
   const msg = templates.paymentReminder(job, invoice, job.customer, business);
-  messenger.twimlReply(res, `Here's a reminder for ${job.customer.name} — forward it over when you're ready:\n\n${msg}`);
+  messenger.twimlReplyPair(res, `Here's a reminder for ${job.customer.name} — forward it over when you're ready:`, msg);
 }
 
 async function handleReview(intent, res) {

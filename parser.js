@@ -208,6 +208,18 @@ function parse(raw) {
     return { kind: 'command', intent: 'chase', jobId: parseInt(chaseMatch[1], 10) };
   }
 
+  // "chase Darren", "chase Darren Masters"
+  const chaseNameMatch = text.match(/^chase\s+(?!#?\d)(.+)$/i);
+  if (chaseNameMatch) {
+    return { kind: 'command', intent: 'chase', jobId: null, jobRef: chaseNameMatch[1].trim() };
+  }
+
+  // "create me a chaser for Darren", "draft a payment chaser for Darren Masters"
+  const createChaserMatch = text.match(/^(?:create|draft|write|make)\s+(?:me\s+)?(?:a\s+)?(?:payment\s+)?chaser\s+(?:for\s+)?(.+)$/i);
+  if (createChaserMatch) {
+    return { kind: 'command', intent: 'chase', jobId: null, jobRef: createChaserMatch[1].trim() };
+  }
+
   // --- Review request (ask customer for a review after job complete) ---
   // "review 42", "follow up 42", "ask for review 42"
   const reviewMatch = lower.match(/^(?:review|follow\s*up|ask\s+for\s+review)\s+#?(\d+)\s*$/);

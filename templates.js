@@ -89,15 +89,16 @@ function paymentReminder(job, invoice, customer, business) {
   const daysSent = Math.floor((Date.now() - new Date(invoice.sent_at).getTime()) / 86400000);
   const name = businessName(business);
   const payment = paymentDetails(business);
+  const net = Number(invoice.amount);
+  const displayAmount = business?.vat_registered ? (net * 1.20).toFixed(2) : net.toFixed(2);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
   return [
     `Hi ${customerGreetingName(customer)},`,
     '',
-    `Friendly reminder — invoice ${formatJobId(job.id)} for £${Number(invoice.amount).toFixed(2)} was sent ${daysSent} days ago and is still outstanding.`,
+    `Friendly reminder — invoice ${formatJobId(job.id)} for £${displayAmount}${vatSuffix} was sent ${daysSent} days ago and is still outstanding.`,
     '',
     `💳 *Payment details:*`,
     payment,
-    '',
-    `If you've already paid, please ignore this. Any questions, just reply!`,
     '',
     `— ${name}`,
   ].join('\n');
