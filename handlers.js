@@ -272,18 +272,11 @@ async function handleResendQuote(intent, res) {
 
   try {
     const pdfUrl = await generateQuotePdf(job, job.customer, business);
-    messenger.twimlReplyWithMedia(
-      res,
-      `📋 £${displayTotal}${vatSuffix} quote for ${job.customer.name} — here you go.`,
-      pdfUrl
-    );
+    messenger.twimlReplyWithMedia(res, `📋 Here's ${job.customer.name}'s quote.`, pdfUrl);
   } catch (err) {
     console.error('Quote PDF regeneration failed:', err.message);
     const msg = templates.quoteMessage(job, job.customer, business);
-    messenger.twimlReply(
-      res,
-      `📋 £${displayTotal}${vatSuffix} quote for ${job.customer.name}\n\n${msg}`
-    );
+    messenger.twimlReply(res, `📋 Here's ${job.customer.name}'s quote.\n\n${msg}`);
   }
 }
 
@@ -416,19 +409,19 @@ async function handleSendInvoice(intent, res) {
   const invDisplay = business?.vat_registered ? (invNet * 1.20).toFixed(2) : invNet.toFixed(2);
   const invVatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
+  const invoiceCaption = isNewInvoice
+    ? `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
+    : `🧾 Here's ${job.customer.name}'s invoice.`;
+
   try {
     const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
-    messenger.twimlReplyWithMedia(
-      res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`,
-      pdfUrl
-    );
+    messenger.twimlReplyWithMedia(res, invoiceCaption, pdfUrl);
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message, err.cause || '');
     const msg = templates.invoiceMessage(job, invoice, job.customer, business);
-    messenger.twimlReply(
-      res,
-      `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
+    messenger.twimlReply(res, isNewInvoice
+      ? `🧾 £${invDisplay}${invVatSuffix} invoice for ${job.customer.name} ready\n\n${msg}\n\n${pick(['Let me know when they\'ve paid up.', 'Send it over and let me know when the money lands.', 'Over to you — shout when it\'s paid.'])}`
+      : `🧾 Here's ${job.customer.name}'s invoice.\n\n${msg}`
     );
   }
 }
