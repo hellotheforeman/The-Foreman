@@ -168,6 +168,11 @@ function parse(raw) {
     return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: invoiceByNameMatch[1].trim(), amount: null };
   }
 
+  // Bare invoice intent: "invoice", "create an invoice", "make an invoice", "raise an invoice"
+  if (/^(?:create|make|raise|send|generate)?\s*an?\s*invoice\s*$/i.test(lower) || lower === 'invoice') {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
+  }
+
   // --- Amend invoice ---
   // "amend 14 450" or "amend 14 450 boiler service" or "amend 14 service 250 | parts 45"
   const amendQuickMatch = text.match(/^amend(?:\s+invoice)?\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
