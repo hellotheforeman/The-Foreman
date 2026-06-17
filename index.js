@@ -1421,7 +1421,14 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
       pending: { type: 'field', field: 'onboarding' },
       options: [],
     });
-    return twimlReplyPair(res, ONBOARDING_WELCOME, ONBOARDING_STEPS[0].prompt);
+    setTimeout(async () => {
+      try {
+        await messenger.sendToForeman(ONBOARDING_STEPS[0].prompt, { businessId: business.id, businessPhone: business.phone });
+      } catch (err) {
+        console.error('Failed to send onboarding follow-up:', err);
+      }
+    }, 1500);
+    return twimlReply(res, ONBOARDING_WELCOME);
   }
 
   const current = ONBOARDING_STEPS[step];
