@@ -1522,7 +1522,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
   // All steps done — mark as onboarded
   await db.updateBusiness(business.id, { onboarded: true });
   await clearConversationState(business.id);
-  return twimlReply(res, `Got it — you're all set. 🎉\n\nJust tell me what you need. To send a quote say *Quote*, for an invoice say *Invoice*, or say *Help* to see everything I can do.`);
+  return twimlReply(res, `You're all set 🎉 Whenever you're ready, just tell me what you need — quote, invoice, whatever it is.`);
 }
 
 // ---------------------------------------------------------------------------
