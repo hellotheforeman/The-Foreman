@@ -380,7 +380,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           await clearConversationState(business.id);
           res.on('finish', () => {
             messenger.sendToForeman(
-              `No problem — add your bank details anytime by replying *bank details*. Your customers will need these to pay you.`,
+              `No problem — you can add them anytime in *settings* if you change your mind.`,
               { businessId: business.id, businessPhone: business.phone }
             ).catch(err => console.error('Bank details nudge failed:', err.message));
           });
