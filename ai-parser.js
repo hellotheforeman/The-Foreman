@@ -35,7 +35,7 @@ const DISPATCH_TOOL = {
           enum: [
             // Commands
             'new_customer', 'new_job', 'quote',
-            'send_invoice', 'amend_invoice', 'amend_quote', 'paid', 'chase', 'review',
+            'send_invoice', 'resend_invoice', 'resend_quote', 'amend_invoice', 'amend_quote', 'paid', 'chase', 'review',
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
             'unpaid', 'open_jobs',
@@ -152,10 +152,12 @@ COMMAND PHRASING:
 INTENT GUIDE:
 - new_customer: "add a customer", "new customer John Smith 07700900123"
 - new_job: "new job", "add a job for Mrs Patel"
-- quote: "quote job 14", "send quote to Patel", "requote 14 850", "create a quote for Mrs Smith", "quote for Mrs Smith" — use jobRef for name-only references
-- send_invoice: "invoice job 14", "invoice Mrs Patel 450", "create an invoice", "create me an invoice", "make me an invoice", "build an invoice" — when no name or job number given, return send_invoice with null jobId and null jobRef (do NOT use reply_directly)
-- amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote"
-- amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14"
+- quote: "quote job 14", "send quote to Patel", "requote 14 850", "create a quote for Mrs Smith", "quote for Mrs Smith", "put a quote together for Darren", "get a price out to Smith", "I need to quote for a bathroom job for Mrs Jones", "quote for a boiler refit for Patel", "get a quote out to Darren for the kitchen", "need to send a quote to Jones" — use jobRef for name references, use items for embedded description/scope of work
+- send_invoice: "invoice job 14", "invoice Mrs Patel 450", "send Darren an invoice", "get an invoice out to Smith", "I need to invoice for the bathroom job", "invoice for the work I did for Patel", "send Mrs Jones an invoice for the boiler job", "create an invoice", "create me an invoice", "make me an invoice", "build an invoice" — when no name or job number given, return send_invoice with null jobId and null jobRef (do NOT use reply_directly)
+- resend_invoice: "give me Chloe's invoice", "resend the invoice to Smith", "send me Patel's invoice again", "get me the invoice for Darren", "can you resend the invoice", "what was the invoice for Smith", "send the invoice over again", "forward the invoice to Jones" — use jobRef for name references
+- resend_quote: "give me Smith's quote", "resend the quote to Patel", "send me Darren's quote again", "get me the quote for Mrs Jones", "can you resend the quote", "what was the quote for Smith", "send the quote over again", "forward the quote to Darren" — use jobRef for name references
+- amend_quote: "amend the quote", "can we amend the quote", "I'd like to change the quote", "amend quote 14", "change quote 9 to 850", "make some changes to the quote", "knock the price down on the quote", "update the quote for Smith", "change the price on Patel's quote", "the quote needs to be higher", "wrong price on the quote"
+- amend_invoice: "amend the invoice", "change invoice 14 to 500", "update the invoice", "amend invoice 14", "wrong amount on the invoice", "change the amount on Patel's invoice", "fix the invoice", "the invoice needs updating", "update the price on the invoice"
 - paid: "paid 14", "job 14 paid", "mark 14 as paid", "Joe Duck paid", "Joe Duck now paid", "Darren's paid up", "just got paid by Smith", "payment received from Patel", "money's in from Darren" — extract name into jobRef where given
 - chase: "chase 14", "send reminder for job 14", "chase Darren", "send Darren a reminder", "nudge Smith about his invoice", "follow up with Patel", "chase up Mrs Smith" — use jobRef for name references
 - review: "review 14", "ask Patel for a review"
@@ -166,7 +168,7 @@ INTENT GUIDE:
 - unpaid: "unpaid", "outstanding invoices", "how many days ago did I invoice [name]", "how long since I sent [name]'s invoice", "when did I invoice [name]", "how many days ago" (when asking about invoice age) — use jobRef for name references
 - open_jobs: "jobs", "open jobs", "pipeline"
 - jobs_by_status: "quoted jobs", "invoiced jobs", "paid jobs", "cancelled jobs", "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "what's been invoiced", "invoices out" → status=invoiced; "completed jobs", "done jobs", "finished jobs", "show me my completed jobs", "what jobs have I finished", "jobs I've done" → status=paid
-- view_job: "job 14", "show me job 3", "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "show me the Smith job", "details for Darren", "show me Darren's quote", "show me the quote for Smith", "show me Darren's invoice", "what's the quote for Patel", "pull up the invoice for Mrs Smith" — use jobRef for name references
+- view_job: "job 14", "show me job 3", "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "show me the Smith job", "details for Darren", "what have I got for Patel", "where are we with Smith" — use jobRef for name references. NOTE: if they specifically mention quote or invoice AND want it sent/forwarded/resent, use resend_quote or resend_invoice instead
 - find: "find Mrs Patel", "look up Smith", "search for Patel", "do I have a customer called Smith", "have I worked for Darren before"
 - list_customers: "customers", "all my customers", "show me my customers"
 - earnings: "earnings", "how much have I made this month", "what have I turned over", "how much has come in this week", "what did I earn last month", "how much did I make this year"
