@@ -507,7 +507,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       currentState = null;
     }
     if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.amount == null) {
-      const { customerRef, prefilledDescription } = extractQuoteParts(intent);
+      const { customerRef: rawCustomerRef, prefilledDescription } = extractQuoteParts(intent);
+      // If what was extracted as a customer ref looks like a sentence rather than a name, discard it
+      const customerRef = (rawCustomerRef && (/^(?:for|to|a|an|the|i|i've)\b/i.test(rawCustomerRef) || rawCustomerRef.split(' ').length > 5))
+        ? null
+        : rawCustomerRef;
 
       if (customerRef) {
         const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: customerRef }, raw: body, state: null });
@@ -745,7 +749,19 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
       }
-      return twimlReply(res, `Can't find anything for "${intent.jobRef}" — say *jobs* to see what's on.`);
+      // jobRef didn't resolve — drop into invoice_pick and ask who it's for
+      const suggestion = await openJobsSuggestion(business.id);
+      await setConversationState(business.id, {
+        workflow: 'invoice_pick',
+        focus: {},
+        collected: {},
+        pending: { type: 'field', field: 'jobRef' },
+        options: [],
+      });
+      return twimlReply(res, suggestion
+        ? `Who's this invoice for? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
+        : `Who's this invoice for? Type a name or say *open* to see what's on.`
+      );
     }
 
     if (currentState?.workflow === 'invoice_pick') {
