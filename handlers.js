@@ -340,7 +340,7 @@ async function handleSendInvoice(intent, res) {
   if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
 
   // Gate: bank details required before creating an invoice
-  if (!business.payment_details) {
+  if (!business.payment_details && !intent.skipBankGate) {
     await setConversationState(business.id, {
       workflow: 'bank_gate',
       focus: {},
@@ -351,10 +351,10 @@ async function handleSendInvoice(intent, res) {
           items: intent.items || null, lineItems: intent.lineItems || null,
         },
       },
-      pending: { type: 'field', field: 'sort_code' },
+      pending: { type: 'field', field: 'bank_confirm' },
       options: [],
     });
-    return messenger.twimlReply(res, `Before I create this invoice — what's your sort code? (e.g. 12-34-56)\n\nYour customers need your bank details to pay you.`);
+    return messenger.twimlReply(res, `Your invoice won't include payment details yet — customers need these to know how to pay you. Want to add them now?\n\nReply *Yes* to add them, or *Skip* to send the invoice without.`);
   }
 
   let invoice = await db.getInvoiceByJob(job.id, business.id);

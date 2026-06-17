@@ -374,6 +374,30 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     if (currentState?.workflow === 'bank_gate') {
       const trimmed = body.trim();
 
+      if (currentState.pending?.field === 'bank_confirm') {
+        if (/^(skip|no|nope|later|s|n)$/i.test(trimmed)) {
+          const { pendingIntent } = currentState.collected;
+          await clearConversationState(business.id);
+          res.on('finish', () => {
+            messenger.sendToForeman(
+              `No problem — add your bank details anytime by replying *bank details*. Your customers will need these to pay you.`,
+              { businessId: business.id, businessPhone: business.phone }
+            ).catch(err => console.error('Bank details nudge failed:', err.message));
+          });
+          return pendingIntent
+            ? dispatch({ ...pendingIntent, skipBankGate: true, business }, res)
+            : twimlReply(res, `No problem — just let me know what you need.`);
+        }
+        if (/^(yes|y|yep|yeah)$/i.test(trimmed)) {
+          await setConversationState(business.id, {
+            ...currentState,
+            pending: { type: 'field', field: 'sort_code' },
+          });
+          return twimlReply(res, `Start with your sort code (e.g. 12-34-56) — or reply *Skip* to leave bank details off.`);
+        }
+        return twimlReply(res, `Reply *Yes* to add your bank details, or *Skip* to send the invoice without.`);
+      }
+
       if (currentState.pending?.field === 'sort_code') {
         await setConversationState(business.id, {
           ...currentState,
