@@ -165,7 +165,12 @@ function parse(raw) {
   // Invoice by customer name: "invoice Mrs Smith"
   const invoiceByNameMatch = text.match(/^(?:send\s+)?invoice\s+(?!#?\d)(.+)$/i);
   if (invoiceByNameMatch) {
-    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: invoiceByNameMatch[1].trim(), amount: null };
+    const ref = invoiceByNameMatch[1].trim();
+    // If the captured ref starts with a number, negative number, or £ it's line items not a name — bare flow
+    if (/^-?\d|^£/.test(ref)) {
+      return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
+    }
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: ref, amount: null };
   }
 
   // Bare invoice intent: "invoice", "create an invoice", "create me an invoice", "build me an invoice" etc.
