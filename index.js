@@ -740,8 +740,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (intent.intent === 'send_invoice' && !intent.jobId && !intent.jobRef) {
         const suggestion = await openJobsSuggestion(business.id);
         return twimlReply(res, suggestion
-          ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Who do you want to invoice? Type a name or say *open* to see what's on.`
+          ? `Who's this invoice for? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Who's this invoice for? Type a name or say *open* to see what's on.`
         );
       }
       // Numeric selection from a presented list
@@ -888,8 +888,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           options: [],
         });
         return twimlReply(res, suggestion
-          ? `Who do you want to invoice? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
-          : `Who do you want to invoice? Type a name or say *open* to see what's on.`
+          ? `Who's this invoice for? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
+          : `Who's this invoice for? Type a name or say *open* to see what's on.`
         );
       }
 
@@ -1257,8 +1257,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         options: [],
       });
       return twimlReply(res, suggestion
-        ? `Which job do you want to invoice? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
-        : `Which job do you want to invoice? Say *jobs* to see what's on, or type a name to start a new one.`
+        ? `Who's this invoice for? Here's what you've got open:\n\n${suggestion}\n\nOr type a name to start a new one.`
+        : `Who's this invoice for? Say *open* to see what's on, or type a name.`
       );
     }
 
