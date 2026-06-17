@@ -861,7 +861,7 @@ async function handleFind(intent, res) {
       const amount = j.latest_amount ? ` £${Number(j.latest_amount).toFixed(2)}` : '';
       const status = db.deriveStatus(j);
       const date = formatShortDate(j.sort_date);
-      return `  - ${date} ${toTitleCase(j.description)}${amount} (${status})`;
+      return `  - ${date ? date + ' ' : ''}${toTitleCase(j.description)}${amount} (${status})`;
     });
     const contactParts = [c.phone, c.email, c.address].filter(Boolean);
     results.push(
@@ -1085,7 +1085,7 @@ function formatLineItemsText(str) {
 }
 
 function formatShortDate(dateStr) {
-  if (!dateStr) return '??-???-??';
+  if (!dateStr) return '';
   const d = new Date(dateStr);
   const day = String(d.getUTCDate()).padStart(2, '0');
   const month = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getUTCMonth()];
