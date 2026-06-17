@@ -142,8 +142,9 @@ FIELD RULES:
 - Amounts must be numbers only — no £ symbols, no words like "four fifty".
 - Phone numbers must be UK format: 07xxx or +447xxx.
 COMMAND PHRASING:
-- Phrases like "Can you X", "I'd like to X", "I want to X", "can we X" are always commands, not help requests. Map them to the appropriate intent.
+- Phrases like "Can you X", "Can I X", "I'd like to X", "I want to X", "can we X", "how do I X", "is there a way to X" are always commands or setting changes, not help requests. Map them to the appropriate intent.
 - "Can you amend the quote?" → amend_quote. "Can you send an invoice?" → send_invoice. "I'd like to make some changes to the quote" → amend_quote.
+- "Can I log I'm VAT registered?" → settings. "How do I update my VAT number?" → settings. "I want to change my business name" → settings.
 
 INTENT GUIDE:
 - new_customer: "add a customer", "new customer John Smith 07700900123"
@@ -172,7 +173,7 @@ INTENT GUIDE:
 - conversion_rate: "what's my conversion rate", "how many quotes am I winning", "how many quotes convert"
 - avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
 PERIOD EXAMPLES: "last 3 months" → last_3_months, "last 90 days" → last_90_days, "last quarter" → last_3_months, "this year" → year, "this week" → week
-- settings: "settings", "change my business name"
+- settings: "settings", "change my business name", "I'm VAT registered", "log I'm VAT registered", "update my VAT number", "add my VAT number", "I need to add my VAT details", "update my bank details", "change my payment terms", "upload my logo", "update my address", "change my email", "update my trade"
 - help: "help", "what can you do"
 - pricing: "how much does this cost", "is this free", "what's the price", "how much is The Foreman", "does it cost money", "is there a subscription", "do I have to pay"
 
