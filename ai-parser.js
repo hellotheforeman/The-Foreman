@@ -46,13 +46,9 @@ const DISPATCH_TOOL = {
           ],
           description: 'The specific intent identified from the message.',
         },
-        jobId: {
-          type: 'integer',
-          description: 'Numeric job ID when explicitly mentioned, e.g. "job 14" or "#0014" → 14.',
-        },
         jobRef: {
           type: 'string',
-          description: 'Customer name or job description when no job number is given, e.g. "Mrs Patel" or "boiler service".',
+          description: 'Customer name, e.g. "Mrs Patel" or "Darren". Always use this — never use a job number.',
         },
         amount: {
           type: 'number',
@@ -142,7 +138,7 @@ DATE RULES:
 - If a date has already passed this month, use next month.
 
 FIELD RULES:
-- Use jobId (integer) when a job number is explicitly mentioned. Use jobRef (string) otherwise.
+- Always use jobRef (customer name) to identify who the message is about. Never use jobId — users don't know job numbers exist.
 - Amounts must be numbers only — no £ symbols, no words like "four fifty".
 - Phone numbers must be UK format: 07xxx or +447xxx.
 COMMAND PHRASING:
