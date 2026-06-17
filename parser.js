@@ -168,8 +168,8 @@ function parse(raw) {
     return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: invoiceByNameMatch[1].trim(), amount: null };
   }
 
-  // Bare invoice intent: "invoice", "create an invoice", "make an invoice", "raise an invoice"
-  if (/^(?:create|make|raise|send|generate|build)?\s*an?\s*invoice\s*$/i.test(lower) || lower === 'invoice') {
+  // Bare invoice intent: "invoice", "create an invoice", "create me an invoice", "build me an invoice" etc.
+  if (/^(?:(?:create|make|raise|send|generate|build)\s+(?:me\s+)?(?:an?\s+)?)?invoice\s*$/i.test(lower)) {
     return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
   }
 
