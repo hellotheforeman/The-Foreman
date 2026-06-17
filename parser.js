@@ -169,7 +169,7 @@ function parse(raw) {
   }
 
   // Bare invoice intent: "invoice", "create an invoice", "make an invoice", "raise an invoice"
-  if (/^(?:create|make|raise|send|generate)?\s*an?\s*invoice\s*$/i.test(lower) || lower === 'invoice') {
+  if (/^(?:create|make|raise|send|generate|build)?\s*an?\s*invoice\s*$/i.test(lower) || lower === 'invoice') {
     return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
   }
 
