@@ -10,6 +10,7 @@ function getProfileTip(business) {
   if (!business.email) return `Tip: add your email address so it appears on your documents — say *settings*.`;
   if (!business.address) return `Tip: add your business address so it appears on your quotes and invoices — say *settings*.`;
   if (!business.logo_path) return `Tip: upload a logo to make your quotes and invoices look more professional — say *settings*.`;
+  if (!business.payment_details) return `Tip: add your bank details so customers know how to pay you — say *settings*.`;
   if (!business.payment_days) return `Tip: set your payment terms (e.g. 14 days) so invoices show when payment is due — say *settings*.`;
   return null;
 }
