@@ -4,7 +4,7 @@ const { normalisePhone } = require('./phone');
 const { parse, parseLineItems } = require('./parser');
 const { dispatch, SETTINGS_FIELDS, buildSettingsMenu, openJobsSuggestion } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
-const { twimlReply, twimlReplyPair } = require('./messenger');
+const { twimlReply, twimlReplyPair, sendToForeman } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
 const { registerAdminRoutes } = require('./admin');
@@ -1421,7 +1421,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
       pending: { type: 'field', field: 'onboarding' },
       options: [],
     });
-    messenger.sendToForeman(ONBOARDING_STEPS[0].prompt, { businessId: business.id, businessPhone: business.phone })
+    sendToForeman(ONBOARDING_STEPS[0].prompt, { businessId: business.id, businessPhone: business.phone })
       .catch(err => console.error('Failed to send onboarding follow-up:', err));
     return twimlReply(res, ONBOARDING_WELCOME);
   }
