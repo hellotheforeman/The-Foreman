@@ -173,7 +173,16 @@ INTENT GUIDE:
 - conversion_rate: "what's my conversion rate", "how many quotes am I winning", "how many quotes convert"
 - avg_payment_time: "how long does it take to get paid", "average payment time", "how quickly do customers pay"
 PERIOD EXAMPLES: "last 3 months" → last_3_months, "last 90 days" → last_90_days, "last quarter" → last_3_months, "this year" → year, "this week" → week
-- settings: "settings", "change my business name", "I'm VAT registered", "log I'm VAT registered", "update my VAT number", "add my VAT number", "I need to add my VAT details", "update my bank details", "change my payment terms", "upload my logo", "update my address", "change my email", "update my trade"
+- settings: any request to view or change business details — always route here rather than replying directly. Covers:
+  Business name: "change my business name", "update my company name", "my business name has changed"
+  Trade: "update my trade", "change my trade", "add my trade", "I'm a plumber not an electrician"
+  Email: "change my email", "update my email address", "add my email"
+  Address: "update my address", "change my business address", "add my address"
+  Bank details: "update my bank details", "add my sort code", "change my account number", "add payment details", "I want to add my bank"
+  VAT: "I'm VAT registered", "log I'm VAT registered", "add my VAT number", "update my VAT", "I've just registered for VAT", "I'm not VAT registered", "remove my VAT", "change my VAT number", "can I log I'm VAT registered"
+  Logo: "upload my logo", "change my logo", "add a logo", "I want to add my logo"
+  Payment terms: "change my payment terms", "update payment terms", "set my payment terms to 30 days", "I want 14 day payment terms"
+  General: "settings", "my settings", "update my profile", "change my details", "what are my settings"
 - help: "help", "what can you do"
 - pricing: "how much does this cost", "is this free", "what's the price", "how much is The Foreman", "does it cost money", "is there a subscription", "do I have to pay"
 
