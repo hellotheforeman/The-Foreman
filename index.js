@@ -825,6 +825,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice by name ---
 
+    // --- Resend invoice — treat identically to send_invoice (handler detects existing invoice and resends) ---
+    if (intent.intent === 'resend_invoice') {
+      intent = { ...intent, intent: 'send_invoice' };
+    }
+
     // --- Resend quote by name ---
     if (!currentState && intent.intent === 'resend_quote' && !intent.jobId && intent.jobRef) {
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
