@@ -229,10 +229,12 @@ async function handleQuote(intent, res) {
 
   if (shouldOfferSetup) {
     await db.markProfileSetupPrompted(business.id);
-    messenger.sendToForeman(
-      `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
-      { businessId: business.id, businessPhone: business.phone }
-    ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+    res.on('finish', () => {
+      messenger.sendToForeman(
+        `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
+        { businessId: business.id, businessPhone: business.phone }
+      ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+    });
   }
 
   try {
@@ -399,10 +401,12 @@ async function handleSendInvoice(intent, res) {
 
   if (shouldOfferSetup) {
     await db.markProfileSetupPrompted(business.id);
-    messenger.sendToForeman(
-      `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
-      { businessId: business.id, businessPhone: business.phone }
-    ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+    res.on('finish', () => {
+      messenger.sendToForeman(
+        `Want to take 2 minutes to finish setting up your profile? It'll make your quotes and invoices look more professional — adding your trade, logo, email and address.\n\nReply *yes* to do it now, or *skip* to leave it for later.`,
+        { businessId: business.id, businessPhone: business.phone }
+      ).catch(err => console.error('Profile setup offer failed to send:', err.message));
+    });
   }
 
   const invNet = Number(invoice.amount);
