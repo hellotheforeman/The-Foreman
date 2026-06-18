@@ -22,7 +22,7 @@ async function uploadPdf(businessId, type, filename, buffer) {
     .upload(filePath, buffer, { contentType: 'application/pdf', upsert: true });
   if (error) throw error;
   const { data } = supabase.storage.from('pdfs').getPublicUrl(filePath);
-  return data.publicUrl;
+  return `${data.publicUrl}?t=${Date.now()}`;
 }
 
 // Fetches a logo from its public URL and returns a Buffer for pdfkit to render.
