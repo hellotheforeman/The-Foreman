@@ -942,6 +942,16 @@ async function handleJobsByStatus(intent, res) {
     ? '\n\nType a name to get their invoice. To follow up, say *chase* or *cancel* followed by their name.'
     : '';
 
+  if (intent.status === 'quoted' || intent.status === 'invoiced') {
+    await setConversationState(intent.business.id, {
+      workflow: intent.status === 'quoted' ? 'quoted_list' : 'invoiced_list',
+      focus: {},
+      collected: { jobs },
+      pending: { type: 'field', field: 'name' },
+      options: [],
+    });
+  }
+
   messenger.twimlReply(res, `📋 *${label} (${jobs.length})*\n\n${lines.join('\n')}${footer}`);
 }
 

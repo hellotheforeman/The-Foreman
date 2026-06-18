@@ -930,6 +930,57 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End view job by name ---
 
+    // --- Quoted list / Invoiced list context ---
+    // Set after handleJobsByStatus so a bare name retrieves the document directly.
+    if (currentState?.workflow === 'quoted_list' || currentState?.workflow === 'invoiced_list') {
+      const trimmed = body.trim();
+      const isInvoiced = currentState.workflow === 'invoiced_list';
+
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'No problem.');
+      }
+
+      // Chase/cancel with a name — clear context and let normal handler take over
+      if ((intent.intent === 'chase' || intent.intent === 'cancel_job') && intent.jobRef) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
+      // Any other new command — abandon list context
+      if (intent.kind === 'command' && !['send_invoice', 'resend_quote'].includes(intent.intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
+      const customerName = extractCustomerName(trimmed);
+      const resolved = await resolveSingleJobReference({
+        businessId: business.id,
+        parsedIntent: { jobRef: customerName },
+        raw: body,
+        state: null,
+        includeAll: true,
+      });
+
+      if (resolved.status === 'resolved') {
+        await clearConversationState(business.id);
+        if (isInvoiced) {
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: resolved.job.id, business }, res);
+        }
+        return dispatch({ kind: 'command', intent: 'resend_quote', jobId: resolved.job.id, business }, res);
+      }
+
+      if (resolved.status === 'multiple') {
+        const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        await setConversationState(business.id, { ...currentState, collected: { jobs: resolved.jobs.slice(0, 5) } });
+        return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with a number.`);
+      }
+
+      await clearConversationState(business.id);
+      return twimlReply(res, `Couldn't find that one — say *quotes* or *invoices* to see the full list.`);
+    }
+    // --- End quoted/invoiced list context ---
+
     // --- Invoice guided workflow ---
     // Triggered when: "invoice 14" — no amount provided.
     // Checks for existing quote and guides accordingly.
