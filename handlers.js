@@ -937,9 +937,9 @@ async function handleJobsByStatus(intent, res) {
   });
 
   const footer = intent.status === 'quoted'
-    ? '\n\nType a name to get their quote, or say *chase* / *cancel* to follow up.'
+    ? '\n\nType a name to get their quote. To follow up, say *chase* or *cancel* followed by their name.'
     : intent.status === 'invoiced'
-    ? '\n\nType a name to get their invoice, or say *chase* / *cancel* to follow up.'
+    ? '\n\nType a name to get their invoice. To follow up, say *chase* or *cancel* followed by their name.'
     : '';
 
   messenger.twimlReply(res, `📋 *${label} (${jobs.length})*\n\n${lines.join('\n')}${footer}`);
