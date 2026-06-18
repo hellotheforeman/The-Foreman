@@ -323,8 +323,8 @@ function parse(raw) {
     return { kind: 'command', intent: 'resend_quote', jobRef: ref };
   }
 
-  // "give me/show me/resend/return [name]'s quote/invoice"
-  const resendDocPossessiveMatch = text.match(/^(?:resend|re-send|send\s+(?:me\s+)?|give\s+me\s+|return\s+|show\s+(?:me\s+)?)(.+?)['’]?s\s+(quote|invoice)$/i);
+  // "give me/show me/resend/return/share with me [name]’s quote/invoice", or bare "[name]’s quote/invoice"
+  const resendDocPossessiveMatch = text.match(/^(?:resend|re-send|send\s+(?:me\s+)?|give\s+me\s+|return\s+|show\s+(?:me\s+)?|share\s+with\s+me\s+(?:the\s+)?)?(.+?)[‘’]s\s+(quote|invoice)$/i);
   if (resendDocPossessiveMatch) {
     const ref = resendDocPossessiveMatch[1].trim();
     const docType = resendDocPossessiveMatch[2].toLowerCase();
