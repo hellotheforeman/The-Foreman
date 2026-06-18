@@ -736,6 +736,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     // --- End invoice flow ---
 
+    // --- Resend invoice — remap early so the invoice-by-name block below can handle it ---
+    if (intent.intent === 'resend_invoice') {
+      intent = { ...intent, intent: 'send_invoice' };
+    }
+
     // --- Invoice by name ---
     // Same guard — clear stale unrelated state so the invoice flow isn't bypassed.
     if (intent.intent === 'send_invoice' && !intent.jobId
@@ -744,7 +749,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       currentState = null;
     }
     if (!currentState && intent.intent === 'send_invoice' && !intent.jobId && intent.jobRef) {
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null });
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
         return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
       }
@@ -804,7 +809,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
       // Name-based resolution — strip document words so "Chloe's invoice" resolves as "Chloe"
       const customerName = extractCustomerName(trimmed);
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: customerName }, raw: body, state: null });
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: customerName }, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'send_invoice', jobId: resolved.job.id, business }, res);
@@ -835,11 +840,6 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
     }
     // --- End invoice by name ---
-
-    // --- Resend invoice — treat identically to send_invoice (handler detects existing invoice and resends) ---
-    if (intent.intent === 'resend_invoice') {
-      intent = { ...intent, intent: 'send_invoice' };
-    }
 
     // --- Resend quote by name ---
     if (!currentState && intent.intent === 'resend_quote' && !intent.jobId && intent.jobRef) {
