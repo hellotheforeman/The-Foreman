@@ -214,6 +214,9 @@ async function init() {
   await pool.query("UPDATE businesses SET onboarded = true WHERE onboarded = false AND created_at < NOW() - INTERVAL '1 minute'");
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS notes');
   await pool.query('ALTER TABLE customers DROP COLUMN IF EXISTS postcode');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS last_briefing_at TIMESTAMPTZ');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS last_briefing_hash TEXT');
+  await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS last_tip_at TIMESTAMPTZ');
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS feedback (
@@ -870,6 +873,28 @@ async function logMessage(direction, participant, body, { businessId, customerId
   );
 }
 
+async function getBriefingMeta(businessId) {
+  return getOne(
+    'SELECT last_briefing_at, last_briefing_hash, last_tip_at FROM businesses WHERE id = $1',
+    [businessId]
+  );
+}
+
+async function setBriefingMeta(businessId, hash, includedTip) {
+  const now = new Date().toISOString();
+  if (includedTip) {
+    await run(
+      'UPDATE businesses SET last_briefing_at = $1, last_briefing_hash = $2, last_tip_at = $3 WHERE id = $4',
+      [now, hash, now, businessId]
+    );
+  } else {
+    await run(
+      'UPDATE businesses SET last_briefing_at = $1, last_briefing_hash = $2 WHERE id = $3',
+      [now, hash, businessId]
+    );
+  }
+}
+
 module.exports = {
   init,
   formatJobId,
@@ -924,4 +949,6 @@ module.exports = {
   getRecentMessages,
   saveFeedback,
   getAll,
+  getBriefingMeta,
+  setBriefingMeta,
 };

@@ -4,6 +4,17 @@ const messenger = require('./messenger');
 const { setConversationState } = require('./conversation-state');
 
 const TZ = { timezone: 'Europe/London' };
+const REPEAT_DAYS = 3;
+const TIP_DAYS = 7;
+
+function buildBriefingHash(dueToday, overdue, staleQuotes) {
+  const parts = [
+    ...dueToday.map(i => `dt:${i.id}`),
+    ...overdue.map(i => `ov:${i.id}`),
+    ...staleQuotes.map(j => `sq:${j.id}`),
+  ].sort();
+  return parts.join('|');
+}
 
 function getProfileTip(business) {
   if (!business.logo_path) return `Tip: upload a logo to make your quotes and invoices look more professional — say *settings*.`;
@@ -37,6 +48,13 @@ function start() {
           ]);
 
           if (!dueToday.length && !overdue.length && !staleQuotes.length) continue;
+
+          // Suppress if content hasn't changed and last send was within REPEAT_DAYS
+          const hash = buildBriefingHash(dueToday, overdue, staleQuotes);
+          const meta = await db.getBriefingMeta(business.id);
+          const lastSentAt = meta?.last_briefing_at ? new Date(meta.last_briefing_at) : null;
+          const daysSinceLastSend = lastSentAt ? (Date.now() - lastSentAt.getTime()) / 86400000 : Infinity;
+          if (meta?.last_briefing_hash === hash && daysSinceLastSend < REPEAT_DAYS) continue;
 
           const items = [];
           const lines = ['🌅 *Morning update*'];
@@ -87,10 +105,13 @@ function start() {
 
           lines.push('', 'Let me know if any of these have paid or if you need me to draft a chaser.');
 
-          const profileTip = getProfileTip(business);
+          const lastTipAt = meta?.last_tip_at ? new Date(meta.last_tip_at) : null;
+          const daysSinceLastTip = lastTipAt ? (Date.now() - lastTipAt.getTime()) / 86400000 : Infinity;
+          const profileTip = daysSinceLastTip >= TIP_DAYS ? getProfileTip(business) : null;
           if (profileTip) lines.push('', `💡 ${profileTip}`);
 
           await messenger.sendToForeman(lines.join('\n'), { businessId: business.id, businessPhone: business.phone });
+          await db.setBriefingMeta(business.id, hash, !!profileTip);
 
           await setConversationState(business.id, {
             workflow: 'morning_briefing',
