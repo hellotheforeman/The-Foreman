@@ -39,7 +39,7 @@ const DISPATCH_TOOL = {
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
             'unpaid', 'open_jobs',
-            'jobs_by_status', 'view_job', 'find', 'list_customers', 'earnings',
+            'jobs_by_status', 'find', 'list_customers', 'earnings',
             'financial_summary', 'conversion_rate', 'avg_payment_time',
             'settings', 'help', 'pricing',
             'greeting', 'thanks',
@@ -157,8 +157,7 @@ INTENT GUIDE:
 - unpaid: view outstanding invoices — "unpaid", "who owes me money", "outstanding invoices", "what's still owed", "who hasn't paid", "how many days ago did I invoice Patel", "when did I invoice Smith" — use jobRef for name where given
 - open_jobs: view all current open work — "jobs", "open jobs", "what have I got on", "show me what's on", "what's in my pipeline", "what jobs do I have", "what am I working on"
 - jobs_by_status: view jobs by status — "what quotes do I have out", "quotes out", "my quotes", "outstanding quotes" → status=quoted; "invoiced jobs", "what's been invoiced", "invoices out" → status=invoiced; "paid jobs", "completed jobs", "done jobs", "jobs I've done" → status=paid; "cancelled jobs" → status=cancelled
-- view_job: look up details of a specific customer or job — "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "where are we with Jones", "what have I got for Patel" — use jobRef for name. Use only for job/customer details — for documents use resend_quote or resend_invoice
-- find: search for a customer — "find Mrs Patel", "look up Smith", "do I have a customer called Smith", "have I worked for Darren before", "is Jones in my contacts"
+- find: look up any customer or job — "show me Darren's details", "pull up Mrs Patel", "what's on for Smith", "where are we with Jones", "find Mrs Patel", "look up Smith", "do I have a customer called Smith", "have I worked for Darren before", "what have I got for Patel" — use query field for the customer name. For documents use resend_quote or resend_invoice instead.
 - list_customers: list all customers — "customers", "all my customers", "show me my customers", "who are my customers", "list everyone I've worked for"
 - earnings: income for a period — "how much have I made this month", "what have I turned over this week", "what did I earn last month", "how much came in this year". Periods: "last 3 months" → last_3_months, "last quarter" → last_3_months, "this year" → year, "this week" → week. Default: month.
 - financial_summary: overall business overview — "how's business", "stats", "how am I doing", "give me an overview", "how have I done this year"
