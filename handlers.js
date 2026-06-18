@@ -562,7 +562,7 @@ async function handleCancelJob(intent, res) {
       return messenger.twimlReply(res, `Found a few matches — which one did you mean?\n\n${list}\n\nBe more specific, e.g. *cancel quote for ${matched[0].customer_name}*.`);
     }
     await db.cancelJob(matched[0].id, business.id);
-    return messenger.twimlReply(res, `Dropped — ${matched[0].customer_name} won't show up in future reminders.`);
+    return messenger.twimlReply(res, `✅ ${matched[0].customer_name} — ${toTitleCase(matched[0].description)} cancelled.`);
   }
 
   const job = await db.getJobWithCustomer(intent.jobId, business.id);
@@ -571,7 +571,8 @@ async function handleCancelJob(intent, res) {
 
   await db.cancelJob(intent.jobId, business.id);
   const name = job.customer?.name || 'that one';
-  messenger.twimlReply(res, `Dropped — ${name} won't show up in future reminders.`);
+  const desc = job.description ? ` — ${toTitleCase(job.description)}` : '';
+  messenger.twimlReply(res, `✅ ${name}${desc} cancelled.`);
 }
 
 async function handleAddNote(intent, res) {
