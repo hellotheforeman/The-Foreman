@@ -20,6 +20,15 @@ const https = require('https');
 const { uploadLogo } = require('./storage');
 const app = express();
 
+// Strip document words and possessives so "Chloe's invoice" → "Chloe", "Smith's quote" → "Smith"
+function extractCustomerName(input) {
+  return input
+    .replace(/['']s\s*(invoice|quote)?\s*$/i, '')
+    .replace(/\s+(invoice|quote)\s*$/i, '')
+    .replace(/^(?:the|for|an?\s+)\s*/i, '')
+    .trim();
+}
+
 // Trust proxy headers so Express reconstructs the correct HTTPS URL behind
 // Railway / Heroku / Render — required for Twilio signature validation to work.
 app.enable('trust proxy');
@@ -606,7 +615,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       // Step: customer name (bare "quote" trigger)
       if (c.step === 'customer_name') {
-        const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+        const customerName = extractCustomerName(trimmed);
+        const existingCustomers = await db.findCustomerByName(business.id, customerName);
         if (existingCustomers.length === 1) {
           const existing = existingCustomers[0];
           await setConversationState(business.id, {
@@ -617,7 +627,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { step: 'address', customerName: trimmed },
+          collected: { step: 'address', customerName },
         });
         return twimlReply(res, `What's their address?\n\nReply *skip* to leave blank.`);
       }
@@ -792,8 +802,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return dispatch({ kind: 'command', intent: 'send_invoice', jobId: jobs[n - 1].id, business }, res);
         }
       }
-      // Name-based resolution
-      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
+      // Name-based resolution — strip document words so "Chloe's invoice" resolves as "Chloe"
+      const customerName = extractCustomerName(trimmed);
+      const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: customerName }, raw: body, state: null });
       if (resolved.status === 'resolved') {
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'send_invoice', jobId: resolved.job.id, business }, res);
@@ -810,10 +821,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
       }
       // No existing job matched — check if customer exists at all (just no open job)
-      const existingCustomers = await db.findCustomerByName(business.id, trimmed);
+      const existingCustomers = await db.findCustomerByName(business.id, customerName);
       const collected = existingCustomers.length === 1
         ? { step: 'phone', customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
-        : { step: 'phone', customerName: trimmed };
+        : { step: 'phone', customerName };
       await setConversationState(business.id, {
         workflow: 'invoice_flow',
         focus: {},
