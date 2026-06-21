@@ -437,4 +437,15 @@ function parsePeriod(lower) {
   return 'month';
 }
 
-module.exports = { parse, normalisePhone, parseLineItems };
+// Extracts a plain amount from input that may have trade-common qualifiers on the end.
+// e.g. "2500 all in", "£800 inc vat", "1200 flat rate", "950 plus vat" → number
+// Returns a number or null. Does NOT handle line items — use parseLineItems for those.
+function extractAmount(text) {
+  const t = (text || '').trim()
+    .replace(/\s*(all[\s-]in|all[\s-]inclusive|inc\.?\s*vat|incl\.?\s*vat|ex\.?\s*vat|excl\.?\s*vat|plus\s*vat|flat[\s-]?rate|flat|fixed[\s-]?price|fixed|total|overall)\s*$/i, '')
+    .trim();
+  const m = t.match(/^£?(\d+(?:\.\d{1,2})?)$/);
+  return m ? parseFloat(m[1]) : null;
+}
+
+module.exports = { parse, normalisePhone, parseLineItems, extractAmount };

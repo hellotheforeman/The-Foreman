@@ -1,7 +1,7 @@
 const { computeMissingFields, getWorkflow } = require('./workflow-definitions');
 const { resolveSingleJobReference } = require('./entity-resolver');
 const { normaliseConversationState } = require('./conversation-state');
-const { parseLineItems, normalisePhone } = require('./parser');
+const { parseLineItems, normalisePhone, extractAmount } = require('./parser');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
@@ -44,6 +44,10 @@ function mergeCollected(base = {}, parsedIntent = {}, raw = '') {
         merged.amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
         merged.items = raw.trim();
         merged.lineItems = lineItems;
+      } else {
+        // Handle plain numbers with trade qualifiers: "2500 all in", "800 inc vat", etc.
+        const extracted = extractAmount(raw);
+        if (extracted != null) merged.amount = extracted;
       }
     }
   }

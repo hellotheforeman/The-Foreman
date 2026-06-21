@@ -1,7 +1,7 @@
 const express = require('express');
 const config = require('./config');
 const { normalisePhone } = require('./phone');
-const { parse, parseLineItems } = require('./parser');
+const { parse, parseLineItems, extractAmount } = require('./parser');
 const { dispatch, SETTINGS_FIELDS, buildSettingsMenu, openJobsSuggestion } = require('./handlers');
 const { logMessage, findBusinessByPhone } = require('./db');
 const { twimlReply, twimlReplyPair, sendToForeman } = require('./messenger');
@@ -1122,9 +1122,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'amend_existing_invoice') {
         let lineItems = parseLineItems(trimmed);
         if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) lineItems = null;
-        const m = !lineItems && trimmed.match(/^(?:total\s+)?£?(\d+(?:\.\d{1,2})?)\s*$/i);
-        if (!lineItems && !m) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
-        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : parseFloat(m[1]);
+        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : extractAmount(trimmed);
+        if (amount == null) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'amend_invoice', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
       }
@@ -1133,9 +1132,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'amend_existing_quote') {
         let lineItems = parseLineItems(trimmed);
         if (lineItems && lineItems.length === 1 && /^total$/i.test(lineItems[0].description)) lineItems = null;
-        const m = !lineItems && trimmed.match(/^(?:total\s+)?£?(\d+(?:\.\d{1,2})?)\s*$/i);
-        if (!lineItems && !m) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
-        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : parseFloat(m[1]);
+        const amount = lineItems ? lineItems.reduce((s, i) => s + i.amount, 0) : extractAmount(trimmed);
+        if (amount == null) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'quote', jobId: currentState.focus.jobId, amount, items: lineItems ? trimmed : null, lineItems: lineItems || null, business }, res);
       }
@@ -1151,17 +1149,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           await clearConversationState(business.id);
           return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount, items: trimmed, lineItems, business }, res);
         }
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) {
-          const totalM = trimmed.match(/^total\s+£?(\d+(?:\.\d{1,2})?)\s*$/i);
-          if (totalM) {
-            await clearConversationState(business.id);
-            return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount: parseFloat(totalM[1]), items: null, lineItems: null, business }, res);
-          }
-          return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
-        }
+        const amount = extractAmount(trimmed);
+        if (amount == null) return twimlReply(res, 'What\'s the amount? (e.g. *450*, or itemised: *service 250, parts 45*)');
         await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount: parseFloat(m[1]), items: null, lineItems: null, business }, res);
+        return dispatch({ kind: 'command', intent: 'send_invoice', jobId: currentState.focus.jobId, amount, items: null, lineItems: null, business }, res);
       }
 
       // Collect itemised line items
