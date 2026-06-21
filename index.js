@@ -775,6 +775,27 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       intent = { ...intent, intent: 'send_invoice' };
     }
 
+    // --- Quote accepted (go ahead / accepted / confirmed) ---
+    // No customer name given — find the one quoted job, or show a short list
+    if (!currentState && intent.intent === 'send_invoice' && !intent.jobId && !intent.jobRef && intent.fromQuote) {
+      const quotedJobs = await db.getJobsByStatus(business.id, 'quoted');
+      if (!quotedJobs.length) {
+        return twimlReply(res, `No quotes out at the moment — say *quote* to create one.`);
+      }
+      if (quotedJobs.length === 1) {
+        return dispatch({ kind: 'command', intent: 'send_invoice', jobId: quotedJobs[0].id, business }, res);
+      }
+      const lines = quotedJobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+      await setConversationState(business.id, {
+        workflow: 'invoice_pick',
+        focus: {},
+        collected: { jobs: quotedJobs.slice(0, 5) },
+        pending: { type: 'selection', field: 'jobId' },
+        options: quotedJobs.slice(0, 5),
+      });
+      return twimlReply(res, `Which quote was accepted?\n\n${lines}\n\nReply with a number or name.`);
+    }
+
     // --- Invoice by name ---
     // Same guard — clear stale unrelated state so the invoice flow isn't bypassed.
     if (intent.intent === 'send_invoice' && !intent.jobId

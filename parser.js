@@ -103,8 +103,9 @@ function parse(raw) {
   }
 
   // Name/partial reference: "quote wood" — workflow engine resolves to a job
+  // Exclude acceptance phrases: "quote accepted/confirmed/approved" are handled later
   const quoteNameMatch = normalisedForQuote.match(/^quote\s+(.+)$/i);
-  if (quoteNameMatch) {
+  if (quoteNameMatch && !/^(accepted|confirmed|approved)$/i.test(quoteNameMatch[1].trim())) {
     return {
       kind: 'command',
       intent: 'quote',
@@ -355,6 +356,20 @@ function parse(raw) {
   const viewDocPossessiveMatch = text.match(/^pull\s+up\s+(.+?)['']?s\s+(?:quote|invoice)$/i);
   if (viewDocPossessiveMatch) {
     return { kind: 'query', intent: 'view_job', jobRef: viewDocPossessiveMatch[1].trim() };
+  }
+
+  // --- Quote accepted / go ahead — must come before "quotes out" to avoid misroute ---
+  // Contextual: no customer name
+  if (/^(go\s+ahead(\s+with\s+(it|the\s+quote))?|quote\s+(accepted|confirmed|approved)|confirmed(\s+the\s+quote)?|convert\s+(the\s+)?quote\s+to\s+(an?\s+)?invoice|convert\s+to\s+(an?\s+)?invoice|they\s+want\s+to\s+(go\s+ahead|proceed)|want\s+to\s+go\s+ahead|happy\s+to\s+proceed)$/i.test(lower)) {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, fromQuote: true };
+  }
+  if (/^(he|she|they|customer)\s+(accepted|confirmed|approved|wants?\s+to\s+go\s+ahead|said\s+yes)(\s+(the\s+)?(quote|it|that))?$/i.test(lower)) {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, fromQuote: true };
+  }
+  // Named: "[Name] accepted/confirmed/approved [the quote]"
+  const nameAcceptedMatch = lower.match(/^([a-z][a-z\s'-]{1,30}?)\s+(accepted|confirmed|approved|said\s+yes|wants?\s+to\s+go\s+ahead)(\s+(the\s+)?(quote|it))?$/i);
+  if (nameAcceptedMatch && !/\b(he|she|they|it|the|that|invoice|quote|job)\b/i.test(nameAcceptedMatch[1])) {
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: nameAcceptedMatch[1].trim(), fromQuote: true };
   }
 
   // --- Quotes out ---
