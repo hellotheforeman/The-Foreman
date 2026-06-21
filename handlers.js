@@ -517,6 +517,13 @@ async function handleChase(intent, res) {
         const list = matched.map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
         return messenger.twimlReply(res, `Which invoice for ${ref}?\n\n${list}`);
       }
+
+      // No unpaid invoice — check if they have a quoted job instead
+      const quotedJobs = await db.findLikelyOpenJobs(business.id, ref);
+      const quotedMatch = quotedJobs.find(j => j.status === 'quoted');
+      if (quotedMatch) {
+        return messenger.twimlReply(res, `No invoice for ${quotedMatch.customer_name} yet — they're still on a quote.`);
+      }
     }
     return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
   }
