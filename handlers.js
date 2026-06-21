@@ -308,6 +308,14 @@ async function handlePaid(intent, res) {
 
     if (!allUnpaid.length) return messenger.twimlReply(res, `No unpaid invoices. 🎉`);
 
+    // Only one outstanding — mark it without asking
+    if (allUnpaid.length === 1) {
+      const only = allUnpaid[0];
+      const vatDisplay = business?.vat_registered ? (Number(only.amount) * 1.20).toFixed(2) : Number(only.amount).toFixed(2);
+      await db.markInvoicePaid(only.id);
+      return messenger.twimlReply(res, `💰 £${vatDisplay} from ${only.customer_name} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
+    }
+
     const list = allUnpaid.slice(0, 5)
       .map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`)
       .join('\n');

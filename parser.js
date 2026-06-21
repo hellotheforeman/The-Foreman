@@ -122,6 +122,17 @@ function parse(raw) {
     return { kind: 'command', intent: 'paid', jobId: parseInt(paidMatch[1], 10) };
   }
 
+  // "paid" / "mark as paid" / "he/she/they paid" / "that invoice is paid" / contextual paid phrases with no name
+  if (/^(paid|mark\s+as\s+paid|mark\s+it\s+as\s+paid|(he|she|they|it)\s+(has\s+)?paid(\s+(that\s+)?(invoice|up))?|that\s+invoice(\s+is|\s+has\s+been)?\s+paid|invoice\s+(is\s+|has\s+been\s+)?paid|just\s+paid|now\s+paid)$/i.test(lower)) {
+    return { kind: 'command', intent: 'paid', jobId: null, jobRef: null };
+  }
+
+  // "[Name] paid" / "[Name] has paid" / "[Name] settled" — name before paid verb
+  const namePaidMatch = lower.match(/^([a-z][a-z\s'-]{1,30}?)\s+(paid(\s+up)?|has\s+paid|settled|paid\s+the\s+invoice)$/i);
+  if (namePaidMatch && !/\b(invoice|quote|job|that|the|it|he|she|they)\b/i.test(namePaidMatch[1])) {
+    return { kind: 'command', intent: 'paid', jobId: null, jobRef: namePaidMatch[1].trim() };
+  }
+
   // --- Invoice (send) ---
   // Quick with amount: "invoice 14 450" or "invoice 14 450 boiler service"
   const invoiceQuickMatch = text.match(/^(?:send\s+)?invoice\s+#?(\d+)\s+£?(\d+(?:\.\d{1,2})?)\s*(.*)$/i);
