@@ -155,7 +155,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'morning_briefing')) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'morning_briefing' || (currentState.workflow === 'quote_flow' && currentState.collected?.step === 'customer_name'))) {
       const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
       if (aiResult) {
         if (aiResult.type === 'reply') return twimlReply(res, aiResult.message);
@@ -623,25 +623,49 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       // Step: customer name (bare "quote" trigger)
       if (c.step === 'customer_name') {
-        const customerName = extractCustomerName(trimmed);
+        // Prefer AI-extracted name (handles complex sentences like "£700 for hedge cutting, customer is Jan Raymond")
+        const rawName = intent.jobRef || intent.name || trimmed;
+        const customerName = extractCustomerName(rawName);
+
+        // Re-prompt if result looks wrong — starts with £/$, too many words, or clearly a sentence
+        if (!customerName || /^[£$\d]/.test(customerName) || customerName.split(/\s+/).length > 5 || /\b(it|is|are|for|and|new|quote|invoice)\b/i.test(customerName)) {
+          return twimlReply(res, `Who's this quote for? Just the customer's name.`);
+        }
+
+        // Carry forward any extra fields the AI spotted in the same message
+        const extraCollected = {
+          ...(intent.amount != null && c.amount == null ? { amount: intent.amount } : {}),
+          ...((intent.items || intent.description) && !c.description ? { description: intent.items || intent.description } : {}),
+        };
+
         const existingCustomers = await db.findCustomerByName(business.id, customerName);
         if (existingCustomers.length === 1) {
           const existing = existingCustomers[0];
+          if (extraCollected.description && extraCollected.amount != null) {
+            const { job } = await createCustomerAndJob(business.id, { customerId: existing.id, customerName: existing.name, description: extraCollected.description });
+            return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: extraCollected.amount, items: extraCollected.description, lineItems: null, business }, res);
+          }
           await setConversationState(business.id, {
             ...currentState,
-            collected: { step: 'description', customerId: existing.id, customerName: existing.name },
+            collected: { step: extraCollected.description ? 'price' : 'description', customerId: existing.id, customerName: existing.name, ...extraCollected },
           });
-          return twimlReply(res, `Got it — what's the work for ${existing.name}?`);
+          return twimlReply(res, extraCollected.description
+            ? `Got it — ${existing.name}, ${extraCollected.description}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`
+            : `Got it — what's the work for ${existing.name}?`);
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { step: 'address', customerName },
+          collected: { step: 'address', customerName, ...extraCollected },
         });
-        return twimlReply(res, `What's their address?\n\nReply *skip* to leave blank.`);
+        return twimlReply(res, `What's ${customerName}'s address?\n\nReply *skip* to leave blank.`);
       }
 
       // Step: address (new customers only)
       if (c.step === 'address') {
+        // Re-prompt if reply looks like confusion rather than an address
+        if (/\b(quote|invoice|new|job)\b/i.test(trimmed) && !/\d/.test(trimmed)) {
+          return twimlReply(res, `What's ${c.customerName}'s address?\n\nReply *skip* to leave blank.`);
+        }
         const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
         if (c.description && c.amount != null) {
           await clearConversationState(business.id);
