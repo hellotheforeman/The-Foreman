@@ -510,13 +510,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // Silently creates customer + job, then hands off to handleQuote.
     // If the user was mid-way through an unrelated flow (e.g. new_customer), clear it so
     // the quote flow can start fresh rather than falling through to the workflow engine.
-    if (intent.intent === 'quote' && !intent.jobId && intent.amount == null
+    if (intent.intent === 'quote' && !intent.jobId
         && currentState && !['quote_flow', 'quote_focus'].includes(currentState.workflow)) {
       await clearConversationState(business.id);
       currentState = null;
     }
-    if (!currentState && intent.intent === 'quote' && !intent.jobId && intent.amount == null) {
-      const { customerRef: rawCustomerRef, prefilledDescription } = extractQuoteParts(intent);
+    if (!currentState && intent.intent === 'quote' && !intent.jobId) {
+      const { customerRef: rawCustomerRef, prefilledDescription: descFromParts } = extractQuoteParts(intent);
+      const prefilledDescription = descFromParts || (intent.items && !parseLineItems(intent.items) ? intent.items : null);
+      const prefilledAmount = intent.amount ?? null;
+      const prefilledItems = intent.items ?? null;
+      const prefilledLineItems = intent.lineItems ?? null;
       // If what was extracted as a customer ref looks like a sentence rather than a name, discard it
       const customerRef = (rawCustomerRef && (/^(?:for|to|a|an|the|i|i've)\b/i.test(rawCustomerRef) || rawCustomerRef.split(' ').length > 5))
         ? null
@@ -541,35 +545,39 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
         }
 
-        // Customer exists but no open job — skip to price if we have description, else ask for it
+        // Customer exists but no open job — skip steps we already have data for
         const existingCustomers = await db.findCustomerByName(business.id, customerRef);
         if (existingCustomers.length === 1) {
-          const c = existingCustomers[0];
+          const ec = existingCustomers[0];
+          if (prefilledDescription && prefilledAmount != null) {
+            const { job } = await createCustomerAndJob(business.id, { customerId: ec.id, customerName: ec.name, description: prefilledDescription });
+            return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: prefilledAmount, items: prefilledItems, lineItems: prefilledLineItems, business }, res);
+          }
           if (prefilledDescription) {
             await setConversationState(business.id, {
               workflow: 'quote_flow',
               focus: {},
-              collected: { step: 'price', customerId: c.id, customerName: c.name, description: prefilledDescription },
+              collected: { step: 'price', customerId: ec.id, customerName: ec.name, description: prefilledDescription },
               pending: { type: 'field', field: 'price' },
               options: [],
             });
-            return twimlReply(res, `Got it — ${c.name}, ${prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+            return twimlReply(res, `Got it — ${ec.name}, ${prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
           }
           await setConversationState(business.id, {
             workflow: 'quote_flow',
             focus: {},
-            collected: { step: 'description', customerId: c.id, customerName: c.name },
+            collected: { step: 'description', customerId: ec.id, customerName: ec.name },
             pending: { type: 'field', field: 'description' },
             options: [],
           });
-          return twimlReply(res, `What's the scope of work for ${c.name}?`);
+          return twimlReply(res, `What's the scope of work for ${ec.name}?`);
         }
 
-        // New customer — ask for address first, then description/price
+        // New customer — ask for address first, then any missing fields
         await setConversationState(business.id, {
           workflow: 'quote_flow',
           focus: {},
-          collected: { step: 'address', customerName: customerRef, description: prefilledDescription || null },
+          collected: { step: 'address', customerName: customerRef, description: prefilledDescription || null, amount: prefilledAmount, items: prefilledItems, lineItems: prefilledLineItems },
           pending: { type: 'field', field: 'address' },
           options: [],
         });
@@ -635,6 +643,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       // Step: address (new customers only)
       if (c.step === 'address') {
         const address = /^skip$/i.test(trimmed) ? null : formatAddress(trimmed);
+        if (c.description && c.amount != null) {
+          await clearConversationState(business.id);
+          const { job } = await createCustomerAndJob(business.id, { ...c, address });
+          return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+        }
         if (c.description) {
           await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
           return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
@@ -645,9 +658,15 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       // Step: job description
       if (c.step === 'description') {
+        const description = trimmed;
+        if (c.amount != null) {
+          await clearConversationState(business.id);
+          const { job } = await createCustomerAndJob(business.id, { ...c, description });
+          return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+        }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { ...c, step: 'price', description: trimmed },
+          collected: { ...c, step: 'price', description },
         });
         return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
       }
@@ -706,12 +725,27 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       if (c.step === 'address') {
         const address = /^skip$/i.test(trimmed) ? null : trimmed;
+        if (c.description && c.amount != null) {
+          await clearConversationState(business.id);
+          const { job } = await createCustomerAndJob(business.id, { ...c, address });
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+        }
+        if (c.description) {
+          await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
+          return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
+        }
         await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', address } });
         return twimlReply(res, `What's the scope of work for ${c.customerName}?`);
       }
 
       if (c.step === 'description') {
-        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', description: trimmed } });
+        const description = trimmed;
+        if (c.amount != null) {
+          await clearConversationState(business.id);
+          const { job } = await createCustomerAndJob(business.id, { ...c, description });
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+        }
+        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', description } });
         return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
       }
 
@@ -764,19 +798,23 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
       }
-      // jobRef didn't resolve — drop into invoice_pick and ask who it's for
-      const suggestion = await openJobsSuggestion(business.id);
-      await setConversationState(business.id, {
-        workflow: 'invoice_pick',
-        focus: {},
-        collected: {},
-        pending: { type: 'field', field: 'jobRef' },
-        options: [],
-      });
-      return twimlReply(res, suggestion
-        ? `Who's this invoice for? Here's what's outstanding:\n\n${suggestion}\n\nOr type a name to start a new one.`
-        : `Who's this invoice for? Type a name or say *open* to see what's on.`
-      );
+      // jobRef didn't resolve — enter invoice_flow directly (we already have the name)
+      {
+        const preDesc = intent.items || null;
+        const preAmt = intent.amount ?? null;
+        const existingCustomers = await db.findCustomerByName(business.id, intent.jobRef);
+        const baseCollected = existingCustomers.length === 1
+          ? { customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
+          : { customerName: intent.jobRef };
+        await setConversationState(business.id, {
+          workflow: 'invoice_flow',
+          focus: {},
+          collected: { step: 'phone', ...baseCollected, description: preDesc, amount: preAmt, items: preDesc },
+          pending: { type: 'field', field: 'phone' },
+          options: [],
+        });
+        return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
+      }
     }
 
     if (currentState?.workflow === 'invoice_pick') {
