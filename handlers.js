@@ -221,7 +221,7 @@ async function handleQuote(intent, res) {
     options: [],
   } : {
     workflow: 'quote_focus',
-    focus: { jobId: job.id },
+    focus: { jobId: job.id, customerName: job.customer.name, setAt: Date.now() },
     collected: {},
     pending: null,
     options: [],
@@ -401,7 +401,7 @@ async function handleSendInvoice(intent, res) {
     options: [],
   } : {
     workflow: 'invoice_focus',
-    focus: { jobId: job.id },
+    focus: { jobId: job.id, customerName: job.customer.name, setAt: Date.now() },
     collected: {},
     pending: null,
     options: [],

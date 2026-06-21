@@ -165,6 +165,32 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     intent.business = business;
     console.log(`📥 ${business.business_name || business.name}: "${body}" → ${intent.intent}`);
 
+    // --- Context resolution ---
+    // quote_focus / invoice_focus carry the last discussed job. When the next message is
+    // contextual (no explicit customer name or job ID), inject the focus job so the user
+    // can say "he paid", "chase him", "he accepted" without repeating the name.
+    // Context expires after 30 minutes to avoid stale matches.
+    {
+      const ctx = currentState?.workflow === 'quote_focus' || currentState?.workflow === 'invoice_focus' ? currentState : null;
+      if (ctx && !intent.jobId && !intent.jobRef) {
+        const focusJobId = ctx.focus?.jobId;
+        const focusSetAt = ctx.focus?.setAt;
+        const expired = focusSetAt && (Date.now() - focusSetAt > 30 * 60 * 1000);
+        if (expired) {
+          await clearConversationState(business.id);
+          currentState = null;
+        } else if (focusJobId) {
+          const CONTEXT_INTENTS = ['paid', 'chase', 'cancel_job'];
+          const isQuoteAcceptance = intent.intent === 'send_invoice' && intent.fromQuote && ctx.workflow === 'quote_focus';
+          if (CONTEXT_INTENTS.includes(intent.intent) || isQuoteAcceptance) {
+            intent = { ...intent, jobId: focusJobId };
+            await clearConversationState(business.id);
+            currentState = null;
+          }
+        }
+      }
+    }
+
     // --- Settings workflow (menu-driven, handled outside the generic workflow engine) ---
     if (intent.intent === 'settings') {
       await setConversationState(business.id, {
