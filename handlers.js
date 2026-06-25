@@ -2,7 +2,7 @@ const db = require('./db');
 const templates = require('./templates');
 const messenger = require('./messenger');
 const { generateQuotePdf, generateInvoicePdf } = require('./pdf');
-const { setConversationState } = require('./conversation-state');
+const { setConversationState, clearConversationState } = require('./conversation-state');
 
 function toTitleCase(str) {
   return String(str).replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
@@ -301,7 +301,9 @@ async function handlePaid(intent, res) {
       }
 
       if (matched.length > 1) {
-        const list = matched.map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        const invoices = matched.slice(0, 5);
+        const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
         return messenger.twimlReply(res, `Which invoice for ${intent.name}?\n\n${list}`);
       }
     }
@@ -316,9 +318,9 @@ async function handlePaid(intent, res) {
       return messenger.twimlReply(res, `💰 £${vatDisplay} from ${only.customer_name} marked as paid. ${pick(['Nice one!', 'Get in! 💪', 'That\'s the one. 👊', 'Lovely stuff.'])}`);
     }
 
-    const list = allUnpaid.slice(0, 5)
-      .map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`)
-      .join('\n');
+    const invoices = allUnpaid.slice(0, 5);
+    const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+    await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
     return messenger.twimlReply(res, `Which invoice got paid?\n\n${list}`);
   }
 

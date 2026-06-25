@@ -349,7 +349,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     if ((business.vat_registered === null || business.vat_registered === undefined)
         && (intent.intent === 'quote' || intent.intent === 'send_invoice')
         && currentState?.workflow !== 'vat_gate'
-        && !['quote_flow', 'quote_focus', 'invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus'].includes(currentState?.workflow)) {
+        && !['quote_flow', 'quote_focus', 'invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus', 'paid_pick'].includes(currentState?.workflow)) {
       await setConversationState(business.id, {
         workflow: 'vat_gate',
         focus: {},
@@ -886,6 +886,40 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `What's their phone number?\n\nReply *skip* to leave blank.`);
       }
+    }
+
+    if (currentState?.workflow === 'paid_pick') {
+      const trimmed = body.trim();
+      const invoices = currentState.collected?.invoices || [];
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      // Numeric selection
+      const n = parseInt(trimmed, 10);
+      if (!isNaN(n) && n >= 1 && n <= invoices.length) {
+        const chosen = invoices[n - 1];
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'paid', jobId: chosen.id, business }, res);
+      }
+      // Name-based: find first invoice whose customer name includes the reply
+      const nameLower = trimmed.toLowerCase();
+      const nameMatches = invoices.filter(i => i.customer_name.toLowerCase().includes(nameLower));
+      if (nameMatches.length === 1) {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'paid', jobId: nameMatches[0].id, business }, res);
+      }
+      if (nameMatches.length > 1) {
+        const list = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        return twimlReply(res, `Still a few matches — reply with a number:\n\n${list}`);
+      }
+      // New command — abandon pick and handle it
+      if (intent.kind === 'command' && intent.intent !== 'paid') {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+      const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+      return twimlReply(res, `Didn't catch that — reply with a name or number:\n\n${list}`);
     }
 
     if (currentState?.workflow === 'invoice_pick') {
