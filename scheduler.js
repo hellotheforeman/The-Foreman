@@ -1,7 +1,7 @@
 const cron = require('node-cron');
 const db = require('./db');
 const messenger = require('./messenger');
-const { setConversationState } = require('./conversation-state');
+const { setConversationState, getConversationState } = require('./conversation-state');
 
 const TZ = { timezone: 'Europe/London' };
 const REPEAT_DAYS = 3;
@@ -113,13 +113,17 @@ function start() {
           await messenger.sendToForeman(lines.join('\n'), { businessId: business.id, businessPhone: business.phone });
           await db.setBriefingMeta(business.id, hash, !!profileTip);
 
-          await setConversationState(business.id, {
-            workflow: 'morning_briefing',
-            focus: {},
-            collected: { items },
-            pending: { type: 'selection', field: 'action' },
-            options: [],
-          });
+          const activeState = await getConversationState(business.id);
+          const activeFlows = ['quote_flow', 'invoice_flow', 'vat_gate', 'bank_gate', 'settings'];
+          if (!activeState || !activeFlows.includes(activeState.workflow)) {
+            await setConversationState(business.id, {
+              workflow: 'morning_briefing',
+              focus: {},
+              collected: { items },
+              pending: { type: 'selection', field: 'action' },
+              options: [],
+            });
+          }
         } catch (err) {
           console.error(`Morning briefing failed for business ${business.id}:`, err.message);
         }

@@ -414,7 +414,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const { pendingIntent } = currentState.collected;
           await clearConversationState(business.id);
           res.on('finish', () => {
-            messenger.sendToForeman(
+            sendToForeman(
               `No problem — you can add them anytime in *settings* if you change your mind.`,
               { businessId: business.id, businessPhone: business.phone }
             ).catch(err => console.error('Bank details nudge failed:', err.message));
@@ -1782,6 +1782,10 @@ async function createCustomerAndJob(businessId, collected) {
   let customer;
   if (collected.customerId) {
     customer = await db.getCustomer(collected.customerId, businessId);
+    if (collected.address) {
+      await db.updateCustomer(collected.customerId, businessId, { address: collected.address });
+      customer = { ...customer, address: collected.address };
+    }
   } else {
     customer = await db.findOrCreateCustomer(businessId, collected.customerName, collected.phone, null, collected.address || null);
   }

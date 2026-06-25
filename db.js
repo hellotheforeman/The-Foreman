@@ -204,6 +204,9 @@ async function init() {
 
 
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_registered BOOLEAN NOT NULL DEFAULT false');
+  // Allow NULL so new businesses trigger the VAT gate; existing false rows are left as-is
+  await pool.query('ALTER TABLE businesses ALTER COLUMN vat_registered DROP NOT NULL');
+  await pool.query('ALTER TABLE businesses ALTER COLUMN vat_registered SET DEFAULT NULL');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS vat_number TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS logo_path TEXT');
   await pool.query('ALTER TABLE businesses ADD COLUMN IF NOT EXISTS onboarded BOOLEAN NOT NULL DEFAULT false');
