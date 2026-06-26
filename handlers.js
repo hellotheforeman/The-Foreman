@@ -303,7 +303,7 @@ async function handlePaid(intent, res) {
       if (matched.length > 1) {
         const invoices = matched.slice(0, 5);
         const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
-        await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
+        await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, job_id: i.job_id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
         return messenger.twimlReply(res, `Which invoice for ${intent.name}?\n\n${list}`);
       }
     }
@@ -320,7 +320,7 @@ async function handlePaid(intent, res) {
 
     const invoices = allUnpaid.slice(0, 5);
     const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
-    await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
+    await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, job_id: i.job_id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
     return messenger.twimlReply(res, `Which invoice got paid?\n\n${list}`);
   }
 

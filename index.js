@@ -900,14 +900,14 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (!isNaN(n) && n >= 1 && n <= invoices.length) {
         const chosen = invoices[n - 1];
         await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'paid', jobId: chosen.id, business }, res);
+        return dispatch({ kind: 'command', intent: 'paid', jobId: chosen.job_id, business }, res);
       }
       // Name-based: find first invoice whose customer name includes the reply
       const nameLower = trimmed.toLowerCase();
       const nameMatches = invoices.filter(i => i.customer_name.toLowerCase().includes(nameLower));
       if (nameMatches.length === 1) {
         await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'paid', jobId: nameMatches[0].id, business }, res);
+        return dispatch({ kind: 'command', intent: 'paid', jobId: nameMatches[0].job_id, business }, res);
       }
       if (nameMatches.length > 1) {
         const list = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
