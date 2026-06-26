@@ -373,11 +373,12 @@ function parse(raw) {
   }
 
   // --- Capability questions ---
-  // New users asking whether the bot can do something — route to help before content patterns fire.
-  // "for Smith" guard prevents "can you do a quote for Smith" being caught.
+  // New users asking whether the bot can do something — return unknown so the AI
+  // answers naturally via reply_directly rather than showing the static help menu.
+  // "for Smith" guard prevents catching actual commands like "can you do a quote for Smith".
   if (/\b(do you (do|also\s+do|handle|support|offer|work\s+with)|can you (do|handle|support|work\s+with)|are you able to)\b/i.test(lower)
       && !/\bfor\s+[A-Z][a-z]/.test(text)) {
-    return { kind: 'query', intent: 'help' };
+    return { kind: 'query', intent: 'unknown' };
   }
 
   // --- Quotes out ---
