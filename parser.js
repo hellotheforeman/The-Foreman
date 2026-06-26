@@ -372,9 +372,18 @@ function parse(raw) {
     return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: nameAcceptedMatch[1].trim(), fromQuote: true };
   }
 
+  // --- Capability questions ---
+  // New users asking whether the bot can do something — route to help before content patterns fire.
+  // "for Smith" guard prevents "can you do a quote for Smith" being caught.
+  if (/\b(do you (do|also\s+do|handle|support|offer|work\s+with)|can you (do|handle|support|work\s+with)|are you able to)\b/i.test(lower)
+      && !/\bfor\s+[A-Z][a-z]/.test(text)) {
+    return { kind: 'query', intent: 'help' };
+  }
+
   // --- Quotes out ---
   // Exclude "quote for [name]" — those are view_job requests, not list requests
-  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower) && !/\bquote\s+for\s+\w/.test(lower)) {
+  // Exclude interrogative phrases so "do you do quotes" routes to help, not here
+  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower) && !/\bquote\s+for\s+\w/.test(lower) && !/\b(do you|can you|are you|will you)\b/.test(lower)) {
     return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
   }
 
