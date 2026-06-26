@@ -130,7 +130,7 @@ function parse(raw) {
 
   // "[Name] paid" / "[Name] has paid" / "[Name] settled" — name before paid verb
   const namePaidMatch = lower.match(/^([a-z][a-z\s'-]{1,30}?)\s+(paid(\s+up)?|has\s+paid|settled|paid\s+the\s+invoice)$/i);
-  if (namePaidMatch && !/\b(invoice|quote|job|that|the|it|he|she|they)\b/i.test(namePaidMatch[1])) {
+  if (namePaidMatch && !/\b(invoice|quote|job|that|the|it|he|she|they|how|what|when|where|why)\b/i.test(namePaidMatch[1])) {
     return { kind: 'command', intent: 'paid', jobId: null, jobRef: namePaidMatch[1].trim() };
   }
 
@@ -420,7 +420,7 @@ function parse(raw) {
   }
 
   // --- Help ---
-  if (/^(help|commands|what can you do|how does this work|\?)$/i.test(lower)) {
+  if (/^(help|commands|what can you do|\?)$/i.test(lower)) {
     return { kind: 'query', intent: 'help' };
   }
 
