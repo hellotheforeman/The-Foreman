@@ -174,15 +174,37 @@ function parse(raw) {
     return { kind: 'command', intent: 'send_invoice', jobId: parseInt(invoiceMatch[1], 10) };
   }
 
-  // Invoice by customer name: "invoice Mrs Smith"
+  // Invoice by customer name: "invoice Mrs Smith" or "invoice for James Smith for a boiler service £180"
   const invoiceByNameMatch = text.match(/^(?:send\s+)?invoice\s+(?!#?\d)(.+)$/i);
   if (invoiceByNameMatch) {
     const ref = invoiceByNameMatch[1].trim();
-    // If the captured ref starts with a number, negative number, or £ it's line items not a name — bare flow
     if (/^-?\d|^£/.test(ref)) {
       return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
     }
-    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: ref, amount: null };
+
+    // Extract £XXX or trailing number from the full phrase
+    const amountMatch = ref.match(/£(\d+(?:\.\d{1,2})?)\b/) || ref.match(/\b(\d+(?:\.\d{1,2})?)\s*$/);
+    const amount = amountMatch ? parseFloat(amountMatch[1]) : null;
+    let jobRef = ref;
+    let items = null;
+
+    // "for [Name] for [description] [£amount]" — most verbose natural form
+    const forNameForDesc = ref.match(/^for\s+([A-Za-z][A-Za-z\s'-]{1,40}?)\s+for\s+(.+?)(?:\s+£[\d.,]+)?\s*$/i);
+    if (forNameForDesc) {
+      jobRef = forNameForDesc[1].trim();
+      items = forNameForDesc[2].replace(/\s*£[\d.,]+\s*$/, '').trim() || null;
+    } else {
+      // "for [Name] [£amount]" — name only with optional trailing amount
+      const forName = ref.match(/^for\s+([A-Za-z][A-Za-z\s'-]{1,40}?)(?:\s+£?[\d.,]+)?\s*$/i);
+      if (forName) {
+        jobRef = forName[1].trim();
+      } else if (amount != null) {
+        // "[Name] [description] [£amount]" — strip trailing amount from ref
+        jobRef = ref.replace(/\s*£?\d[\d.,]*\s*$/, '').trim();
+      }
+    }
+
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef, amount, items };
   }
 
   // Bare invoice intent: "invoice", "create an invoice", "create me an invoice", "build me an invoice" etc.

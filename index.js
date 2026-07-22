@@ -877,6 +877,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const baseCollected = existingCustomers.length === 1
           ? { customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
           : { customerName: intent.jobRef };
+        // Fast path: name + description + amount all present — create invoice without asking for phone/address
+        if (preDesc && preAmt != null) {
+          const { job } = await createCustomerAndJob(business.id, { ...baseCollected, description: preDesc });
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: preAmt, items: preDesc, business }, res);
+        }
         await setConversationState(business.id, {
           workflow: 'invoice_flow',
           focus: {},
