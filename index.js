@@ -794,9 +794,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const { job } = await createCustomerAndJob(business.id, c);
           return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
         }
-        const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
-        if (!m) return twimlReply(res, `What's the price? (e.g. *450*, or itemised: *labour 250, parts 45*)`);
-        const amount = parseFloat(m[1]);
+        const amount = extractAmount(trimmed);
+        if (amount == null) return twimlReply(res, `What's the price? (e.g. *450*, or itemised: *labour 250, parts 45*)`);
         await clearConversationState(business.id);
         const { job } = await createCustomerAndJob(business.id, c);
         return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount, items: null, lineItems: null, business }, res);
