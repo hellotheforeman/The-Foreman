@@ -26,7 +26,7 @@ const SETTINGS_FIELDS = [
 ];
 
 function buildSettingsMenu(business) {
-  const lines = ['⚙️ *Business Settings*\n', 'Which one do you want to update?\n'];
+  const lines = ['⚙️ *Business Settings*\n', 'Reply with a number to update that field, or *cancel* to close.\n'];
   SETTINGS_FIELDS.forEach((s, i) => {
     let display;
     if (s.type === 'vat') {
@@ -50,7 +50,6 @@ function buildSettingsMenu(business) {
     }
     lines.push(`${i + 1}. ${s.label}: ${display}`);
   });
-  lines.push('\nSay *cancel* to close.');
   return lines.join('\n');
 }
 
