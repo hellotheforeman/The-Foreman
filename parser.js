@@ -303,7 +303,10 @@ function parse(raw) {
   }
 
   // --- Business settings menu ---
-  if (/^(?:settings?|business\s+settings?|my\s+settings?)$/i.test(lower)) {
+  // Bare command or natural language request mentioning a settings field
+  if (/^(?:settings?|business\s+settings?|my\s+settings?|profile)$/i.test(lower)
+      || /\b(logo|bank\s+details?|sort\s+code|account\s+number|payment\s+details?|payment\s+terms?|vat\s+(number|registration|registered)|business\s+name|my\s+trade)\b/i.test(lower)
+      || /^i'?m\s+(vat\s+registered|not\s+vat\s+registered)\b/i.test(lower)) {
     return { kind: 'query', intent: 'settings' };
   }
 
