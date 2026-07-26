@@ -537,7 +537,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // If the user was mid-way through an unrelated flow (e.g. new_customer), clear it so
     // the quote flow can start fresh rather than falling through to the workflow engine.
     if (intent.intent === 'quote' && !intent.jobId
-        && currentState && !['quote_flow', 'quote_focus'].includes(currentState.workflow)) {
+        && currentState && currentState.workflow !== 'quote_flow') {
       await clearConversationState(business.id);
       currentState = null;
     }
@@ -860,7 +860,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- Invoice by name ---
     // Same guard — clear stale unrelated state so the invoice flow isn't bypassed.
     if (intent.intent === 'send_invoice' && !intent.jobId
-        && currentState && !['invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus'].includes(currentState.workflow)) {
+        && currentState && !['invoice_flow', 'invoice_guided', 'invoice_pick'].includes(currentState.workflow)) {
       await clearConversationState(business.id);
       currentState = null;
     }
