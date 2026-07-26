@@ -552,7 +552,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           intent = { ...intent, ...aiResult };
         }
       }
-      const { customerRef: rawCustomerRef, prefilledDescription: descFromParts } = extractQuoteParts(intent);
+      const { customerRef: rawCustomerRef, prefilledDescription: _descFromParts } = extractQuoteParts(intent);
+      const descFromParts = _descFromParts || intent.workDescription || null;
       let prefilledItems = intent.items ?? null;
       const _qParsedItems = prefilledItems ? parseLineItems(prefilledItems) : null;
       let prefilledLineItems = intent.lineItems ?? _qParsedItems ?? null;
@@ -897,7 +898,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const iResAmt = _iResDesc
             ? _iResDesc.reduce((s, i) => s + i.amount, 0)
             : (intent.amount ?? null);
-          const iResCleanDesc = null;
+          const iResCleanDesc = intent.workDescription || null;
           if (iResAmt != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: iResCleanDesc });
             return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: iResAmt, items: intent.items, lineItems: iResLineItems, business }, res);

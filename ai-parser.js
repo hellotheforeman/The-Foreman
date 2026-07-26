@@ -50,6 +50,10 @@ const DISPATCH_TOOL = {
           type: 'string',
           description: 'Customer name, e.g. "Mrs Patel" or "Darren". Always use this — never use a job number.',
         },
+        workDescription: {
+          type: 'string',
+          description: 'The type of work being quoted or invoiced — e.g. "fit staircase", "bathroom refit", "replace boiler". Only set when the user explicitly names the work separately from the cost breakdown (e.g. "quote James Smith to fit a staircase, materials 800 labour 100" → "fit staircase"). Leave unset if the message only contains a customer name and prices with no named work type.',
+        },
         amount: {
           type: 'number',
           description: 'Total monetary amount in GBP as a number. If multiple prices appear (e.g. "labour 200, parts 100, callout 50"), sum ALL of them (350 in that example). Never return just one price from a multi-price message.',
