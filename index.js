@@ -542,6 +542,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       currentState = null;
     }
     if (!currentState && intent.intent === 'quote' && !intent.jobId) {
+      // jobRef or items contains digits → regex captured more than a clean name; use AI for field extraction
+      if (
+        (typeof intent.jobRef === 'string' && /\d/.test(intent.jobRef)) ||
+        (!intent.jobRef && typeof intent.items === 'string' && /\d/.test(intent.items))
+      ) {
+        const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
+        if (aiResult && !aiResult.type && aiResult.intent === 'quote' && aiResult.jobRef) {
+          intent = { ...intent, ...aiResult };
+        }
+      }
       const { customerRef: rawCustomerRef, prefilledDescription: descFromParts } = extractQuoteParts(intent);
       let prefilledItems = intent.items ?? null;
       const _qParsedItems = prefilledItems ? parseLineItems(prefilledItems) : null;
@@ -855,6 +865,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       currentState = null;
     }
     if (!currentState && intent.intent === 'send_invoice' && !intent.jobId && intent.jobRef) {
+      // jobRef or items contains digits → regex captured more than a clean name; use AI for field extraction
+      if (
+        (typeof intent.jobRef === 'string' && /\d/.test(intent.jobRef)) ||
+        (typeof intent.items === 'string' && /\d/.test(intent.items))
+      ) {
+        const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
+        if (aiResult && !aiResult.type && aiResult.intent === 'send_invoice' && aiResult.jobRef) {
+          intent = { ...intent, ...aiResult };
+        }
+      }
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
         return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
