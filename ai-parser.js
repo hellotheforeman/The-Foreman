@@ -52,11 +52,11 @@ const DISPATCH_TOOL = {
         },
         amount: {
           type: 'number',
-          description: 'Monetary amount in GBP as a number, e.g. 450 or 85.50. Do not include currency symbols.',
+          description: 'Total monetary amount in GBP as a number. If multiple prices appear (e.g. "labour 200, parts 100, callout 50"), sum ALL of them (350 in that example). Never return just one price from a multi-price message.',
         },
         items: {
           type: 'string',
-          description: 'Line items as raw text, e.g. "Labour 200, Parts 50, Callout 40".',
+          description: 'Line items as comma-separated raw text. Each item MUST include a description AND a price at the end, e.g. "Labour 200, Parts 50, Callout 40". Every item needs a price — do not emit description-only items. If the message has multiple prices for different tasks (e.g. "shorten 2 doors 200 labour 100 parts 250"), extract each as a separate item with its price.',
         },
         status: {
           type: 'string',
