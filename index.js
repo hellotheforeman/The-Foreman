@@ -543,14 +543,26 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     }
     if (!currentState && intent.intent === 'quote' && !intent.jobId) {
       const { customerRef: rawCustomerRef, prefilledDescription: descFromParts } = extractQuoteParts(intent);
-      const prefilledDescription = descFromParts || (intent.items && !parseLineItems(intent.items) ? intent.items : null);
-      const prefilledAmount = intent.amount ?? null;
-      const prefilledItems = intent.items ?? null;
-      const prefilledLineItems = intent.lineItems ?? null;
-      // If what was extracted as a customer ref looks like a sentence rather than a name, discard it
-      const customerRef = (rawCustomerRef && (/^(?:for|to|a|an|the|i|i've)\b/i.test(rawCustomerRef) || rawCustomerRef.split(' ').length > 5))
+      let prefilledItems = intent.items ?? null;
+      const _qParsedItems = prefilledItems ? parseLineItems(prefilledItems) : null;
+      let prefilledLineItems = intent.lineItems ?? _qParsedItems ?? null;
+      let prefilledAmount = intent.amount ?? (_qParsedItems ? _qParsedItems.reduce((s, i) => s + i.amount, 0) : null);
+      // When items are structured line items, use only item names (no £ amounts) as the job description
+      const prefilledDescription = descFromParts
+        || (_qParsedItems ? _qParsedItems.map(i => i.description).join(', ') : prefilledItems)
+        || null;
+      // If what was extracted as a customer ref looks like a sentence rather than a name, try AI before discarding
+      let customerRef = (rawCustomerRef && (/^(?:for|to|a|an|the|i|i've)\b/i.test(rawCustomerRef) || rawCustomerRef.split(' ').length > 5))
         ? null
         : rawCustomerRef;
+      if (!customerRef) {
+        const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
+        if (aiResult && !aiResult.type && aiResult.intent === 'quote' && aiResult.jobRef) {
+          customerRef = aiResult.jobRef;
+          if (aiResult.amount != null && prefilledAmount == null) prefilledAmount = aiResult.amount;
+          if (aiResult.items != null && !prefilledItems) prefilledItems = aiResult.items;
+        }
+      }
 
       if (customerRef) {
         const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: customerRef }, raw: body, state: null });
@@ -659,9 +671,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
 
         // Carry forward any extra fields the AI spotted in the same message
+        const _csnParsed = intent.items ? parseLineItems(intent.items) : null;
+        const csnAmount = intent.amount != null ? intent.amount : (_csnParsed ? _csnParsed.reduce((s, i) => s + i.amount, 0) : null);
+        const csnDesc = _csnParsed ? _csnParsed.map(i => i.description).join(', ') : (intent.items || intent.description);
         const extraCollected = {
-          ...(intent.amount != null && c.amount == null ? { amount: intent.amount } : {}),
-          ...((intent.items || intent.description) && !c.description ? { description: intent.items || intent.description } : {}),
+          ...(csnAmount != null && c.amount == null ? { amount: csnAmount } : {}),
+          ...(csnDesc && !c.description ? { description: csnDesc, ...(_csnParsed ? { lineItems: _csnParsed, items: intent.items } : {}) } : {}),
         };
 
         const existingCustomers = await db.findCustomerByName(business.id, customerName);
@@ -669,7 +684,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const existing = existingCustomers[0];
           if (extraCollected.description && extraCollected.amount != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId: existing.id, customerName: existing.name, description: extraCollected.description });
-            return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: extraCollected.amount, items: extraCollected.description, lineItems: null, business }, res);
+            return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: extraCollected.amount, items: extraCollected.items || null, lineItems: extraCollected.lineItems || null, business }, res);
           }
           await setConversationState(business.id, {
             ...currentState,
@@ -858,20 +873,24 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       // jobRef didn't resolve — enter invoice_flow directly (we already have the name)
       {
         const preDesc = intent.items || null;
-        const preAmt = intent.amount ?? null;
+        const _iParsedItems = preDesc ? parseLineItems(preDesc) : null;
+        const preLineItems = intent.lineItems ?? _iParsedItems ?? null;
+        const preAmt = intent.amount ?? (_iParsedItems ? _iParsedItems.reduce((s, i) => s + i.amount, 0) : null);
+        // Job description stores only item names (no £ amounts) — PDF uses the structured line items for the table
+        const cleanPreDesc = _iParsedItems ? _iParsedItems.map(i => i.description).join(', ') : preDesc;
         const existingCustomers = await db.findCustomerByName(business.id, intent.jobRef);
         const baseCollected = existingCustomers.length === 1
           ? { customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
           : { customerName: intent.jobRef };
         // Fast path: name + description + amount all present — create invoice without asking for phone/address
         if (preDesc && preAmt != null) {
-          const { job } = await createCustomerAndJob(business.id, { ...baseCollected, description: preDesc });
-          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: preAmt, items: preDesc, business }, res);
+          const { job } = await createCustomerAndJob(business.id, { ...baseCollected, description: cleanPreDesc });
+          return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: preAmt, items: preDesc, lineItems: preLineItems, business }, res);
         }
         await setConversationState(business.id, {
           workflow: 'invoice_flow',
           focus: {},
-          collected: { step: 'address', ...baseCollected, description: preDesc, amount: preAmt, items: preDesc },
+          collected: { step: 'address', ...baseCollected, description: cleanPreDesc, amount: preAmt, items: preDesc, lineItems: preLineItems },
           pending: { type: 'field', field: 'address' },
           options: [],
         });

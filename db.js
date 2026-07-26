@@ -883,6 +883,22 @@ async function getBriefingMeta(businessId) {
   );
 }
 
+async function getQuoteSeqNum(businessId, jobId) {
+  const r = await pool.query(
+    'SELECT COUNT(*) FROM jobs WHERE business_id = $1 AND quoted_amount IS NOT NULL AND id <= $2',
+    [businessId, jobId]
+  );
+  return parseInt(r.rows[0].count, 10);
+}
+
+async function getInvoiceSeqNum(businessId, invoiceId) {
+  const r = await pool.query(
+    'SELECT COUNT(*) FROM invoices WHERE business_id = $1 AND id <= $2',
+    [businessId, invoiceId]
+  );
+  return parseInt(r.rows[0].count, 10);
+}
+
 async function setBriefingMeta(businessId, hash, includedTip) {
   const now = new Date().toISOString();
   if (includedTip) {
@@ -925,6 +941,8 @@ module.exports = {
   findLikelyAnyJobs,
   createInvoice,
   updateInvoice,
+  getQuoteSeqNum,
+  getInvoiceSeqNum,
   getInvoiceByJob,
   markInvoicePaid,
   deriveStatus,

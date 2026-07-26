@@ -91,15 +91,27 @@ function parse(raw) {
   // "create a quote for Mrs Smith", "quote for Mrs Smith", "send a quote to Mrs Smith"
   const quoteForMatch = normalisedForQuote.match(/^(?:create\s+a?\s*quote\s+(?:for|to)|quote\s+for|send\s+a?\s*quote\s+(?:for|to))\s+(.+)$/i);
   if (quoteForMatch) {
-    return {
-      kind: 'command',
-      intent: 'quote',
-      jobId: null,
-      jobRef: quoteForMatch[1].trim(),
-      amount: null,
-      items: null,
-      lineItems: null,
-    };
+    const ref = quoteForMatch[1].trim();
+    // "Name: item1 £X, item2 £Y" — colon/dash separator splits name from line items
+    const colonSep = ref.match(/^(?:for\s+)?([A-Za-z][A-Za-z\s'-]{1,30}?)\s*[:\-]\s*(.+)$/i);
+    if (colonSep) {
+      const colonName = colonSep[1].trim();
+      const colonItems = colonSep[2].trim();
+      const colonParsed = parseLineItems(colonItems);
+      if (colonParsed) {
+        const colonAmount = colonParsed.reduce((s, i) => s + i.amount, 0);
+        return { kind: 'command', intent: 'quote', jobId: null, jobRef: colonName, amount: colonAmount, items: colonItems, lineItems: colonParsed };
+      }
+      const singleAmt = colonItems.match(/£(\d+(?:\.\d{1,2})?)\b/) || colonItems.match(/\b(\d+(?:\.\d{1,2})?)\s*$/);
+      const singleAmount = singleAmt ? parseFloat(singleAmt[1]) : null;
+      const desc = singleAmount != null ? colonItems.replace(/\s*£?\d[\d.,]*\s*$/, '').trim() : colonItems;
+      return { kind: 'command', intent: 'quote', jobId: null, jobRef: colonName, amount: singleAmount, items: desc || null, lineItems: null };
+    }
+    // Extract trailing amount: "James Smith shorten 2 doors £200"
+    const amountMatch = ref.match(/£(\d+(?:\.\d{1,2})?)\b/) || ref.match(/\b(\d+(?:\.\d{1,2})?)\s*$/);
+    const amount = amountMatch ? parseFloat(amountMatch[1]) : null;
+    const jobRef = amount != null ? ref.replace(/\s*£?\d[\d.,]*\s*$/, '').trim() : ref;
+    return { kind: 'command', intent: 'quote', jobId: null, jobRef, amount, items: null, lineItems: null };
   }
 
   // Name/partial reference: "quote wood" — workflow engine resolves to a job
@@ -180,6 +192,22 @@ function parse(raw) {
     const ref = invoiceByNameMatch[1].trim();
     if (/^-?\d|^£/.test(ref)) {
       return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: null, amount: null };
+    }
+
+    // "Name: item1 £X, item2 £Y" — colon/dash separator splits name from line items (handles multi-amount totalling)
+    const colonSep = ref.match(/^(?:for\s+)?([A-Za-z][A-Za-z\s'-]{1,30}?)\s*[:\-]\s*(.+)$/i);
+    if (colonSep) {
+      const colonName = colonSep[1].trim();
+      const colonItems = colonSep[2].trim();
+      const colonParsed = parseLineItems(colonItems);
+      if (colonParsed) {
+        const colonAmount = colonParsed.reduce((s, i) => s + i.amount, 0);
+        return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: colonName, amount: colonAmount, items: colonItems, lineItems: colonParsed };
+      }
+      const singleAmt = colonItems.match(/£(\d+(?:\.\d{1,2})?)\b/) || colonItems.match(/\b(\d+(?:\.\d{1,2})?)\s*$/);
+      const singleAmount = singleAmt ? parseFloat(singleAmt[1]) : null;
+      const desc = singleAmount != null ? colonItems.replace(/\s*£?\d[\d.,]*\s*$/, '').trim() : colonItems;
+      return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef: colonName, amount: singleAmount, items: desc || null, lineItems: null };
     }
 
     // Extract £XXX or trailing number from the full phrase

@@ -237,7 +237,8 @@ async function handleQuote(intent, res) {
   }
 
   try {
-    const pdfUrl = await generateQuotePdf(job, job.customer, business);
+    const quoteSeq = await db.getQuoteSeqNum(business.id, job.id);
+    const pdfUrl = await generateQuotePdf(job, job.customer, business, quoteSeq);
     messenger.twimlReplyWithMedia(
       res,
       `📋 £${displayTotal}${vatSuffix} ${label.toLowerCase()} for ${job.customer.name} ready\n${pick(['Send it when you\'re happy 👍', 'Over to you — send when ready.', 'All done — fire it over when you\'re happy.'])}`,
@@ -272,7 +273,8 @@ async function handleResendQuote(intent, res) {
   const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
   try {
-    const pdfUrl = await generateQuotePdf(job, job.customer, business);
+    const quoteSeq = await db.getQuoteSeqNum(business.id, job.id);
+    const pdfUrl = await generateQuotePdf(job, job.customer, business, quoteSeq);
     messenger.twimlReplyWithMedia(res, `📋 Here's ${job.customer.name}'s quote.`, pdfUrl);
   } catch (err) {
     console.error('Quote PDF regeneration failed:', err.message);
@@ -427,7 +429,8 @@ async function handleSendInvoice(intent, res) {
     : `🧾 Here's ${job.customer.name}'s invoice.`;
 
   try {
-    const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business);
+    const invSeq = await db.getInvoiceSeqNum(business.id, invoice.id);
+    const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business, invSeq);
     messenger.twimlReplyWithMedia(res, invoiceCaption, pdfUrl);
   } catch (err) {
     console.error('Invoice PDF generation failed:', err.message, err.cause || '');
@@ -480,7 +483,8 @@ async function handleAmend(intent, res) {
   const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
 
   try {
-    const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business);
+    const invSeq = await db.getInvoiceSeqNum(business.id, updatedInvoice.id);
+    const pdfUrl = await generateInvoicePdf(job, updatedInvoice, job.customer, business, invSeq);
     messenger.twimlReplyWithMedia(
       res,
       `🧾 £${displayTotal}${vatSuffix} invoice for ${job.customer.name} updated\n\nUpdated PDF attached. Let me know when they've paid up.`,
