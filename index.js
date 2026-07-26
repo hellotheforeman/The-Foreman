@@ -556,11 +556,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       let prefilledItems = intent.items ?? null;
       const _qParsedItems = prefilledItems ? parseLineItems(prefilledItems) : null;
       let prefilledLineItems = intent.lineItems ?? _qParsedItems ?? null;
-      let prefilledAmount = intent.amount ?? (_qParsedItems ? _qParsedItems.reduce((s, i) => s + i.amount, 0) : null);
-      // When items are structured line items, use only item names (no £ amounts) as the job description
-      const prefilledDescription = descFromParts
-        || (_qParsedItems ? _qParsedItems.map(i => i.description).join(', ') : prefilledItems)
-        || null;
+      let prefilledAmount = _qParsedItems
+        ? _qParsedItems.reduce((s, i) => s + i.amount, 0)
+        : (intent.amount ?? null);
+      const prefilledDescription = descFromParts || null;
       // If what was extracted as a customer ref looks like a sentence rather than a name, try AI before discarding
       let customerRef = (rawCustomerRef && (/^(?:for|to|a|an|the|i|i've)\b/i.test(rawCustomerRef) || rawCustomerRef.split(' ').length > 5))
         ? null
@@ -578,8 +577,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: customerRef }, raw: body, state: null });
 
         if (resolved.status === 'resolved') {
-          if (prefilledDescription) {
-            // Description provided = new work, not a re-quote of the existing job
+          if (prefilledItems || prefilledDescription) {
+            // Items or description provided = new work, not a re-quote of the existing job
             if (prefilledAmount != null) {
               const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: prefilledDescription });
               return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: prefilledAmount, items: prefilledItems, lineItems: prefilledLineItems, business }, res);
@@ -895,8 +894,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (intent.items) {
           const _iResDesc = parseLineItems(intent.items);
           const iResLineItems = intent.lineItems ?? _iResDesc ?? null;
-          const iResAmt = intent.amount ?? (_iResDesc ? _iResDesc.reduce((s, i) => s + i.amount, 0) : null);
-          const iResCleanDesc = _iResDesc ? _iResDesc.map(i => i.description).join(', ') : intent.items;
+          const iResAmt = _iResDesc
+            ? _iResDesc.reduce((s, i) => s + i.amount, 0)
+            : (intent.amount ?? null);
+          const iResCleanDesc = null;
           if (iResAmt != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: iResCleanDesc });
             return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: iResAmt, items: intent.items, lineItems: iResLineItems, business }, res);
