@@ -578,6 +578,21 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { ...intent, jobRef: customerRef }, raw: body, state: null });
 
         if (resolved.status === 'resolved') {
+          if (prefilledDescription) {
+            // Description provided = new work, not a re-quote of the existing job
+            if (prefilledAmount != null) {
+              const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: prefilledDescription });
+              return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: prefilledAmount, items: prefilledItems, lineItems: prefilledLineItems, business }, res);
+            }
+            await setConversationState(business.id, {
+              workflow: 'quote_flow',
+              focus: {},
+              collected: { step: 'price', customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: prefilledDescription },
+              pending: { type: 'field', field: 'price' },
+              options: [],
+            });
+            return twimlReply(res, `Got it — ${resolved.job.customer_name}, ${prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+          }
           return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
         }
 
@@ -877,6 +892,22 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: intent, raw: body, state: null, includeAll: true });
       if (resolved.status === 'resolved') {
+        if (intent.items) {
+          const _iResDesc = parseLineItems(intent.items);
+          const iResLineItems = intent.lineItems ?? _iResDesc ?? null;
+          const iResAmt = intent.amount ?? (_iResDesc ? _iResDesc.reduce((s, i) => s + i.amount, 0) : null);
+          const iResCleanDesc = _iResDesc ? _iResDesc.map(i => i.description).join(', ') : intent.items;
+          if (iResAmt != null) {
+            const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: iResCleanDesc });
+            return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: iResAmt, items: intent.items, lineItems: iResLineItems, business }, res);
+          }
+          await setConversationState(business.id, {
+            workflow: 'invoice_flow', focus: {},
+            collected: { step: 'price', customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: iResCleanDesc, items: intent.items },
+            pending: { type: 'field', field: 'price' }, options: [],
+          });
+          return twimlReply(res, `What's the price?\nYou can give a total or itemise (e.g. labour £250, materials £45).`);
+        }
         return dispatch({ ...intent, jobId: resolved.job.id, business }, res);
       }
       if (resolved.status === 'multiple') {
