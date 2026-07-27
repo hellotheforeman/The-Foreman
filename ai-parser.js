@@ -52,7 +52,7 @@ const DISPATCH_TOOL = {
         },
         workDescription: {
           type: 'string',
-          description: 'The type of work being quoted or invoiced — e.g. "fit staircase", "bathroom refit", "replace boiler". Only set when the user explicitly names the work separately from the cost breakdown (e.g. "quote James Smith to fit a staircase, materials 800 labour 100" → "fit staircase"). Leave unset if the message only contains a customer name and prices with no named work type.',
+          description: 'The type of work being quoted or invoiced — e.g. "Fit staircase", "Bathroom refit", "Replace boiler". Only set when the user explicitly names the work separately from the cost breakdown. Clean up the phrasing and fix obvious typos (e.g. "make and staircase" → "Make and fit staircase"), but do not add detail that was not in the message. Leave unset if the message only contains a customer name and prices with no named work type.',
         },
         amount: {
           type: 'number',
