@@ -8,7 +8,6 @@ const { twimlReply, twimlReplyPair, sendToForeman } = require('./messenger');
 const scheduler = require('./scheduler');
 const db = require('./db');
 const { registerAdminRoutes } = require('./admin');
-const { registerSignupRoutes } = require('./signup');
 const workflowEngine = require('./workflow-engine');
 const templates = require('./templates');
 const { getConversationState, setConversationState, clearConversationState } = require('./conversation-state');
@@ -81,7 +80,6 @@ const validateTwilioSignature = config.twilio.authToken && !isLocalDev
       next();
     };
 
-registerSignupRoutes(app);
 registerAdminRoutes(app);
 
 // Health check
