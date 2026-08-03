@@ -206,7 +206,7 @@ function renderLandingPage(whatsappUrl) {
         <div class="step">
           <div class="step-number">2</div>
           <h3>Quick setup</h3>
-          <p>The Foreman will ask a few questions to get your business set up — name, trade, bank details. Takes about a minute.</p>
+          <p>The Foreman will ask a few questions to get your business set up — name, trade, bank details. Takes around 30 seconds.</p>
         </div>
         <div class="step">
           <div class="step-number">3</div>
