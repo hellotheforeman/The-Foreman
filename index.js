@@ -532,7 +532,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
     // Silently creates customer + job, then hands off to handleQuote.
-    // If the user was mid-way through an unrelated flow (e.g. new_customer), clear it so
+    // If the user was mid-way through an unrelated flow (e.g. new_job), clear it so
     // the quote flow can start fresh rather than falling through to the workflow engine.
     if (intent.intent === 'quote' && !intent.jobId
         && currentState && currentState.workflow !== 'quote_flow') {
@@ -1892,7 +1892,7 @@ async function createCustomerAndJob(businessId, collected) {
 
 
 
-const WORKFLOW_INTENTS = new Set(['new_customer', 'new_job', 'quote', 'send_invoice', 'settings']);
+const WORKFLOW_INTENTS = new Set(['new_job', 'quote', 'send_invoice', 'settings']);
 
 function isWorkflowInterrupt(intent) {
   return intent?.kind === 'query' || (intent?.kind === 'command' && !WORKFLOW_INTENTS.has(intent.intent));

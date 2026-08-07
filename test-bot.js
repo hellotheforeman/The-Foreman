@@ -179,9 +179,10 @@ function runParserTests() {
   check('earnings this year',       'how much have I earned this year',  { intent: 'earnings', period: 'year' });
   check('earnings today',           'how much have I earned today',      { intent: 'earnings', period: 'today' });
 
-  // New customer / new job
-  check('new customer partial',     'new customer Dave Smith', { intent: 'new_customer', name: 'Dave Smith' });
-  check('new customer full',        'new customer Dave Smith 07700900123', { intent: 'new_customer', name: 'Dave Smith', phone: '+447700900123' });
+  // Customer-only requests redirect to the quote / new job flows
+  check('customer redirect bare',   'new customer', { intent: 'customer_redirect', name: null });
+  check('customer redirect name',   'new customer Dave Smith', { intent: 'customer_redirect', name: 'Dave Smith' });
+  check('customer redirect w/phone','new customer Dave Smith 07700900123', { intent: 'customer_redirect', name: 'Dave Smith' });
 
   // Line item parsing
   checkItems('simple items',        'labour 250, parts 45', 295);

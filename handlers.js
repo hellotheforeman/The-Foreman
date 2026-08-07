@@ -77,7 +77,7 @@ function requireBusiness(intent, res) {
 // --- Dispatch ---
 
 const commandHandlers = {
-  new_customer: handleNewCustomer,
+  customer_redirect: handleCustomerRedirect,
   new_job: handleNewJob,
   quote: handleQuote,
   resend_quote: handleResendQuote,
@@ -134,17 +134,22 @@ async function dispatch(intent, res) {
 
 // --- Handlers ---
 
-async function handleNewCustomer(intent, res) {
+// Standalone customer creation isn't a thing — customers are created automatically
+// as part of the quote, invoice and new job flows. Point the user at those instead.
+async function handleCustomerRedirect(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
-  const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.email || null);
-  const details = [customer.phone, customer.email].filter(Boolean).join(' · ');
+  const name = (intent.name || intent.jobRef || '').trim();
+  if (name) {
+    return messenger.twimlReply(
+      res,
+      `I add customers as you go. Just say *quote for ${name}* or *new job for ${name}* when you're ready — I'll set them up then.`
+    );
+  }
   messenger.twimlReply(
     res,
-    `👤 Customer saved\n\n` +
-    `*${customer.name}*\n${details}\n\n` +
-    `To log a job for them, say: *new job ${customer.name} ${customer.phone} boiler service*`
+    `I add customers as you go. Just say *quote for [name]* or *new job for [name]* when you're ready — I'll set them up then.`
   );
 }
 
@@ -846,7 +851,7 @@ async function handleListCustomers(intent, res) {
     db.countCustomers(business.id),
   ]);
 
-  if (!customers.length) return messenger.twimlReply(res, `No customers yet. Add one with *new customer*.`);
+  if (!customers.length) return messenger.twimlReply(res, `No customers yet. They get added automatically — say *quote for [name]* or *new job for [name]* to get started.`);
 
   const lines = customers.map((c) => `• ${c.name}${c.phone ? ` — ${c.phone}` : ''}`);
   const showing = offset + customers.length;

@@ -5,7 +5,7 @@ const { parseLineItems, normalisePhone, extractAmount } = require('./parser');
 
 function workflowFromIntent(parsedIntent) {
   if (!parsedIntent?.intent) return null;
-  const supported = new Set(['new_customer', 'new_job', 'quote']);
+  const supported = new Set(['new_job', 'quote']);
   return supported.has(parsedIntent.intent) ? parsedIntent.intent : null;
 }
 

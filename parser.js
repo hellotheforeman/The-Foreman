@@ -33,32 +33,22 @@ function parse(raw) {
     return { kind: 'continuation', intent: 'cancel' };
   }
 
-  // --- New customer (no job) ---
-  // "new customer Dave Smith 07700900123"
-  const newCustomerMatch = text.match(
-    /^(?:new|add)\s+customer\s+(.+?)\s+((?:\+?44|0)7\d{8,9})(?:\s+([A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}))?(?:\s+(\S+@\S+))?\s*$/i
-  );
-  if (newCustomerMatch) {
+  // --- Customer-only requests (no job) ---
+  // Standalone customer creation was removed: customers are created implicitly by the
+  // quote / invoice / new job flows. Catch the phrasing and point the user at those.
+  // "new customer", "new customer Dave", "add customer Dave Smith 07700900123"
+  const customerOnlyMatch = text.match(/^(?:new|add|save)\s+customer(?:\s+(.+))?$/i);
+  if (customerOnlyMatch) {
+    // Strip any phone / postcode / email so only the name is left
+    const rest = (customerOnlyMatch[1] || '')
+      .replace(/\S+@\S+/g, '')
+      .replace(/(?:\+?44|0)7[\d\s-]{8,}/g, '')
+      .replace(/\b[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}\b/gi, '')
+      .trim();
     return {
       kind: 'command',
-      intent: 'new_customer',
-      name: newCustomerMatch[1].trim(),
-      phone: normalisePhone(newCustomerMatch[2]),
-      postcode: newCustomerMatch[3] ? newCustomerMatch[3].toUpperCase() : null,
-      email: newCustomerMatch[4] ? newCustomerMatch[4].toLowerCase() : null,
-    };
-  }
-
-  // "new customer" or "new customer Dave" — trigger workflow to collect missing fields
-  const newCustomerPartialMatch = text.match(/^(?:new|add)\s+customer(?:\s+(.+))?$/i);
-  if (newCustomerPartialMatch) {
-    const rest = (newCustomerPartialMatch[1] || '').trim();
-    const looksLikePhone = /^(?:\+?44|0)7\d/.test(rest);
-    return {
-      kind: 'command',
-      intent: 'new_customer',
-      name: rest && !looksLikePhone ? rest : null,
-      phone: null,
+      intent: 'customer_redirect',
+      name: rest || null,
     };
   }
 

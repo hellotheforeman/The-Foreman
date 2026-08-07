@@ -34,7 +34,7 @@ const DISPATCH_TOOL = {
           type: 'string',
           enum: [
             // Commands
-            'new_customer', 'new_job', 'quote',
+            'customer_redirect', 'new_job', 'quote',
             'send_invoice', 'resend_invoice', 'resend_quote', 'amend_invoice', 'amend_quote', 'paid', 'chase', 'review',
             'cancel_job', 'mark_complete', 'add_note', 'update_customer',
             // Queries
@@ -73,7 +73,7 @@ const DISPATCH_TOOL = {
         },
         name: {
           type: 'string',
-          description: 'Customer full name for new_customer, new_job, or paid (when customer name is mentioned, e.g. "Joe Duck now paid").',
+          description: 'Customer full name for new_job, customer_redirect, or paid (when customer name is mentioned, e.g. "Joe Duck now paid").',
         },
         phone: {
           type: 'string',
@@ -143,7 +143,7 @@ COMMAND PHRASING:
 - "Can you X", "Can I X", "I'd like to X", "I want to X", "can we X", "how do I X" are always commands, not questions. Map to the appropriate intent.
 
 INTENT GUIDE:
-- new_customer: explicit request to save a contact with no job yet — "add a customer", "new customer John Smith 07700900123", "save Mrs Jones as a contact", "add a new client"
+- customer_redirect: request to save a contact with no job attached — "add a customer", "new customer John Smith 07700900123", "save Mrs Jones as a contact", "add a new client". The Foreman does not store contacts on their own; customers are created automatically by the quote / invoice / new job flows, so this intent just points the user there. Put any customer name in the name field.
 - new_job: explicit request to log a job without quoting — "new job for Mrs Patel", "log a job for Smith", "add a job for Darren", "I've got a new job"
 - quote: create or send a quote — "quote for Mrs Smith", "send a quote to Patel", "put a quote together for Darren", "get a price out to Smith", "I need to quote for a bathroom job for Mrs Jones", "create a quote for the boiler refit", "need to send a quote to Jones" — use jobRef for customer name, items for description/scope
 - send_invoice: create a new invoice — "invoice Mrs Patel", "send Darren an invoice", "get an invoice out to Smith", "invoice for the work I did for Patel", "create an invoice", "build me an invoice" — also used when a quote is accepted: "he accepted the quote", "they want to go ahead", "quote confirmed", "go ahead", "convert quote to invoice", "Smith accepted", "they said yes" — use jobRef for customer name if mentioned, null if contextual (e.g. "he accepted"); never use reply_directly
