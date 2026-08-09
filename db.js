@@ -712,6 +712,18 @@ async function clearBriefingMeta(businessId) {
   );
 }
 
+async function repairInconsistentJobStatuses(businessId) {
+  const result = await pool.query(
+    `UPDATE jobs SET status = 'invoiced'
+     WHERE business_id = $1
+       AND status = 'paid'
+       AND id IN (SELECT job_id FROM invoices WHERE status IN ('OVERDUE', 'SENT'))
+     RETURNING id`,
+    [businessId]
+  );
+  return result.rows.map(r => r.id);
+}
+
 // --- Earnings ---
 
 async function getEarningsSummary(businessId, startDate, endDate) {
@@ -971,6 +983,7 @@ module.exports = {
   markAllOverdueInvoices,
   forceMarkBusinessInvoicesOverdue,
   clearBriefingMeta,
+  repairInconsistentJobStatuses,
   hasProcessedMessage,
   getStaleQuotes,
   getInvoicesDueToday,

@@ -334,6 +334,17 @@ function registerAdminRoutes(app) {
   app.post('/admin/businesses/:id/suspend', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'suspended'));
   app.post('/admin/businesses/:id/pending', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'pending'));
 
+  app.post('/admin/businesses/:id/repair-job-statuses', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid business id' });
+      const fixedIds = await db.repairInconsistentJobStatuses(id);
+      res.json({ ok: true, fixed: fixedIds.length, jobIds: fixedIds });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/admin/businesses/:id/trigger-briefing', requireAdmin, async (req, res) => {
     try {
       const businesses = await db.listBusinesses();
