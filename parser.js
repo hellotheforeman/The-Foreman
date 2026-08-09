@@ -314,6 +314,11 @@ function parse(raw) {
   if (cancelJobNameMatch) {
     return { kind: 'command', intent: 'cancel_job', jobRef: cancelJobNameMatch[1].trim() };
   }
+  // Name before type: "cancel James Smith quote", "cancel Mrs Patel job", "cancel the Smith invoice"
+  const cancelJobNameFirstMatch = text.match(/^cancel\s+(?:the\s+)?(.+?)\s+(?:job|quote|invoice|contract)s?\s*$/i);
+  if (cancelJobNameFirstMatch) {
+    return { kind: 'command', intent: 'cancel_job', jobRef: cancelJobNameFirstMatch[1].trim() };
+  }
   // Lost / didn't win: "lost the Smith quote", "didn't get the boiler job"
   const lostJobMatch = text.match(/^(?:lost|didn'?t\s+get|not\s+getting)\s+(?:the\s+)?(.+?)(?:\s+(?:job|quote|contract|one))?\s*$/i);
   if (lostJobMatch) {
@@ -427,7 +432,7 @@ function parse(raw) {
   // --- Quotes out ---
   // Exclude "quote for [name]" — those are view_job requests, not list requests
   // Exclude interrogative phrases so "do you do quotes" routes to help, not here
-  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new/.test(lower) && !/\bquote\s+for\s+\w/.test(lower) && !/\b(do you|can you|are you|will you)\b/.test(lower)) {
+  if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new|cancel/.test(lower) && !/\bquote\s+for\s+\w/.test(lower) && !/\b(do you|can you|are you|will you)\b/.test(lower)) {
     return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
   }
 
