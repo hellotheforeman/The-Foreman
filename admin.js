@@ -1,6 +1,7 @@
 const crypto = require('crypto');
 const db = require('./db');
 const config = require('./config');
+const { sendBriefingForBusiness } = require('./scheduler');
 
 function adminSecretConfigured() {
   return Boolean(config.adminSecret);
@@ -332,6 +333,22 @@ function registerAdminRoutes(app) {
   app.post('/admin/businesses/:id/activate', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'active'));
   app.post('/admin/businesses/:id/suspend', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'suspended'));
   app.post('/admin/businesses/:id/pending', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'pending'));
+
+  app.post('/admin/businesses/:id/trigger-briefing', requireAdmin, async (req, res) => {
+    try {
+      const businesses = await db.listBusinesses();
+      const business = businesses.find(b => String(b.id) === req.params.id);
+      if (!business) return res.status(404).json({ error: 'Business not found' });
+
+      await db.forceMarkBusinessInvoicesOverdue(business.id);
+      await db.clearBriefingMeta(business.id);
+      const sent = await sendBriefingForBusiness(business);
+
+      res.json({ ok: true, sent });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 }
 
 module.exports = {

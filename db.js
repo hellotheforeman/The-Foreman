@@ -698,6 +698,20 @@ async function markAllOverdueInvoices() {
   );
 }
 
+async function forceMarkBusinessInvoicesOverdue(businessId) {
+  await run(
+    `UPDATE invoices SET status = 'OVERDUE' WHERE business_id = $1 AND status = 'SENT'`,
+    [businessId]
+  );
+}
+
+async function clearBriefingMeta(businessId) {
+  await run(
+    `UPDATE businesses SET last_briefing_at = NULL, last_briefing_hash = NULL WHERE id = $1`,
+    [businessId]
+  );
+}
+
 // --- Earnings ---
 
 async function getEarningsSummary(businessId, startDate, endDate) {
@@ -955,6 +969,8 @@ module.exports = {
   appendJobNote,
   updateCustomer,
   markAllOverdueInvoices,
+  forceMarkBusinessInvoicesOverdue,
+  clearBriefingMeta,
   hasProcessedMessage,
   getStaleQuotes,
   getInvoicesDueToday,
