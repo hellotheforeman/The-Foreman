@@ -366,6 +366,21 @@ function registerAdminRoutes(app) {
     }
   });
 
+  app.post('/admin/businesses/:id/jobs/:jobId/set-status', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const jobId = Number(req.params.jobId);
+      const { status } = req.body || {};
+      const allowed = ['new', 'quoted', 'invoiced', 'paid', 'cancelled'];
+      if (!Number.isInteger(id) || !Number.isInteger(jobId)) return res.status(400).json({ error: 'Invalid id' });
+      if (!allowed.includes(status)) return res.status(400).json({ error: `status must be one of: ${allowed.join(', ')}` });
+      await db.getAll(`UPDATE jobs SET status = $1 WHERE id = $2 AND business_id = $3`, [status, jobId, id]);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/admin/businesses/:id/backdate-invoices', requireAdmin, async (req, res) => {
     try {
       const id = Number(req.params.id);
