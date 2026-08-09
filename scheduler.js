@@ -4,7 +4,7 @@ const messenger = require('./messenger');
 const { setConversationState, getConversationState } = require('./conversation-state');
 
 const TZ = { timezone: 'Europe/London' };
-const REPEAT_DAYS = 3;
+const REPEAT_DAYS = 1;
 const TIP_DAYS = 7;
 
 function buildBriefingHash(dueToday, overdue, staleQuotes) {

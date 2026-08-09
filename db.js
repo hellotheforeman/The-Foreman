@@ -831,7 +831,6 @@ async function getStaleQuotes(daysOld, businessId = null) {
      WHERE j.status = 'quoted'
        AND j.quoted_amount IS NOT NULL
        AND j.created_at < NOW() - ($1 * INTERVAL '1 day')
-       AND j.created_at >= NOW() - (($1 + 1) * INTERVAL '1 day')
        AND b.status = 'active'
        ${extra}`,
     params
