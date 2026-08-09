@@ -595,15 +595,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
 
         if (resolved.status === 'multiple') {
-          const lines = resolved.jobs.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+          const jobs = resolved.jobs.slice(0, 5);
+          const lines = jobs.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+          const newJobN = jobs.length + 1;
           await setConversationState(business.id, {
             workflow: 'quote_flow',
             focus: {},
-            collected: { step: 'pick_job', jobs: resolved.jobs.slice(0, 5) },
+            collected: { step: 'pick_job', jobs, prefilledAmount, prefilledItems, prefilledLineItems, prefilledDescription },
             pending: { type: 'selection', field: 'jobId' },
-            options: resolved.jobs.slice(0, 5),
+            options: jobs,
           });
-          return twimlReply(res, `I found a few matches:\n${lines}\n\nReply with 1, 2 or 3.`);
+          return twimlReply(res, `I found a few matches:\n${lines}\n${newJobN}. None of these — new job\n\nReply with a number.`);
         }
 
         // Customer exists but no open job — skip steps we already have data for
@@ -674,12 +676,29 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (c.step === 'pick_job') {
         const n = parseInt(trimmed, 10);
         const jobs = c.jobs || [];
-        if (!n || n < 1 || n > jobs.length) {
+        const newJobN = jobs.length + 1;
+        if (!n || n < 1 || n > newJobN) {
           return twimlReply(res, `Pick a number from the list above.`);
         }
-        const job = jobs[n - 1];
         await clearConversationState(business.id);
-        return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: null, items: null, lineItems: null, business }, res);
+        if (n === newJobN) {
+          // "None of these — new job"
+          const { customer_id: customerId, customer_name: customerName } = jobs[0];
+          if (c.prefilledAmount != null) {
+            const { job } = await createCustomerAndJob(business.id, { customerId, customerName, description: c.prefilledDescription });
+            return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: c.prefilledAmount, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
+          }
+          await setConversationState(business.id, {
+            workflow: 'quote_flow',
+            focus: {},
+            collected: { step: 'price', customerId, customerName, description: c.prefilledDescription },
+            pending: { type: 'field', field: 'price' },
+            options: [],
+          });
+          return twimlReply(res, `Got it — ${customerName}, ${c.prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+        }
+        const job = jobs[n - 1];
+        return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: c.prefilledAmount ?? null, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
       }
 
       // Step: customer name (bare "quote" trigger)

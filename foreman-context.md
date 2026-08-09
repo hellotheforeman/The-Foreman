@@ -24,7 +24,7 @@ Just text this WhatsApp number. The Foreman will ask for your business name and 
 ## Settings
 Users can update the following via *settings*:
 - **Business name** — the trading name shown on all documents
-- **Trade** — e.g. Plumber, Electrician, Builder — shown on quotes and invoices
+- **Trade** — e.g. Plumber, Electrician, Builder — not currently shown on quotes or invoices; used elsewhere (e.g. setup messaging)
 - **Email** — contact email shown on documents
 - **Address** — business address shown on documents
 - **Bank details** — sort code and account number, shown on invoices so customers know where to pay
