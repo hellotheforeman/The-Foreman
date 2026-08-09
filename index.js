@@ -347,7 +347,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     if ((business.vat_registered === null || business.vat_registered === undefined)
         && (intent.intent === 'quote' || intent.intent === 'send_invoice')
         && currentState?.workflow !== 'vat_gate'
-        && !['quote_flow', 'quote_focus', 'invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus', 'paid_pick'].includes(currentState?.workflow)) {
+        && !['quote_flow', 'quote_focus', 'invoice_flow', 'invoice_guided', 'invoice_pick', 'invoice_focus', 'paid_pick', 'cancel_pick'].includes(currentState?.workflow)) {
       await setConversationState(business.id, {
         workflow: 'vat_gate',
         focus: {},
@@ -1011,6 +1011,23 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
       const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
       return twimlReply(res, `Didn't catch that — reply with a name or number:\n\n${list}`);
+    }
+
+    if (currentState?.workflow === 'cancel_pick') {
+      const trimmed = body.trim();
+      const jobs = currentState.collected?.jobs || [];
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      const n = parseInt(trimmed, 10);
+      if (!isNaN(n) && n >= 1 && n <= jobs.length) {
+        const job = jobs[n - 1];
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'cancel_job', jobId: job.id, business }, res);
+      }
+      const list = jobs.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+      return twimlReply(res, `Reply with a number:\n\n${list}`);
     }
 
     if (currentState?.workflow === 'invoice_pick') {

@@ -583,8 +583,16 @@ async function handleCancelJob(intent, res) {
       return messenger.twimlReply(res, `Can't find an open quote or invoice for "${intent.jobRef}".`);
     }
     if (matched.length > 1) {
-      const list = matched.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
-      return messenger.twimlReply(res, `Found a few matches — which one did you mean?\n\n${list}\n\nBe more specific, e.g. *cancel quote for ${matched[0].customer_name}*.`);
+      const jobs = matched.slice(0, 5);
+      const list = jobs.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+      await setConversationState(business.id, {
+        workflow: 'cancel_pick',
+        focus: {},
+        collected: { jobs },
+        pending: { type: 'selection', field: 'jobId' },
+        options: jobs,
+      });
+      return messenger.twimlReply(res, `Found a few matches:\n\n${list}\n\nReply with a number.`);
     }
     await db.cancelJob(matched[0].id, business.id);
     return messenger.twimlReply(res, `✅ ${matched[0].customer_name} — ${toTitleCase(matched[0].description)} cancelled.`);
