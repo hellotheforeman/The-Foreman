@@ -712,6 +712,19 @@ async function clearBriefingMeta(businessId) {
   );
 }
 
+async function backdateRecentInvoices(businessId, daysAgo) {
+  const result = await pool.query(
+    `UPDATE invoices
+     SET sent_at = NOW() - ($2 * INTERVAL '1 day')
+     WHERE business_id = $1
+       AND status IN ('OVERDUE', 'SENT')
+       AND (sent_at IS NULL OR sent_at > NOW() - INTERVAL '1 day')
+     RETURNING id`,
+    [businessId, daysAgo]
+  );
+  return result.rows.map(r => r.id);
+}
+
 async function repairInconsistentJobStatuses(businessId) {
   const result = await pool.query(
     `UPDATE jobs SET status = 'invoiced'
@@ -984,6 +997,7 @@ module.exports = {
   forceMarkBusinessInvoicesOverdue,
   clearBriefingMeta,
   repairInconsistentJobStatuses,
+  backdateRecentInvoices,
   hasProcessedMessage,
   getStaleQuotes,
   getInvoicesDueToday,
