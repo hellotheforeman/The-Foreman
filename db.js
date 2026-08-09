@@ -725,6 +725,14 @@ async function backdateRecentInvoices(businessId, daysAgo) {
   return result.rows.map(r => r.id);
 }
 
+async function voidJobAndInvoice(jobId, businessId) {
+  await pool.query(
+    `UPDATE invoices SET status = 'CANCELLED' WHERE job_id = $1 AND business_id = $2`,
+    [jobId, businessId]
+  );
+  await run(`UPDATE jobs SET status = 'cancelled' WHERE id = $1 AND business_id = $2`, [jobId, businessId]);
+}
+
 async function repairInconsistentJobStatuses(businessId) {
   const result = await pool.query(
     `UPDATE jobs SET status = 'invoiced'
@@ -998,6 +1006,7 @@ module.exports = {
   clearBriefingMeta,
   repairInconsistentJobStatuses,
   backdateRecentInvoices,
+  voidJobAndInvoice,
   hasProcessedMessage,
   getStaleQuotes,
   getInvoicesDueToday,

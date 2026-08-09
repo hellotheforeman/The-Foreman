@@ -334,6 +334,38 @@ function registerAdminRoutes(app) {
   app.post('/admin/businesses/:id/suspend', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'suspended'));
   app.post('/admin/businesses/:id/pending', requireAdmin, (req, res) => updateBusinessStatus(req, res, 'pending'));
 
+  app.get('/admin/businesses/:id/jobs', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid business id' });
+      const jobs = await db.getAll(
+        `SELECT j.id, j.status, j.description, j.created_at, c.name AS customer_name,
+                i.id AS invoice_id, i.status AS invoice_status, i.amount, i.sent_at
+         FROM jobs j
+         JOIN customers c ON j.customer_id = c.id
+         LEFT JOIN invoices i ON i.job_id = j.id AND i.business_id = j.business_id
+         WHERE j.business_id = $1
+         ORDER BY j.created_at DESC`,
+        [id]
+      );
+      res.json({ jobs });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/admin/businesses/:id/jobs/:jobId/void', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      const jobId = Number(req.params.jobId);
+      if (!Number.isInteger(id) || !Number.isInteger(jobId)) return res.status(400).json({ error: 'Invalid id' });
+      await db.voidJobAndInvoice(jobId, id);
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/admin/businesses/:id/backdate-invoices', requireAdmin, async (req, res) => {
     try {
       const id = Number(req.params.id);
