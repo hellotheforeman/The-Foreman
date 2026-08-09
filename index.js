@@ -577,7 +577,18 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
         if (resolved.status === 'resolved') {
           if (prefilledItems || prefilledDescription) {
-            // Items or description provided = new work, not a re-quote of the existing job
+            // If the description matches the existing job closely, confirm before forking a duplicate
+            if (prefilledDescription && descriptionOverlaps(prefilledDescription, resolved.job.description)) {
+              await setConversationState(business.id, {
+                workflow: 'quote_flow',
+                focus: {},
+                collected: { step: 'pick_job', jobs: [resolved.job], prefilledAmount, prefilledItems, prefilledLineItems, prefilledDescription },
+                pending: { type: 'selection', field: 'jobId' },
+                options: [resolved.job],
+              });
+              return twimlReply(res, `There's already a ${toTitleCase(resolved.job.description)} for ${resolved.job.customer_name}:\n\n1. Re-quote at the new price\n2. New job\n\nReply with 1 or 2.`);
+            }
+            // Clearly different work — create a new job
             if (prefilledAmount != null) {
               const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: prefilledDescription });
               return dispatch({ kind: 'command', intent: 'quote', jobId: job.id, amount: prefilledAmount, items: prefilledItems, lineItems: prefilledLineItems, business }, res);
@@ -1633,6 +1644,18 @@ app.post('/status', (req, res) => {
 
 function toTitleCase(str) {
   return str.replace(/\S+/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+
+// Returns true if two job descriptions share enough words to be likely the same type of work.
+// Used to detect potential duplicates before auto-forking a new job.
+function descriptionOverlaps(a, b) {
+  if (!a || !b) return false;
+  const stopwords = new Set(['a', 'an', 'the', 'and', 'or', 'for', 'of', 'to', 'in', 'on', 'at']);
+  const words = s => new Set(s.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(/\s+/).filter(w => w.length > 2 && !stopwords.has(w)));
+  const wa = words(a), wb = words(b);
+  if (!wa.size || !wb.size) return false;
+  const overlap = [...wa].filter(w => wb.has(w)).length;
+  return overlap / Math.min(wa.size, wb.size) >= 0.5;
 }
 
 // Shows the amend menu — user picks what they want to change.
