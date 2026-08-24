@@ -330,8 +330,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       if (currentState.pending?.field === 'account_number') {
-        const { sortCode } = currentState.collected || {};
-        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${trimmed}`;
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { ...currentState.collected, accountNumber: trimmed },
+          pending: { type: 'field', field: 'account_name' },
+        });
+        return twimlReply(res, `And the account name? (e.g. T P Wood or Fine Finish Joinery)`);
+      }
+
+      if (currentState.pending?.field === 'account_name') {
+        const { sortCode, accountNumber } = currentState.collected || {};
+        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${accountNumber}\nAccount name: ${trimmed}`;
         await db.updateBusiness(business.id, { payment_details: paymentDetails });
         await clearConversationState(business.id);
         return twimlReply(res, `Done — bank details saved. These will appear on all your invoices.`);
