@@ -227,7 +227,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `Are you VAT registered? Reply *yes* or *no*.`);
         }
         if (setting.type === 'bank') {
-          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)`);
+          return twimlReply(res, `The account name?`);
         }
         if (setting.type === 'image') {
           if (business.logo_path) {
@@ -270,13 +270,13 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           }
 
           if (settingType === 'bank') {
-            // Step 1: sort code → account number
+            // Step 1: account name → sort code
             await setConversationState(business.id, {
               ...currentState,
-              collected: { ...currentState.collected, sortCode: trimmed },
-              pending: { type: 'field', field: 'account_number' },
+              collected: { ...currentState.collected, accountName: trimmed },
+              pending: { type: 'field', field: 'sort_code' },
             });
-            return twimlReply(res, `Got it. Now what's the account number?`);
+            return twimlReply(res, `Sort code? (e.g. 12-34-56)`);
           }
 
           if (settingType === 'vat') {
@@ -329,18 +329,18 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, `Done — VAT registered, ${trimmed}.`);
       }
 
-      if (currentState.pending?.field === 'account_number') {
+      if (currentState.pending?.field === 'sort_code') {
         await setConversationState(business.id, {
           ...currentState,
-          collected: { ...currentState.collected, accountNumber: trimmed },
-          pending: { type: 'field', field: 'account_name' },
+          collected: { ...currentState.collected, sortCode: trimmed },
+          pending: { type: 'field', field: 'account_number' },
         });
-        return twimlReply(res, `And the account name? (e.g. T P Wood or Fine Finish Joinery)`);
+        return twimlReply(res, `Account number?`);
       }
 
-      if (currentState.pending?.field === 'account_name') {
-        const { sortCode, accountNumber } = currentState.collected || {};
-        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${accountNumber}\nAccount name: ${trimmed}`;
+      if (currentState.pending?.field === 'account_number') {
+        const { accountName, sortCode } = currentState.collected || {};
+        const paymentDetails = `Account name: ${accountName}\nSort code: ${sortCode}\nAccount number: ${trimmed}`;
         await db.updateBusiness(business.id, { payment_details: paymentDetails });
         await clearConversationState(business.id);
         return twimlReply(res, `Done — bank details saved. These will appear on all your invoices.`);
@@ -433,11 +433,20 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (/^(yes|y|yep|yeah)$/i.test(trimmed)) {
           await setConversationState(business.id, {
             ...currentState,
-            pending: { type: 'field', field: 'sort_code' },
+            pending: { type: 'field', field: 'account_name' },
           });
-          return twimlReply(res, `Start with your sort code (e.g. 12-34-56) — or reply *Skip* to leave bank details off.`);
+          return twimlReply(res, `The account name?`);
         }
         return twimlReply(res, `Reply *Yes* to add your bank details, or *Skip* to send the invoice without.`);
+      }
+
+      if (currentState.pending?.field === 'account_name') {
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { ...currentState.collected, accountName: trimmed },
+          pending: { type: 'field', field: 'sort_code' },
+        });
+        return twimlReply(res, `Sort code? (e.g. 12-34-56)`);
       }
 
       if (currentState.pending?.field === 'sort_code') {
@@ -446,21 +455,12 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           collected: { ...currentState.collected, sortCode: trimmed },
           pending: { type: 'field', field: 'account_number' },
         });
-        return twimlReply(res, `And the account number?`);
+        return twimlReply(res, `Account number?`);
       }
 
       if (currentState.pending?.field === 'account_number') {
-        await setConversationState(business.id, {
-          ...currentState,
-          collected: { ...currentState.collected, accountNumber: trimmed },
-          pending: { type: 'field', field: 'account_name' },
-        });
-        return twimlReply(res, `And the account name? (e.g. T P Wood or Fine Finish Joinery)`);
-      }
-
-      if (currentState.pending?.field === 'account_name') {
-        const { sortCode, accountNumber, pendingIntent } = currentState.collected;
-        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${accountNumber}\nAccount name: ${trimmed}`;
+        const { accountName, sortCode, pendingIntent } = currentState.collected;
+        const paymentDetails = `Account name: ${accountName}\nSort code: ${sortCode}\nAccount number: ${trimmed}`;
         await db.updateBusiness(business.id, { payment_details: paymentDetails });
         business = { ...business, payment_details: paymentDetails };
         await clearConversationState(business.id);
