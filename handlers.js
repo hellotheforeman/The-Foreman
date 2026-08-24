@@ -865,7 +865,10 @@ async function handleOpenJobs(intent, res) {
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
     const rawAmount = j.status === 'quoted' ? j.quoted_amount : j.invoice_amount;
     const amountStr = rawAmount ? ` — £${(Number(rawAmount) * vat).toFixed(2)}${vatSuffix}` : '';
-    const statusLabel = j.status === 'quoted' ? 'quote out' : j.status === 'invoiced' ? 'invoice sent' : j.status;
+    const statusLabel = j.status === 'quoted' ? 'quote out'
+      : j.status === 'invoiced' && j.invoice_status === 'OVERDUE' ? '⚠️ overdue'
+      : j.status === 'invoiced' ? 'invoice sent'
+      : j.status;
     return `• ${j.customer_name} — ${summary}${amountStr} (${statusLabel})`;
   });
 
