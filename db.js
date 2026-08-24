@@ -755,13 +755,17 @@ async function repairInconsistentJobStatuses(businessId) {
 async function getEarningsSummary(businessId, startDate, endDate) {
   const row = await getOne(
     `SELECT
-      COALESCE(SUM(amount), 0)                                           AS total_invoiced,
-      COALESCE(SUM(CASE WHEN status = 'PAID'    THEN amount END), 0)    AS total_paid,
-      COALESCE(SUM(CASE WHEN status != 'PAID'   THEN amount END), 0)    AS total_unpaid,
-      COALESCE(SUM(CASE WHEN status = 'OVERDUE' THEN amount END), 0)    AS total_overdue,
-      COUNT(*)                                                           AS invoice_count
+      COALESCE(SUM(CASE WHEN created_at >= $2 AND created_at <= $3 THEN amount END), 0)                                          AS total_invoiced,
+      COALESCE(SUM(CASE WHEN status = 'PAID'    AND paid_at  >= $2 AND paid_at  <= $3 THEN amount END), 0)                       AS total_paid,
+      COALESCE(SUM(CASE WHEN status != 'PAID'   AND created_at >= $2 AND created_at <= $3 THEN amount END), 0)                   AS total_unpaid,
+      COALESCE(SUM(CASE WHEN status = 'OVERDUE' AND created_at >= $2 AND created_at <= $3 THEN amount END), 0)                   AS total_overdue,
+      COUNT(CASE WHEN created_at >= $2 AND created_at <= $3 THEN 1 END)                                                          AS invoice_count
      FROM invoices
-     WHERE business_id = $1 AND created_at >= $2 AND created_at <= $3`,
+     WHERE business_id = $1
+       AND (
+         (created_at >= $2 AND created_at <= $3)
+         OR (status = 'PAID' AND paid_at >= $2 AND paid_at <= $3)
+       )`,
     [businessId, startDate, endDate]
   );
   return row;
