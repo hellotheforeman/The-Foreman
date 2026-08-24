@@ -572,6 +572,21 @@ async function handleCancelJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
+  if (!intent.jobId && !intent.jobRef) {
+    const openJobs = await db.getOpenJobs(business.id);
+    if (!openJobs.length) return messenger.twimlReply(res, `No open jobs to cancel.`);
+    const jobs = openJobs.slice(0, 5);
+    const list = jobs.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+    await setConversationState(business.id, {
+      workflow: 'cancel_pick',
+      focus: {},
+      collected: { jobs },
+      pending: { type: 'selection', field: 'jobId' },
+      options: jobs,
+    });
+    return messenger.twimlReply(res, `Which job?\n\n${list}\n\nReply with a number.`);
+  }
+
   if (!intent.jobId && intent.jobRef) {
     const openJobs = await db.getOpenJobs(business.id);
     const ref = intent.jobRef.toLowerCase();
@@ -825,12 +840,13 @@ async function handleUnpaid(intent, res) {
   const total = invoices.reduce((sum, i) => sum + Number(i.amount), 0) * vat;
   const lines = invoices.map((i) => {
     const days = Math.floor((Date.now() - new Date(i.sent_at).getTime()) / 86400000);
-    return `• ${i.customer_name} — £${(Number(i.amount) * vat).toFixed(2)}${vatSuffix}, sent ${days} day${days === 1 ? '' : 's'} ago`;
+    const overdueTag = i.status === 'OVERDUE' ? ' ⚠️ overdue' : '';
+    return `• ${i.customer_name} — £${(Number(i.amount) * vat).toFixed(2)}${vatSuffix}, sent ${days} day${days === 1 ? '' : 's'} ago${overdueTag}`;
   });
 
   messenger.twimlReply(
     res,
-    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}\n\nI'll let you know as soon as anything goes overdue.`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}`
   );
 }
 

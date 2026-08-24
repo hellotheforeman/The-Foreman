@@ -431,6 +431,11 @@ function parse(raw) {
 
   // --- Quotes out ---
   // Exclude "quote for [name]" — those are view_job requests, not list requests
+  // "quotes and invoices" together → show all open jobs (covers both)
+  if (/\bquotes?\b/.test(lower) && /\binvoices?\b/.test(lower)) {
+    return { kind: 'query', intent: 'open_jobs' };
+  }
+
   // Exclude interrogative phrases so "do you do quotes" routes to help, not here
   if (/\bquotes?\b/.test(lower) && !/amend|change|update|send|create|new|cancel/.test(lower) && !/\bquote\s+for\s+\w/.test(lower) && !/\b(do you|can you|are you|will you)\b/.test(lower)) {
     return { kind: 'query', intent: 'jobs_by_status', status: 'quoted' };
