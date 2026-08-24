@@ -227,7 +227,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, `Are you VAT registered? Reply *yes* or *no*.`);
         }
         if (setting.type === 'bank') {
-          return twimlReply(res, `What's your sort code? I'll grab the account number straight after. (e.g. 12-34-56)`);
+          return twimlReply(res, `What's your sort code? (e.g. 12-34-56)`);
         }
         if (setting.type === 'image') {
           if (business.logo_path) {
@@ -270,7 +270,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           }
 
           if (settingType === 'bank') {
-            // Step 1: collect sort code, move to account_number step
+            // Step 1: sort code → account number
             await setConversationState(business.id, {
               ...currentState,
               collected: { ...currentState.collected, sortCode: trimmed },
@@ -441,8 +441,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       if (currentState.pending?.field === 'account_number') {
-        const { sortCode, pendingIntent } = currentState.collected;
-        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${trimmed}`;
+        await setConversationState(business.id, {
+          ...currentState,
+          collected: { ...currentState.collected, accountNumber: trimmed },
+          pending: { type: 'field', field: 'account_name' },
+        });
+        return twimlReply(res, `And the account name? (e.g. T P Wood or Fine Finish Joinery)`);
+      }
+
+      if (currentState.pending?.field === 'account_name') {
+        const { sortCode, accountNumber, pendingIntent } = currentState.collected;
+        const paymentDetails = `Sort code: ${sortCode}\nAccount number: ${accountNumber}\nAccount name: ${trimmed}`;
         await db.updateBusiness(business.id, { payment_details: paymentDetails });
         business = { ...business, payment_details: paymentDetails };
         await clearConversationState(business.id);
@@ -1798,17 +1807,23 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
   // Process the answer for the current step
   if (!isSkip) {
     if (current.key === 'bank') {
-      // Bank is two-part — sort code first, then account number
+      // Three-part: sort code → account number → account name
       if (!state.collected.sortCode) {
-        // Store sort code, re-prompt for account number
         await setConversationState(business.id, {
           ...state,
           collected: { ...state.collected, sortCode: trimmed },
         });
         return twimlReply(res, `Got it. And the account number?`);
       }
-      // Have both — save and move on
-      const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${trimmed}`;
+      if (!state.collected.accountNumber) {
+        await setConversationState(business.id, {
+          ...state,
+          collected: { ...state.collected, accountNumber: trimmed },
+        });
+        return twimlReply(res, `And the account name? (e.g. T P Wood or Fine Finish Joinery)`);
+      }
+      // Have all three — save and move on
+      const paymentDetails = `Sort code: ${state.collected.sortCode}\nAccount number: ${state.collected.accountNumber}\nAccount name: ${trimmed}`;
       await db.updateBusiness(business.id, { payment_details: paymentDetails });
 
     } else if (current.key === 'payment_days') {
