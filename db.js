@@ -426,7 +426,10 @@ async function markJobComplete(jobId, businessId) {
 
 async function getOpenJobs(businessId) {
   return getAll(
-    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone
+    `SELECT j.*, c.name AS customer_name, c.phone AS customer_phone,
+            (SELECT i.amount  FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id ORDER BY i.created_at DESC LIMIT 1) AS invoice_amount,
+            (SELECT i.sent_at FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id ORDER BY i.created_at DESC LIMIT 1) AS invoice_sent_at,
+            (SELECT i.status  FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id ORDER BY i.created_at DESC LIMIT 1) AS invoice_status
      FROM jobs j
      JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1
@@ -438,7 +441,9 @@ async function getOpenJobs(businessId) {
 
 async function getJobsByStatus(businessId, status) {
   return getAll(
-    `SELECT j.*, c.name AS customer_name
+    `SELECT j.*, c.name AS customer_name,
+            (SELECT i.amount  FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id ORDER BY i.created_at DESC LIMIT 1) AS invoice_amount,
+            (SELECT i.sent_at FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id ORDER BY i.created_at DESC LIMIT 1) AS invoice_sent_at
      FROM jobs j
      JOIN customers c ON j.customer_id = c.id
      WHERE j.business_id = $1 AND j.status = $2

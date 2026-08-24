@@ -846,7 +846,7 @@ async function handleUnpaid(intent, res) {
 
   messenger.twimlReply(
     res,
-    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}\n\nSay *chase [name]* to send a reminder, or *[name] paid* to mark as paid.`
   );
 }
 
@@ -857,12 +857,19 @@ async function handleOpenJobs(intent, res) {
   const jobs = await db.getOpenJobs(business.id);
   if (!jobs.length) return messenger.twimlReply(res, `Nothing open right now. 📭`);
 
+  const vat = vatScale(business);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
-    return `• ${j.customer_name} — ${summary} (${db.deriveStatus(j)})`;
+    const rawAmount = j.status === 'quoted' ? j.quoted_amount : j.invoice_amount;
+    const amountStr = rawAmount ? ` — £${(Number(rawAmount) * vat).toFixed(2)}${vatSuffix}` : '';
+    const statusLabel = j.status === 'quoted' ? 'quote out' : j.status === 'invoiced' ? 'invoice sent' : j.status;
+    return `• ${j.customer_name} — ${summary}${amountStr} (${statusLabel})`;
   });
-  messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}`);
+
+  messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}\n\nSay *quotes* or *unpaid* for more detail, or *chase [name]* to follow up.`);
 }
 
 async function handleListCustomers(intent, res) {
@@ -974,6 +981,9 @@ async function handleJobsByStatus(intent, res) {
 
   if (!jobs.length) return messenger.twimlReply(res, `Nothing ${intent.status} right now. 📭`);
 
+  const vat = vatScale(business);
+  const vatSuffix = business?.vat_registered ? ' inc. VAT' : '';
+
   const lines = jobs.map((j) => {
     const desc = toTitleCase(j.description);
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
@@ -981,6 +991,12 @@ async function handleJobsByStatus(intent, res) {
       const days = j.created_at ? Math.floor((Date.now() - new Date(j.created_at).getTime()) / 86400000) : null;
       const amount = j.quoted_amount ? ` — £${Number(j.quoted_amount).toFixed(2)}` : '';
       const datePart = days !== null ? ` (${days} day${days === 1 ? '' : 's'} ago)` : '';
+      return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
+    }
+    if (intent.status === 'invoiced') {
+      const days = j.invoice_sent_at ? Math.floor((Date.now() - new Date(j.invoice_sent_at).getTime()) / 86400000) : null;
+      const amount = j.invoice_amount ? ` — £${(Number(j.invoice_amount) * vat).toFixed(2)}${vatSuffix}` : '';
+      const datePart = days !== null ? `, sent ${days} day${days === 1 ? '' : 's'} ago` : '';
       return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
     }
     return `• ${j.customer_name} — ${summary}`;
