@@ -18,7 +18,8 @@ function parse(raw) {
   if (/^(hi+|hello|hey|morning|afternoon|evening|alright|aight|yo|sup|howdy|hiya)[\s!?.]*$/i.test(lower)) {
     return { kind: 'query', intent: 'greeting' };
   }
-  if (/^(thanks?|ta|cheers|thank you|nice one|legend|perfect|brilliant|great|fab|lovely|sweet|sorted|no worries|no problem|appreciate it|sound)[\s!?.]*$/i.test(lower)) {
+  if (/^(boom[\s!]*|yes[\s!]*)?(thanks?|ta|cheers|thank you|nice one|legend|perfect|brilliant|great|fab|lovely|sweet|sorted|no worries|no problem|appreciate it|sound)[\s!?.]*$/i.test(lower) ||
+      /^(boom|ace|class|lush|mint|wicked|banging|bosh)[\s!?.]*$/i.test(lower)) {
     return { kind: 'query', intent: 'thanks' };
   }
 
