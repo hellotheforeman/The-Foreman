@@ -872,7 +872,7 @@ async function handleOpenJobs(intent, res) {
     return `• ${j.customer_name} — ${summary}${amountStr} (${statusLabel})`;
   });
 
-  messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}\n\nSay *quotes* or *unpaid* for more detail, or *chase [name]* to follow up.`);
+  messenger.twimlReply(res, `📋 *Open (${jobs.length})*\n\n${lines.join('\n')}`);
 }
 
 async function handleListCustomers(intent, res) {
