@@ -20,6 +20,12 @@ const { uploadLogo } = require('./storage');
 const app = express();
 
 // Strip document words and possessives so "Chloe's invoice" → "Chloe", "Smith's quote" → "Smith"
+function formatSortCode(raw) {
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length === 6) return `${digits.slice(0, 2)}-${digits.slice(2, 4)}-${digits.slice(4, 6)}`;
+  return raw;
+}
+
 function extractCustomerName(input) {
   return input
     .replace(/['']s\s*(invoice|quote)?\s*$/i, '')
@@ -332,7 +338,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'sort_code') {
         await setConversationState(business.id, {
           ...currentState,
-          collected: { ...currentState.collected, sortCode: trimmed },
+          collected: { ...currentState.collected, sortCode: formatSortCode(trimmed) },
           pending: { type: 'field', field: 'account_number' },
         });
         return twimlReply(res, `Account number?`);
@@ -452,7 +458,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (currentState.pending?.field === 'sort_code') {
         await setConversationState(business.id, {
           ...currentState,
-          collected: { ...currentState.collected, sortCode: trimmed },
+          collected: { ...currentState.collected, sortCode: formatSortCode(trimmed) },
           pending: { type: 'field', field: 'account_number' },
         });
         return twimlReply(res, `Account number?`);
@@ -1820,7 +1826,7 @@ async function handleOnboarding({ business, body, mediaUrl, res }) {
       if (!state.collected.sortCode) {
         await setConversationState(business.id, {
           ...state,
-          collected: { ...state.collected, sortCode: trimmed },
+          collected: { ...state.collected, sortCode: formatSortCode(trimmed) },
         });
         return twimlReply(res, `Got it. And the account number?`);
       }
