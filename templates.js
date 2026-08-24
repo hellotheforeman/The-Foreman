@@ -95,7 +95,7 @@ function paymentReminder(job, invoice, customer, business) {
   return [
     `Hi ${customerGreetingName(customer)},`,
     '',
-    `Friendly reminder — invoice ${formatJobId(job.id)} for £${displayAmount}${vatSuffix} was sent ${daysSent} days ago and is still outstanding.`,
+    `Friendly reminder — your invoice for £${displayAmount}${vatSuffix} was sent ${daysSent} days ago and is still outstanding.`,
     '',
     `💳 *Payment details:*`,
     payment,
