@@ -450,7 +450,7 @@ function registerAdminRoutes(app) {
       await db.getAll(
         `UPDATE businesses SET
           business_name = phone, trade = NULL, address = NULL, email = NULL,
-          logo_path = NULL, payment_details = NULL, payment_days = NULL,
+          logo_path = NULL, payment_details = NULL, payment_days = 14,
           vat_registered = NULL, vat_number = NULL,
           last_briefing_at = NULL, last_briefing_hash = NULL, last_tip_at = NULL,
           onboarded = false, status = 'pending'
