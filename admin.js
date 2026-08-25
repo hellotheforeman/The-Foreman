@@ -453,7 +453,7 @@ function registerAdminRoutes(app) {
           logo_path = NULL, payment_details = NULL, payment_days = 14,
           vat_registered = NULL, vat_number = NULL,
           last_briefing_at = NULL, last_briefing_hash = NULL, last_tip_at = NULL,
-          onboarded = false, status = 'pending'
+          onboarded = false, status = 'active'
          WHERE id = $1`,
         [id]
       );
