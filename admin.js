@@ -449,7 +449,7 @@ function registerAdminRoutes(app) {
       await db.getAll(`DELETE FROM conversation_state WHERE business_id = $1`, [id]);
       await db.getAll(
         `UPDATE businesses SET
-          name = NULL, trade = NULL, address = NULL, email = NULL,
+          business_name = NULL, trade = NULL, address = NULL, email = NULL,
           logo_path = NULL, payment_details = NULL, payment_days = NULL,
           vat_registered = NULL, vat_number = NULL,
           last_briefing_at = NULL, last_briefing_hash = NULL, last_tip_at = NULL,
