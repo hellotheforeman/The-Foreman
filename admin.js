@@ -438,6 +438,30 @@ function registerAdminRoutes(app) {
       res.status(500).json({ error: err.message });
     }
   });
+
+  app.post('/admin/businesses/:id/reset', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid business id' });
+      await db.getAll(`DELETE FROM invoices WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM jobs WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM customers WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM conversation_state WHERE business_id = $1`, [id]);
+      await db.getAll(
+        `UPDATE businesses SET
+          name = NULL, trade = NULL, address = NULL, email = NULL,
+          logo_path = NULL, payment_details = NULL, payment_days = NULL,
+          vat_registered = NULL, vat_number = NULL,
+          last_briefing_at = NULL, last_briefing_hash = NULL, last_tip_at = NULL,
+          onboarded = false, status = 'pending'
+         WHERE id = $1`,
+        [id]
+      );
+      res.json({ ok: true });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
 }
 
 module.exports = {
