@@ -373,6 +373,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             amount: intent.amount != null ? intent.amount : null,
             items: intent.items || null, lineItems: intent.lineItems || null,
             name: intent.name || null,
+            description: intent.description || null,
           },
         },
         pending: { type: 'field', field: 'vat_registered' },
@@ -383,6 +384,39 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     if (currentState?.workflow === 'vat_gate') {
       const trimmed = body.trim();
+
+      // Shared helper: dispatch pending intent after VAT is resolved,
+      // creating customer+job first if this was a new quote/invoice with no jobId yet.
+      const dispatchPending = async (pending) => {
+        if (!pending) return null;
+        if ((pending.intent === 'quote' || pending.intent === 'send_invoice') && !pending.jobId) {
+          const customerRef = pending.jobRef || pending.name;
+          if (!customerRef) {
+            // No customer name — re-prompt via quote flow
+            await setConversationState(business.id, {
+              workflow: 'quote_flow',
+              focus: {},
+              collected: {
+                step: 'customer_name',
+                prefilledAmount: pending.amount,
+                prefilledItems: pending.items,
+                prefilledLineItems: pending.lineItems,
+                prefilledDescription: pending.description,
+                invoiceMode: pending.intent === 'send_invoice',
+              },
+              pending: { type: 'field', field: 'customer_name' },
+              options: [],
+            });
+            return twimlReply(res, `Got it. Now, who's this ${pending.intent === 'send_invoice' ? 'invoice' : 'quote'} for?`);
+          }
+          const { job } = await createCustomerAndJob(business.id, {
+            customerName: customerRef,
+            description: pending.description,
+          });
+          return dispatch({ ...pending, jobId: job.id, business }, res);
+        }
+        return dispatch({ ...pending, business }, res);
+      };
 
       if (currentState.pending?.field === 'vat_registered') {
         const isYes = /^(yes|y|yep|yeah)$/i.test(trimmed);
@@ -401,7 +435,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         const pending = currentState.collected?.pendingIntent;
         await clearConversationState(business.id);
-        return pending ? dispatch({ ...pending, business }, res) : twimlReply(res, `Got it — not VAT registered.`);
+        return (await dispatchPending(pending)) ?? twimlReply(res, `Got it — not VAT registered.`);
       }
 
       if (currentState.pending?.field === 'vat_number') {
@@ -410,7 +444,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         business = { ...business, vat_number: isSkip ? null : trimmed };
         const pending = currentState.collected?.pendingIntent;
         await clearConversationState(business.id);
-        return pending ? dispatch({ ...pending, business }, res) : twimlReply(res, `Got it — VAT number saved.`);
+        return (await dispatchPending(pending)) ?? twimlReply(res, `Got it — VAT number saved.`);
       }
 
       await clearConversationState(business.id);
