@@ -447,6 +447,7 @@ function registerAdminRoutes(app) {
       await db.getAll(`DELETE FROM jobs WHERE business_id = $1`, [id]);
       await db.getAll(`DELETE FROM customers WHERE business_id = $1`, [id]);
       await db.getAll(`DELETE FROM conversation_state WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM message_log WHERE business_id = $1`, [id]);
       await db.getAll(`DELETE FROM businesses WHERE id = $1`, [id]);
       res.json({ ok: true, deleted: id });
     } catch (err) {
