@@ -439,6 +439,21 @@ function registerAdminRoutes(app) {
     }
   });
 
+  app.delete('/admin/businesses/:id', requireAdmin, async (req, res) => {
+    try {
+      const id = Number(req.params.id);
+      if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Invalid business id' });
+      await db.getAll(`DELETE FROM invoices WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM jobs WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM customers WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM conversation_state WHERE business_id = $1`, [id]);
+      await db.getAll(`DELETE FROM businesses WHERE id = $1`, [id]);
+      res.json({ ok: true, deleted: id });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   app.post('/admin/businesses/:id/reset', requireAdmin, async (req, res) => {
     try {
       const id = Number(req.params.id);
