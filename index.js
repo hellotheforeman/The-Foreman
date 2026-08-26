@@ -69,6 +69,9 @@ function downloadToBuffer(mediaUrl) {
 function detectImageExt(buffer) {
   if (buffer[0] === 0x89 && buffer[1] === 0x50 && buffer[2] === 0x4E && buffer[3] === 0x47) return 'png';
   if (buffer[0] === 0xFF && buffer[1] === 0xD8) return 'jpg';
+  // WebP: "RIFF....WEBP"
+  if (buffer.length >= 12 && buffer[0] === 0x52 && buffer[1] === 0x49 && buffer[2] === 0x46 && buffer[3] === 0x46
+      && buffer[8] === 0x57 && buffer[9] === 0x45 && buffer[10] === 0x42 && buffer[11] === 0x50) return 'webp';
   return null;
 }
 
@@ -560,8 +563,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         if (!isSkip && mediaUrl) {
           try {
+            console.log(`🖼️ Logo upload — content-type: ${mediaContentType}, url: ${mediaUrl}`);
             const buffer = await downloadToBuffer(mediaUrl);
             const ext = detectImageExt(buffer);
+            console.log(`🖼️ Logo magic bytes: ${buffer.slice(0, 12).toString('hex')}, detected: ${ext}`);
             if (!ext) {
               return twimlReply(res, `That file type isn't supported — please send a JPEG or PNG, or say *skip*.`);
             }
