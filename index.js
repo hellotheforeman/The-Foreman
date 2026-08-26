@@ -1025,7 +1025,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const iResAmt = _iResDesc
             ? _iResDesc.reduce((s, i) => s + i.amount, 0)
             : (intent.amount ?? null);
-          const iResCleanDesc = intent.workDescription || null;
+          const iResCleanDesc = intent.workDescription || (_iResDesc ? _iResDesc.map(i => i.description).join(', ') : null);
           if (iResAmt != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId: resolved.job.customer_id, customerName: resolved.job.customer_name, description: iResCleanDesc });
             return dispatch({ kind: 'command', intent: 'send_invoice', jobId: job.id, amount: iResAmt, items: intent.items, lineItems: iResLineItems, business }, res);
@@ -1057,7 +1057,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const preLineItems = intent.lineItems ?? _iParsedItems ?? null;
         const preAmt = intent.amount ?? (_iParsedItems ? _iParsedItems.reduce((s, i) => s + i.amount, 0) : null);
         // Job description stores only item names (no £ amounts) — PDF uses the structured line items for the table
-        const cleanPreDesc = _iParsedItems ? _iParsedItems.map(i => i.description).join(', ') : preDesc;
+        const cleanPreDesc = intent.workDescription || (_iParsedItems ? _iParsedItems.map(i => i.description).join(', ') : preDesc);
         const existingCustomers = await db.findCustomerByName(business.id, intent.jobRef);
         const baseCollected = existingCustomers.length === 1
           ? { customerId: existingCustomers[0].id, customerName: existingCustomers[0].name }
