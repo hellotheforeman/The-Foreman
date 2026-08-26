@@ -166,6 +166,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         intent = aiResult;
       }
     }
+    // AI occasionally treats "me"/"us" as a customer name on bare quote/invoice requests — clear it
+    if (intent.jobRef && /^(me|us|i|we|him|her|them|they|myself|ourselves|someone)$/i.test(intent.jobRef.trim())) {
+      intent = { ...intent, jobRef: null };
+    }
     intent.business = business;
     console.log(`📥 ${business.business_name || business.name}: "${body}" → ${intent.intent}`);
 
@@ -655,7 +659,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         : rawCustomerRef;
       if (!customerRef) {
         const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
-        if (aiResult && !aiResult.type && aiResult.intent === 'quote' && aiResult.jobRef) {
+        if (aiResult && !aiResult.type && aiResult.intent === 'quote' && aiResult.jobRef && !/^(me|us|i|we|him|her|them|they|myself|ourselves|someone)$/i.test(aiResult.jobRef.trim())) {
           customerRef = aiResult.jobRef;
           if (aiResult.amount != null && prefilledAmount == null) prefilledAmount = aiResult.amount;
           if (aiResult.items != null && !prefilledItems) prefilledItems = aiResult.items;
@@ -809,7 +813,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const customerName = extractCustomerName(rawName);
 
         // Re-prompt if result looks wrong — starts with £/$, too many words, or clearly a sentence
-        if (!customerName || /^[£$\d]/.test(customerName) || customerName.split(/\s+/).length > 5 || /\b(it|is|are|for|and|new|quote|invoice)\b/i.test(customerName)) {
+        if (!customerName || /^[£$\d]/.test(customerName) || customerName.split(/\s+/).length > 5 || /\b(me|us|we|him|her|them|they|it|is|are|for|and|new|quote|invoice)\b/i.test(customerName)) {
           return twimlReply(res, `Who's this quote for? Just the customer's name.`);
         }
 
@@ -1004,7 +1008,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         (typeof intent.items === 'string' && /\d/.test(intent.items))
       ) {
         const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
-        if (aiResult && !aiResult.type && aiResult.intent === 'send_invoice' && aiResult.jobRef) {
+        if (aiResult && !aiResult.type && aiResult.intent === 'send_invoice' && aiResult.jobRef && !/^(me|us|i|we|him|her|them|they|myself|ourselves|someone)$/i.test(aiResult.jobRef.trim())) {
           intent = { ...intent, ...aiResult };
         }
       }
