@@ -589,7 +589,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const docLabel = docType === 'invoice' ? 'invoice' : 'quote';
           res.on('finish', () => {
             sendToForeman(
-              `Want me to resend the ${docLabel} for ${setupCustomerName} with your new details? Reply *yes* to resend, or *no* to leave it.`,
+              `Want me to re-create the ${docLabel} for ${setupCustomerName} with your new details? Reply *yes* or *no*.`,
               { businessId: business.id, businessPhone: business.phone }
             ).catch(err => console.error('Profile setup resend offer failed:', err.message));
           });
