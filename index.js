@@ -101,7 +101,7 @@ app.get('/', (req, res) => {
  * tradesperson to copy and send from their own WhatsApp.
  */
 const SETUP_QUESTIONS = {
-  trade:    `What's your trade? (e.g. Plumber, Electrician, Builder)\n\nReply *skip* to do this later.`,
+  trade:    `What does your business do? (e.g. Plumber, Joiner, Decorator, Landscaper)\n\nReply *skip* to do this later.`,
   email:    `What's your email address?\n\nReply *skip* to do this later.`,
   address:  `What's your business address?\n\nReply *skip* to do this later.`,
   logo_path: `Last one — send your logo as a photo and it'll appear on all your quotes and invoices.\n\nReply *skip* to do this later.`,
