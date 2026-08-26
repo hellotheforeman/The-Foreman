@@ -157,6 +157,11 @@ async function handleNewJob(intent, res) {
   const business = requireBusiness(intent, res);
   if (!business) return;
 
+  // If prices were included, this should have been a quote — redirect
+  if ((intent.amount && Number(intent.amount) > 0) || intent.items) {
+    return dispatch({ ...intent, intent: 'quote', jobRef: intent.jobRef || intent.name }, res);
+  }
+
   const customer = await db.findOrCreateCustomer(business.id, intent.name, intent.phone, intent.email || null);
   const job = await db.createJob(business.id, customer.id, intent.description, intent.postcode);
   const details = [customer.phone, customer.email].filter(Boolean).join(' · ');

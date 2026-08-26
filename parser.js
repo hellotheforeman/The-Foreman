@@ -75,7 +75,7 @@ function parse(raw) {
   const normalisedForQuote = text.replace(/^(?:re-?quote|update\s+quote)\s+/i, 'quote ');
 
   // Bare "quote" or "create/make/send a quote" — starts the guided new-quote flow
-  if (/^(?:(?:create|make|send)\s+a?\s*)?quote\s*$/i.test(lower)) {
+  if (/^(?:(?:create|make|send)\s+(?:me\s+)?a?\s*)?quote\s*$/i.test(lower)) {
     return { kind: 'command', intent: 'quote', jobId: null, jobRef: null, amount: null, items: null, lineItems: null };
   }
 
