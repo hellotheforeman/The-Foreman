@@ -606,7 +606,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       await setConversationState(business.id, {
         ...currentState,
-        collected: { fields: remaining },
+        collected: { ...currentState.collected, fields: remaining },
         pending: { type: 'field', field: remaining[0] },
       });
       return twimlReply(res, SETUP_QUESTIONS[remaining[0]]);
