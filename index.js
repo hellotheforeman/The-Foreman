@@ -435,7 +435,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         const pending = currentState.collected?.pendingIntent;
         await clearConversationState(business.id);
-        return (await dispatchPending(pending)) ?? twimlReply(res, `Got it — not VAT registered.`);
+        return pending ? dispatchPending(pending) : twimlReply(res, `Got it — not VAT registered.`);
       }
 
       if (currentState.pending?.field === 'vat_number') {
@@ -444,7 +444,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         business = { ...business, vat_number: isSkip ? null : trimmed };
         const pending = currentState.collected?.pendingIntent;
         await clearConversationState(business.id);
-        return (await dispatchPending(pending)) ?? twimlReply(res, `Got it — VAT number saved.`);
+        return pending ? dispatchPending(pending) : twimlReply(res, `Got it — VAT number saved.`);
       }
 
       await clearConversationState(business.id);
