@@ -402,10 +402,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
             // No customer name — re-prompt via quote flow
             await setConversationState(business.id, {
               workflow: 'quote_flow',
-              docType: pending.intent === 'send_invoice' ? 'invoice' : 'quote',
               focus: {},
               collected: {
                 step: 'customer_name',
+                docType: pending.intent === 'send_invoice' ? 'invoice' : 'quote',
                 prefilledAmount: pending.amount,
                 prefilledItems: pending.items,
                 prefilledLineItems: pending.lineItems,
@@ -796,18 +796,18 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const { customer_id: customerId, customer_name: customerName } = jobs[0];
           if (c.prefilledAmount != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId, customerName, description: c.prefilledDescription });
-            return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.prefilledAmount, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
+            return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.prefilledAmount, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
           }
           await setConversationState(business.id, {
             ...currentState,
-            collected: { step: 'price', customerId, customerName, description: c.prefilledDescription },
+            collected: { ...c, step: 'price', customerId, customerName, description: c.prefilledDescription },
             pending: { type: 'field', field: 'price' },
             options: [],
           });
           return twimlReply(res, `Got it — ${customerName}, ${c.prefilledDescription}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
         }
         const job = jobs[n - 1];
-        return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.prefilledAmount ?? null, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
+        return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.prefilledAmount ?? null, items: c.prefilledItems ?? null, lineItems: c.prefilledLineItems ?? null, business }, res);
       }
 
       // Step: customer name (bare "quote" trigger)
@@ -835,11 +835,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const existing = existingCustomers[0];
           if (extraCollected.description && extraCollected.amount != null) {
             const { job } = await createCustomerAndJob(business.id, { customerId: existing.id, customerName: existing.name, description: extraCollected.description });
-            return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: extraCollected.amount, items: extraCollected.items || null, lineItems: extraCollected.lineItems || null, business }, res);
+            return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: extraCollected.amount, items: extraCollected.items || null, lineItems: extraCollected.lineItems || null, business }, res);
           }
           await setConversationState(business.id, {
             ...currentState,
-            collected: { step: extraCollected.description ? 'price' : 'description', customerId: existing.id, customerName: existing.name, ...extraCollected },
+            collected: { ...c, step: extraCollected.description ? 'price' : 'description', customerId: existing.id, customerName: existing.name, ...extraCollected },
           });
           return twimlReply(res, extraCollected.description
             ? `Got it — ${existing.name}, ${extraCollected.description}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`
@@ -847,7 +847,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         }
         await setConversationState(business.id, {
           ...currentState,
-          collected: { step: 'address', customerName, ...extraCollected },
+          collected: { ...c, step: 'address', customerName, ...extraCollected },
         });
         return twimlReply(res, `What's ${customerName}'s address?\n\nReply *skip* to leave blank.`);
       }
@@ -862,7 +862,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (c.description && c.amount != null) {
           await clearConversationState(business.id);
           const { job } = await createCustomerAndJob(business.id, { ...c, address });
-          return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+          return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
         }
         if (c.description) {
           await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', address } });
@@ -878,7 +878,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         if (c.amount != null) {
           await clearConversationState(business.id);
           const { job } = await createCustomerAndJob(business.id, { ...c, description });
-          return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+          return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
         }
         await setConversationState(business.id, {
           ...currentState,
@@ -894,14 +894,14 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           const amount = lineItems.reduce((sum, i) => sum + i.amount, 0);
           await clearConversationState(business.id);
           const { job } = await createCustomerAndJob(business.id, c);
-          return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
+          return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount, items: trimmed, lineItems, business }, res);
         }
         const m = trimmed.match(/^£?(\d+(?:\.\d{1,2})?)\s*$/);
         if (!m) return twimlReply(res, `What's the price? (e.g. *450*, or itemised: *labour 250, parts 45*)`);
         const amount = parseFloat(m[1]);
         await clearConversationState(business.id);
         const { job } = await createCustomerAndJob(business.id, c);
-        return dispatch({ kind: 'command', intent: currentState.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount, items: null, lineItems: null, business }, res);
+        return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount, items: null, lineItems: null, business }, res);
       }
 
       await clearConversationState(business.id);
