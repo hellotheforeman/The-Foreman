@@ -220,7 +220,7 @@ async function handleQuote(intent, res) {
   await setConversationState(business.id, shouldOfferSetup ? {
     workflow: 'profile_setup_offered',
     focus: {},
-    collected: { fields: pendingSetupFields(business) },
+    collected: { fields: pendingSetupFields(business), jobId: job.id, docType: 'quote', customerName: job.customer.name },
     pending: { type: 'field', field: 'response' },
     options: [],
   } : {
@@ -404,7 +404,7 @@ async function handleSendInvoice(intent, res) {
   await setConversationState(business.id, shouldOfferSetup ? {
     workflow: 'profile_setup_offered',
     focus: {},
-    collected: { fields: pendingSetupFields(business) },
+    collected: { fields: pendingSetupFields(business), jobId: job.id, docType: 'invoice', customerName: job.customer.name },
     pending: { type: 'field', field: 'response' },
     options: [],
   } : {

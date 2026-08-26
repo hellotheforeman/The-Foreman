@@ -522,7 +522,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await setConversationState(business.id, {
           workflow: 'profile_setup',
           focus: {},
-          collected: { fields },
+          collected: { fields, jobId: currentState.collected?.jobId, docType: currentState.collected?.docType, customerName: currentState.collected?.customerName },
           pending: { type: 'field', field: fields[0] },
           options: [],
         });
@@ -574,7 +574,24 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
       const remaining = fields.slice(1);
       if (!remaining.length) {
+        const { jobId: setupJobId, docType, customerName: setupCustomerName } = currentState.collected || {};
         await clearConversationState(business.id);
+        if (setupJobId && docType && setupCustomerName) {
+          const docLabel = docType === 'invoice' ? 'invoice' : 'quote';
+          res.on('finish', () => {
+            sendToForeman(
+              `Want me to resend the ${docLabel} for ${setupCustomerName} with your new details? Reply *yes* to resend, or *no* to leave it.`,
+              { businessId: business.id, businessPhone: business.phone }
+            ).catch(err => console.error('Profile setup resend offer failed:', err.message));
+          });
+          await setConversationState(business.id, {
+            workflow: 'profile_setup_resend',
+            focus: {},
+            collected: { jobId: setupJobId, docType },
+            pending: { type: 'field', field: 'resend_confirm' },
+            options: [],
+          });
+        }
         return twimlReply(res, `All set — your profile is updated. 🎉 It'll show on all your quotes and invoices.`);
       }
 
@@ -586,6 +603,21 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, SETUP_QUESTIONS[remaining[0]]);
     }
     // --- End profile setup ---
+
+    // --- Profile setup resend offer ---
+    if (currentState?.workflow === 'profile_setup_resend') {
+      const trimmed = body.trim();
+      const { jobId: resendJobId, docType } = currentState.collected || {};
+      await clearConversationState(business.id);
+      if (/^(yes|y|yep|yeah)$/i.test(trimmed) && resendJobId) {
+        const resendIntent = docType === 'invoice'
+          ? { kind: 'command', intent: 'resend_invoice', jobId: resendJobId }
+          : { kind: 'command', intent: 'resend_quote', jobId: resendJobId };
+        return dispatch({ ...resendIntent, business }, res);
+      }
+      return twimlReply(res, `No problem — just say *resend quote* or *resend invoice* any time.`);
+    }
+    // --- End profile setup resend ---
 
     // --- Unified quote flow ---
     // Triggered by: bare "quote", "quote for Mrs Smith", "quote Mrs Smith" — no job ID, no amount.
