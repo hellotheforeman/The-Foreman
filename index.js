@@ -28,7 +28,7 @@ function formatSortCode(raw) {
 
 function extractCustomerName(input) {
   return input
-    .replace(/['']s\s*(invoice|quote)?\s*$/i, '')
+    .replace(/['‘’]s\s*(invoice|quote)?\s*$/i, '')
     .replace(/\s+(invoice|quote)\s*$/i, '')
     .replace(/^(?:the|for|an?\s+)\s*/i, '')
     .trim();
