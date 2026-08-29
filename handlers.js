@@ -81,6 +81,7 @@ const commandHandlers = {
   new_job: handleNewJob,
   quote: handleQuote,
   resend_quote: handleResendQuote,
+  resend_invoice: handleResendInvoice,
   paid: handlePaid,
   send_invoice: handleSendInvoice,
   amend_quote: handleQuote,
@@ -290,6 +291,32 @@ async function handleResendQuote(intent, res) {
     console.error('Quote PDF regeneration failed:', err.message);
     const msg = templates.quoteMessage(job, job.customer, business);
     messenger.twimlReply(res, `📋 Here's ${job.customer.name}'s quote.\n\n${msg}`);
+  }
+}
+
+async function handleResendInvoice(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  const job = await db.getJobWithCustomer(intent.jobId, business.id);
+  if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
+
+  const invoice = await db.getInvoiceByJob(job.id, business.id);
+  if (!invoice) {
+    return messenger.twimlReply(
+      res,
+      `No invoice on file for ${job.customer.name}. To create one: *invoice for ${job.customer.name}*`
+    );
+  }
+
+  try {
+    const invSeq = await db.getInvoiceSeqNum(business.id, invoice.id);
+    const pdfUrl = await generateInvoicePdf(job, invoice, job.customer, business, invSeq);
+    messenger.twimlReplyWithMedia(res, `🧾 Here's ${job.customer.name}'s invoice.`, pdfUrl);
+  } catch (err) {
+    console.error('Invoice PDF regeneration failed:', err.message);
+    const msg = templates.invoiceMessage(job, invoice, job.customer, business);
+    messenger.twimlReply(res, `🧾 Here's ${job.customer.name}'s invoice.\n\n${msg}`);
   }
 }
 
