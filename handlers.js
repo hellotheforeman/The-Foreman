@@ -129,7 +129,14 @@ async function dispatch(intent, res) {
     handler = continuationHandlers[intent.intent];
   }
 
-  if (!handler) return handleUnknown(intent, res);
+  if (!handler) {
+    // A recognised kind + intent with no handler means the code built an intent
+    // it can't route — a bug, not user gibberish. Make it loud in the logs.
+    if (['command', 'query', 'continuation'].includes(intent.kind) && intent.intent && intent.intent !== 'unknown') {
+      console.error(`⚠️ No handler registered for ${intent.kind}/${intent.intent}`);
+    }
+    return handleUnknown(intent, res);
+  }
   return handler(intent, res);
 }
 
