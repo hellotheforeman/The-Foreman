@@ -777,7 +777,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, 'No problem — quote dropped.');
       }
 
-      if (isWorkflowInterrupt(intent)) {
+      // A bare name at the "who's this for?" step gets AI-classified as customer_redirect.
+      // That's the answer to the prompt, not a request to bail — let the step handler take it.
+      if (isWorkflowInterrupt(intent) && !(c.step === 'customer_name' && intent.intent === 'customer_redirect')) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
