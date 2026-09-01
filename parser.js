@@ -350,6 +350,11 @@ function parse(raw) {
   if (changeNameMatch) {
     return { kind: 'command', intent: 'rename_customer', newName: changeNameMatch[1].trim() };
   }
+  // "Rename Joe Bloggs" — name specified but no new name yet; ask for it
+  const renameNoNewName = text.match(/^rename\s+(.+)$/i);
+  if (renameNoNewName) {
+    return { kind: 'command', intent: 'rename_customer', fromName: renameNoNewName[1].trim() };
+  }
 
   // --- Update customer ---
   // "update Dave Smith email dave@example.com"

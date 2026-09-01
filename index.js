@@ -162,7 +162,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'morning_briefing' || (currentState.workflow === 'quote_flow' && currentState.collected?.step === 'customer_name'))) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'rename_pending' || currentState.workflow === 'morning_briefing' || (currentState.workflow === 'quote_flow' && currentState.collected?.step === 'customer_name'))) {
       const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
       if (aiResult) {
         if (aiResult.type === 'reply') return twimlReply(res, aiResult.message);
@@ -1582,6 +1582,43 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       return twimlReply(res, `Can't find anything for "${trimmed}" — say *jobs* if you want to see what's on.`);
     }
     // --- End amend with context ---
+
+    // --- Rename pending: "Rename Joe Bloggs" with no new name yet ---
+    if (intent.intent === 'rename_customer' && !intent.newName) {
+      let displayName = intent.fromName || currentState?.focus?.customerName || null;
+      if (intent.fromName) {
+        const matches = await db.findCustomerByName(business.id, intent.fromName);
+        if (!matches.length) return twimlReply(res, `❌ No customer found matching "${intent.fromName}".`);
+        displayName = matches[0].name;
+      }
+      if (!displayName && !intent.jobId) {
+        return twimlReply(res, `Who should I rename? Say *rename [current name] to [new name]*.`);
+      }
+      await setConversationState(business.id, {
+        workflow: 'rename_pending',
+        focus: intent.jobId ? { jobId: intent.jobId } : (currentState?.focus || {}),
+        collected: { fromName: displayName },
+        pending: { type: 'field', field: 'new_name' },
+        options: [],
+      });
+      return twimlReply(res, `What would you like to rename ${displayName || 'them'} to?`);
+    }
+
+    if (currentState?.workflow === 'rename_pending') {
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+      const { fromName } = currentState.collected || {};
+      const jobId = currentState.focus?.jobId;
+      await clearConversationState(business.id);
+      return dispatch({ kind: 'command', intent: 'rename_customer', jobId, fromName, newName: trimmed, business }, res);
+    }
+    // --- End rename pending ---
 
     // --- Feedback pending ---
     if (currentState?.workflow === 'feedback_pending') {
