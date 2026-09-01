@@ -92,6 +92,7 @@ const commandHandlers = {
   mark_complete: handleMarkComplete,
   add_note: handleAddNote,
   update_customer: handleUpdateCustomer,
+  rename_customer: handleRenameCustomer,
   feedback: handleFeedback,
 };
 
@@ -691,6 +692,55 @@ async function handleUpdateCustomer(intent, res) {
   if (!updated) return messenger.twimlReply(res, `❌ Couldn't update that field.`);
 
   messenger.twimlReply(res, `✅ Updated ${customer.name}'s ${intent.field}: ${intent.value}`);
+}
+
+async function handleRenameCustomer(intent, res) {
+  const business = requireBusiness(intent, res);
+  if (!business) return;
+
+  let job = null;
+  let customer = null;
+
+  if (intent.jobId) {
+    job = await db.getJobWithCustomer(intent.jobId, business.id);
+    if (!job) return messenger.twimlReply(res, await jobNotFoundMsg(intent.jobId, business));
+    customer = job.customer;
+  } else if (intent.fromName) {
+    const matches = await db.findCustomerByName(business.id, intent.fromName);
+    if (!matches.length) return messenger.twimlReply(res, `❌ No customer found matching "${intent.fromName}".`);
+    customer = matches[0];
+  } else {
+    return messenger.twimlReply(res, `Who should I rename? Say *rename [current name] to [new name]*.`);
+  }
+
+  const oldName = customer.name;
+  const updated = await db.updateCustomer(customer.id, business.id, { name: intent.newName });
+  if (!updated) return messenger.twimlReply(res, `❌ Couldn't update the name.`);
+
+  const updatedCustomer = { ...customer, name: intent.newName };
+
+  if (job) {
+    const invoice = await db.getInvoiceByJob(job.id, business.id);
+    if (invoice) {
+      try {
+        const invSeq = await db.getInvoiceSeqNum(business.id, invoice.id);
+        const pdfUrl = await generateInvoicePdf(job, invoice, updatedCustomer, business, invSeq);
+        return messenger.twimlReplyWithMedia(res, `✅ Renamed to ${intent.newName}. Here's the updated invoice.`, pdfUrl);
+      } catch (err) {
+        console.error('Invoice PDF regeneration after rename failed:', err.message);
+      }
+    } else if (job.quoted_amount && Number(job.quoted_amount) > 0) {
+      try {
+        const quoteSeq = await db.getQuoteSeqNum(business.id, job.id);
+        const pdfUrl = await generateQuotePdf(job, updatedCustomer, business, quoteSeq);
+        return messenger.twimlReplyWithMedia(res, `✅ Renamed to ${intent.newName}. Here's the updated quote.`, pdfUrl);
+      } catch (err) {
+        console.error('Quote PDF regeneration after rename failed:', err.message);
+      }
+    }
+  }
+
+  messenger.twimlReply(res, `✅ Renamed ${oldName} to ${intent.newName}.`);
 }
 
 function resolvePeriod(period) {

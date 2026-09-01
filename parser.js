@@ -334,6 +334,23 @@ function parse(raw) {
     return { kind: 'query', intent: 'settings' };
   }
 
+  // --- Rename customer ---
+  // "rename to KCLA Netball Club" (contextual)
+  // "rename Dave Smith to KCLA Netball Club" (explicit)
+  // "change the name to KCLA Netball Club" (contextual)
+  const renameToOnly = text.match(/^rename\s+to\s+(.+)$/i);
+  if (renameToOnly) {
+    return { kind: 'command', intent: 'rename_customer', newName: renameToOnly[1].trim() };
+  }
+  const renameExplicit = text.match(/^rename\s+(.+?)\s+to\s+(.+)$/i);
+  if (renameExplicit) {
+    return { kind: 'command', intent: 'rename_customer', fromName: renameExplicit[1].trim(), newName: renameExplicit[2].trim() };
+  }
+  const changeNameMatch = text.match(/^change\s+(?:the\s+)?(?:customer\s+)?name(?:\s+on\s+(?:this\s+)?(?:quote|invoice|job))?\s+to\s+(.+)$/i);
+  if (changeNameMatch) {
+    return { kind: 'command', intent: 'rename_customer', newName: changeNameMatch[1].trim() };
+  }
+
   // --- Update customer ---
   // "update Dave Smith email dave@example.com"
   const updateCustomerMatch = text.match(/^update\s+(?:customer\s+)?(.+?)\s+(name|phone|email|address)\s+(.+)$/i);

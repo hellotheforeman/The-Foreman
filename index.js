@@ -191,7 +191,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           await clearConversationState(business.id);
           currentState = null;
         } else if (focusJobId) {
-          const CONTEXT_INTENTS = ['paid', 'chase', 'cancel_job'];
+          const CONTEXT_INTENTS = ['paid', 'chase', 'cancel_job', 'rename_customer'];
           const isQuoteAcceptance = intent.intent === 'send_invoice' && intent.fromQuote && ctx.workflow === 'quote_focus';
           if (CONTEXT_INTENTS.includes(intent.intent) || isQuoteAcceptance) {
             intent = { ...intent, jobId: focusJobId };
