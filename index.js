@@ -823,6 +823,35 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return dispatch({ ...intent, business }, res);
       }
 
+      // Step: pick from multiple customers with the same name
+      if (c.step === 'pick_customer') {
+        const n = parseInt(trimmed, 10);
+        const candidates = c.customers || [];
+        const newN = candidates.length + 1;
+        if (!n || n < 1 || n > newN) {
+          return twimlReply(res, `Pick a number from the list above.`);
+        }
+        await clearConversationState(business.id);
+        if (n === newN) {
+          await setConversationState(business.id, {
+            ...currentState,
+            collected: { ...c, step: 'address', customers: undefined },
+          });
+          return twimlReply(res, `What's ${c.customerName}'s address?\n\nReply *skip* to leave blank.`);
+        }
+        const chosen = candidates[n - 1];
+        if (c.description && c.amount != null) {
+          const { job } = await createCustomerAndJob(business.id, { customerId: chosen.id, customerName: chosen.name, description: c.description });
+          return dispatch({ kind: 'command', intent: c.docType === 'invoice' ? 'send_invoice' : 'quote', jobId: job.id, amount: c.amount, items: c.items || null, lineItems: c.lineItems || null, business }, res);
+        }
+        if (c.description) {
+          await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'price', customerId: chosen.id, customerName: chosen.name, customers: undefined } });
+          return twimlReply(res, `Got it — ${chosen.name}, ${c.description}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`);
+        }
+        await setConversationState(business.id, { ...currentState, collected: { ...c, step: 'description', customerId: chosen.id, customerName: chosen.name, customers: undefined } });
+        return twimlReply(res, `Got it — what's the work for ${chosen.name}?`);
+      }
+
       // Step: pick from multiple job matches
       if (c.step === 'pick_job') {
         const n = parseInt(trimmed, 10);
@@ -885,6 +914,19 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           return twimlReply(res, extraCollected.description
             ? `Got it — ${existing.name}, ${extraCollected.description}.\n\nEnter the price\nYou can add a total or itemise (e.g. labour £250, materials £45).`
             : `Got it — what's the work for ${existing.name}?`);
+        }
+        if (existingCustomers.length > 1) {
+          const candidates = existingCustomers.slice(0, 4);
+          const lines = candidates.map((cu, i) => {
+            const contact = [cu.phone, cu.email].filter(Boolean).join(', ');
+            return `${i + 1}. ${cu.name}${contact ? ' — ' + contact : ''}`;
+          }).join('\n');
+          const newN = candidates.length + 1;
+          await setConversationState(business.id, {
+            ...currentState,
+            collected: { ...c, step: 'pick_customer', customerName, customers: candidates, ...extraCollected },
+          });
+          return twimlReply(res, `Found ${candidates.length} customers named ${customerName}:\n\n${lines}\n${newN}. New customer\n\nPick a number.`);
         }
         await setConversationState(business.id, {
           ...currentState,
@@ -1142,14 +1184,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return dispatch({ kind: 'command', intent: 'paid', jobId: nameMatches[0].job_id, business }, res);
       }
       if (nameMatches.length > 1) {
-        const list = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        const paidVat = business?.vat_registered ? 1.20 : 1;
+        const list = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${(Number(i.amount) * paidVat).toFixed(2)}`).join('\n');
         return twimlReply(res, `Still a few matches — reply with a number:\n\n${list}`);
       }
       if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
-      const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+      const paidVat = business?.vat_registered ? 1.20 : 1;
+      const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${(Number(i.amount) * paidVat).toFixed(2)}`).join('\n');
       return twimlReply(res, `Didn't catch that — reply with a name or number:\n\n${list}`);
     }
 
@@ -1176,6 +1220,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'chase', jobId: nameMatches[0].job_id, business }, res);
       }
+      if (nameMatches.length > 1) {
+        const subList = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        return twimlReply(res, `Still a few matches — reply with a number:\n\n${subList}`);
+      }
       const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
       return twimlReply(res, `Reply with a number:\n\n${list}`);
     }
@@ -1196,6 +1244,19 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const job = jobs[n - 1];
         await clearConversationState(business.id);
         return dispatch({ kind: 'command', intent: 'cancel_job', jobId: job.id, business }, res);
+      }
+      const nameLower = trimmed.toLowerCase();
+      const nameMatches = jobs.filter(j =>
+        j.customer_name.toLowerCase().includes(nameLower) ||
+        j.description.toLowerCase().includes(nameLower)
+      );
+      if (nameMatches.length === 1) {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'cancel_job', jobId: nameMatches[0].id, business }, res);
+      }
+      if (nameMatches.length > 1) {
+        const subList = nameMatches.slice(0, 5).map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
+        return twimlReply(res, `Still a few matches — reply with a number:\n\n${subList}`);
       }
       const list = jobs.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
       return twimlReply(res, `Reply with a number:\n\n${list}`);
@@ -1703,7 +1764,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      if (intent?.kind === 'query') {
+      if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
@@ -1751,7 +1812,9 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       }
 
       if (item.type === 'stale_quote') {
-        return dispatch({ kind: 'command', intent: 'quote', jobId: item.jobId, amount: null, business }, res);
+        const staleJob = await db.getJobWithCustomer(item.jobId, business.id);
+        const staleAmount = staleJob?.quoted_amount ? Number(staleJob.quoted_amount) : null;
+        return dispatch({ kind: 'command', intent: 'quote', jobId: item.jobId, amount: staleAmount, business }, res);
       }
     }
     // --- End morning briefing workflow ---

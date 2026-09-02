@@ -89,7 +89,7 @@ const commandHandlers = {
   chase: handleChase,
   review: handleReview,
   cancel_job: handleCancelJob,
-  mark_complete: handlePaid,
+  mark_complete: handleMarkComplete,
   add_note: handleAddNote,
   update_customer: handleUpdateCustomer,
   rename_customer: handleRenameCustomer,
@@ -348,7 +348,8 @@ async function handlePaid(intent, res) {
 
       if (matched.length > 1) {
         const invoices = matched.slice(0, 5);
-        const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        const vat = vatScale(business);
+        const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${(Number(i.amount) * vat).toFixed(2)}`).join('\n');
         await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, job_id: i.job_id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
         return messenger.twimlReply(res, `Which invoice for ${intent.name}?\n\n${list}`);
       }
@@ -365,7 +366,8 @@ async function handlePaid(intent, res) {
     }
 
     const invoices = allUnpaid.slice(0, 5);
-    const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+    const vatForList = vatScale(business);
+    const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${(Number(i.amount) * vatForList).toFixed(2)}`).join('\n');
     await setConversationState(business.id, { workflow: 'paid_pick', focus: {}, collected: { invoices: invoices.map(i => ({ id: i.id, job_id: i.job_id, customer_name: i.customer_name, amount: i.amount })) }, pending: { type: 'selection', field: 'invoice' }, options: [] });
     return messenger.twimlReply(res, `Which invoice got paid?\n\n${list}`);
   }
@@ -784,9 +786,25 @@ function resolvePeriod(period) {
     const start = new Date(now); start.setDate(start.getDate() - daysToMonday); start.setHours(0, 0, 0, 0);
     return { start, end, label: 'This week' };
   }
+  if (period === 'last_week') {
+    const daysToMonday = (now.getDay() + 6) % 7;
+    const start = new Date(now); start.setDate(start.getDate() - daysToMonday - 7); start.setHours(0, 0, 0, 0);
+    const lastWeekEnd = new Date(start); lastWeekEnd.setDate(lastWeekEnd.getDate() + 6); lastWeekEnd.setHours(23, 59, 59, 999);
+    return { start, end: lastWeekEnd, label: 'Last week' };
+  }
   if (period === 'year') {
     const start = new Date(now.getFullYear(), 0, 1, 0, 0, 0, 0);
     return { start, end, label: 'This year' };
+  }
+  if (period === 'last_year') {
+    const start = new Date(now.getFullYear() - 1, 0, 1, 0, 0, 0, 0);
+    const lastYearEnd = new Date(now.getFullYear() - 1, 11, 31, 23, 59, 59, 999);
+    return { start, end: lastYearEnd, label: 'Last year' };
+  }
+  if (period === 'last_month') {
+    const start = new Date(now.getFullYear(), now.getMonth() - 1, 1, 0, 0, 0, 0);
+    const lastMonthEnd = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    return { start, end: lastMonthEnd, label: 'Last month' };
   }
   // month (default)
   const start = new Date(now.getFullYear(), now.getMonth(), 1, 0, 0, 0, 0);
@@ -1089,7 +1107,7 @@ async function handleJobsByStatus(intent, res) {
     const summary = desc.length > 40 ? desc.slice(0, 40).trimEnd() + '…' : desc;
     if (intent.status === 'quoted') {
       const days = j.created_at ? Math.floor((Date.now() - new Date(j.created_at).getTime()) / 86400000) : null;
-      const amount = j.quoted_amount ? ` — £${Number(j.quoted_amount).toFixed(2)}` : '';
+      const amount = j.quoted_amount ? ` — £${(Number(j.quoted_amount) * vat).toFixed(2)}${vatSuffix}` : '';
       const datePart = days !== null ? ` (${days} day${days === 1 ? '' : 's'} ago)` : '';
       return `• ${j.customer_name} — ${summary}${amount}${datePart}`;
     }

@@ -131,6 +131,12 @@ function parse(raw) {
     return { kind: 'command', intent: 'paid', jobId: null, jobRef: null };
   }
 
+  // "mark [Name] as paid" / "mark [Name] paid" — must run before namePaidMatch to avoid greedy capture
+  const markNamePaidMatch = text.match(/^mark\s+(.+?)\s+(?:as\s+)?paid$/i);
+  if (markNamePaidMatch && !/\b(it|that|the|invoice|job|quote)\b/i.test(markNamePaidMatch[1]) && !/^\d+$/.test(markNamePaidMatch[1].trim())) {
+    return { kind: 'command', intent: 'paid', jobId: null, jobRef: markNamePaidMatch[1].trim() };
+  }
+
   // "[Name] paid" / "[Name] has paid" / "[Name] settled" — name before paid verb
   const namePaidMatch = lower.match(/^([a-z][a-z\s'-]{1,30}?)\s+(paid(\s+up)?|has\s+paid|settled|paid\s+the\s+invoice)$/i);
   if (namePaidMatch && !/\b(invoice|quote|job|that|the|it|he|she|they|how|what|when|where|why)\b/i.test(namePaidMatch[1])) {
@@ -175,6 +181,16 @@ function parse(raw) {
   const invoiceMatch = lower.match(/^(?:send\s+)?invoice\s+#?(\d+)\s*$/);
   if (invoiceMatch) {
     return { kind: 'command', intent: 'send_invoice', jobId: parseInt(invoiceMatch[1], 10) };
+  }
+
+  // "send me an invoice for Smith", "create an invoice for Smith", "send an invoice to Smith"
+  const invoiceMeForMatch = text.match(/^(?:create|make|raise|generate|build|send)\s+(?:me\s+)?(?:an?\s+)?invoice\s+(?:for|to)\s+(.+)$/i);
+  if (invoiceMeForMatch) {
+    const ref = invoiceMeForMatch[1].trim();
+    const amountMatch = ref.match(/£(\d+(?:\.\d{1,2})?)\b/) || ref.match(/\b(\d+(?:\.\d{1,2})?)\s*$/);
+    const amount = amountMatch ? parseFloat(amountMatch[1]) : null;
+    const jobRef = amount != null ? ref.replace(/\s*£?\d[\d.,]*\s*$/, '').trim() : ref;
+    return { kind: 'command', intent: 'send_invoice', jobId: null, jobRef, amount, items: null };
   }
 
   // Invoice by customer name: "invoice Mrs Smith" or "invoice for James Smith for a boiler service £180"
@@ -281,6 +297,16 @@ function parse(raw) {
   const createChaserMatch = text.match(/^(?:create|draft|write|make)\s+(?:me\s+)?(?:a\s+)?(?:payment\s+)?chaser\s+(?:for\s+)?(.+)$/i);
   if (createChaserMatch) {
     return { kind: 'command', intent: 'chase', jobId: null, jobRef: createChaserMatch[1].trim() };
+  }
+
+  // "remind Smith to pay", "send a reminder to Smith", "send a payment reminder for Smith"
+  const remindToPayMatch = text.match(/^remind\s+(.+?)\s+to\s+pay$/i);
+  if (remindToPayMatch) {
+    return { kind: 'command', intent: 'chase', jobId: null, jobRef: remindToPayMatch[1].trim() };
+  }
+  const sendReminderMatch = text.match(/^send\s+(?:a\s+)?(?:payment\s+)?reminder\s+(?:to|for)\s+(.+)$/i);
+  if (sendReminderMatch) {
+    return { kind: 'command', intent: 'chase', jobId: null, jobRef: sendReminderMatch[1].trim() };
   }
 
   // --- Review request (ask customer for a review after job complete) ---
@@ -541,9 +567,12 @@ function parsePeriod(lower) {
   if (/\blast\s+quarter\b/.test(lower)) return 'last_3_months';
   if (/\byesterday\b/.test(lower)) return 'yesterday';
   if (/\btoday\b/.test(lower)) return 'today';
-  if (/\bthis\s+week\b|\blast\s+week\b/.test(lower)) return 'week';
-  if (/\bthis\s+year\b|\blast\s+year\b/.test(lower)) return 'year';
-  if (/\bthis\s+month\b|\blast\s+month\b/.test(lower)) return 'month';
+  if (/\blast\s+week\b/.test(lower)) return 'last_week';
+  if (/\bthis\s+week\b/.test(lower)) return 'week';
+  if (/\blast\s+year\b/.test(lower)) return 'last_year';
+  if (/\bthis\s+year\b/.test(lower)) return 'year';
+  if (/\blast\s+month\b/.test(lower)) return 'last_month';
+  if (/\bthis\s+month\b/.test(lower)) return 'month';
   if (/\bweek\b/.test(lower)) return 'week';
   if (/\byear\b/.test(lower)) return 'year';
   return 'month';
