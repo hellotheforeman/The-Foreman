@@ -1618,10 +1618,6 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      if (isWorkflowInterrupt(intent)) {
-        await clearConversationState(business.id);
-        return dispatch({ ...intent, business }, res);
-      }
       const { fromName } = currentState.collected || {};
       const jobId = currentState.focus?.jobId;
       await clearConversationState(business.id);
