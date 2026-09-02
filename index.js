@@ -1535,18 +1535,27 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return routeAmend(focusJobId, business, res);
       }
-      const suggestion = await openJobsSuggestion(business.id);
+      const isInvoice = intent.intent === 'amend_invoice';
+      const jobs = isInvoice
+        ? await db.getJobsWithInvoice(business.id)
+        : await db.getJobsWithQuote(business.id);
+      const docWord = isInvoice ? 'invoice' : 'quote';
+      if (!jobs.length) {
+        return twimlReply(res, `You don't have any open ${docWord}s to edit.`);
+      }
+      if (jobs.length === 1) {
+        return routeAmend(jobs[0].id, business, res);
+      }
+      const list = jobs.slice(0, 5);
+      const lines = list.map((j, i) => `${i + 1}. ${j.customer_name} — ${toTitleCase(j.description)}`).join('\n');
       await setConversationState(business.id, {
         workflow: 'amend_pending',
         focus: {},
-        collected: {},
-        pending: { type: 'field', field: 'jobRef' },
-        options: [],
+        collected: { jobs: list },
+        pending: { type: 'selection', field: 'jobId' },
+        options: list,
       });
-      return twimlReply(res, suggestion
-        ? `Which quote did you want to change? Here's what you've got open:\n\n${suggestion}`
-        : `Which quote did you want to change? Say *jobs* to see what's on.`
-      );
+      return twimlReply(res, `Which ${docWord} did you want to change?\n\n${lines}\n\nReply with 1–${list.length}.`);
     }
 
     if (currentState?.workflow === 'amend_pending') {
@@ -1554,6 +1563,17 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
+      // Numbered selection (initial filtered list or disambiguation sub-list)
+      if (currentState.pending?.type === 'selection') {
+        const jobs = currentState.collected?.jobs || [];
+        const n = parseInt(trimmed, 10);
+        if (n >= 1 && n <= jobs.length) {
+          await clearConversationState(business.id);
+          return routeAmend(jobs[n - 1].id, business, res);
+        }
+        return twimlReply(res, `Pick a number from the list above, or say *cancel*.`);
+      }
+      // Text fallback (shouldn't normally be reached with the new filtered flow)
       const resolved = await resolveSingleJobReference({ businessId: business.id, parsedIntent: { jobRef: trimmed }, raw: body, state: null });
       if (resolved.status === 'resolved') {
         await clearConversationState(business.id);
@@ -1570,16 +1590,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         });
         return twimlReply(res, `Found a few matches:\n${lines}\n\nReply with 1–${resolved.jobs.slice(0, 5).length}.`);
       }
-      if (currentState.pending?.type === 'selection') {
-        const jobs = currentState.collected?.jobs || [];
-        const n = parseInt(trimmed, 10);
-        if (n >= 1 && n <= jobs.length) {
-          await clearConversationState(business.id);
-          return routeAmend(jobs[n - 1].id, business, res);
-        }
-        return twimlReply(res, `Pick a number from the list above.`);
-      }
-      return twimlReply(res, `Can't find anything for "${trimmed}" — say *jobs* if you want to see what's on.`);
+      return twimlReply(res, `Can't find anything for "${trimmed}" — say *cancel* to exit.`);
     }
     // --- End amend with context ---
 

@@ -439,6 +439,37 @@ async function getOpenJobs(businessId) {
   );
 }
 
+async function getJobsWithQuote(businessId) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND j.status NOT IN ('cancelled', 'paid')
+       AND j.quoted_amount IS NOT NULL
+       AND NOT EXISTS (
+         SELECT 1 FROM invoices i WHERE i.job_id = j.id AND i.business_id = j.business_id
+       )
+     ORDER BY j.created_at DESC`,
+    [businessId]
+  );
+}
+
+async function getJobsWithInvoice(businessId) {
+  return getAll(
+    `SELECT j.*, c.name AS customer_name
+     FROM jobs j
+     JOIN customers c ON j.customer_id = c.id
+     WHERE j.business_id = $1
+       AND EXISTS (
+         SELECT 1 FROM invoices i
+         WHERE i.job_id = j.id AND i.business_id = j.business_id AND i.status != 'PAID'
+       )
+     ORDER BY j.created_at DESC`,
+    [businessId]
+  );
+}
+
 async function getJobsByStatus(businessId, status) {
   return getAll(
     `SELECT j.*, c.name AS customer_name,
@@ -987,6 +1018,8 @@ module.exports = {
   getJobWithCustomer,
   setQuote,
   getOpenJobs,
+  getJobsWithQuote,
+  getJobsWithInvoice,
   getJobsByStatus,
   findOpenJobsByCustomerName,
   findJobsByDescription,
