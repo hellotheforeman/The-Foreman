@@ -1585,23 +1585,32 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     // --- Rename pending: "Rename Joe Bloggs" with no new name yet ---
     if (intent.intent === 'rename_customer' && !intent.newName) {
-      let displayName = intent.fromName || currentState?.focus?.customerName || null;
+      // If a job is in focus, treat fromName as the NEW name ("rename to Joe Bloggs" without "to").
+      const focusJobId = (currentState?.workflow === 'quote_focus' || currentState?.workflow === 'invoice_focus' || currentState?.workflow === 'profile_setup_offered')
+        ? currentState.focus?.jobId : null;
+      if (focusJobId && intent.fromName) {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'rename_customer', jobId: focusJobId, newName: intent.fromName, business }, res);
+      }
+
+      // No focus: fromName is the customer to rename — ask for the new name.
+      let displayName = intent.fromName || null;
       if (intent.fromName) {
         const matches = await db.findCustomerByName(business.id, intent.fromName);
         if (!matches.length) return twimlReply(res, `❌ No customer found matching "${intent.fromName}".`);
         displayName = matches[0].name;
       }
-      if (!displayName && !intent.jobId) {
+      if (!displayName) {
         return twimlReply(res, `Who should I rename? Say *rename [current name] to [new name]*.`);
       }
       await setConversationState(business.id, {
         workflow: 'rename_pending',
-        focus: intent.jobId ? { jobId: intent.jobId } : (currentState?.focus || {}),
+        focus: {},
         collected: { fromName: displayName },
         pending: { type: 'field', field: 'new_name' },
         options: [],
       });
-      return twimlReply(res, `What would you like to rename ${displayName || 'them'} to?`);
+      return twimlReply(res, `What would you like to rename ${displayName} to?`);
     }
 
     if (currentState?.workflow === 'rename_pending') {
