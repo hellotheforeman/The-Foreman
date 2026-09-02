@@ -162,7 +162,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     let currentState = await getConversationState(business.id);
 
     let intent = parse(body);
-    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'rename_pending' || currentState.workflow === 'morning_briefing' || (currentState.workflow === 'quote_flow' && currentState.collected?.step === 'customer_name'))) {
+    if (intent.intent === 'unknown' && (!currentState || currentState.workflow === 'quote_focus' || currentState.workflow === 'invoice_focus' || currentState.workflow === 'amend_pending' || currentState.workflow === 'rename_pending' || currentState.workflow === 'morning_briefing' || currentState.workflow === 'invoice_pick' || (currentState.workflow === 'quote_flow' && currentState.collected?.step === 'customer_name'))) {
       const aiResult = await parseWithAI(body, { onboarded: business.onboarded, businessName: business.business_name });
       if (aiResult) {
         if (aiResult.type === 'reply') return twimlReply(res, aiResult.message);
@@ -221,6 +221,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         return twimlReply(res, 'Settings closed.');
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
       }
 
       if (currentState.pending?.field === 'choose') {
@@ -392,6 +397,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     if (currentState?.workflow === 'vat_gate') {
       const trimmed = body.trim();
 
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, `Cancelled — your ${currentState.collected?.pendingIntent?.intent === 'send_invoice' ? 'invoice' : 'quote'} wasn't sent. Say it again when you're ready.`);
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
       // Shared helper: dispatch pending intent after VAT is resolved,
       // creating customer+job first if this was a new quote/invoice with no jobId yet.
       const dispatchPending = async (pending) => {
@@ -462,6 +477,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- Bank details gate ---
     if (currentState?.workflow === 'bank_gate') {
       const trimmed = body.trim();
+
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, `Cancelled — your invoice wasn't sent. Say *invoice* again when you're ready.`);
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
 
       if (currentState.pending?.field === 'bank_confirm') {
         if (/^(skip|no|nope|later|s|n)$/i.test(trimmed)) {
@@ -555,6 +580,16 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         return twimlReply(res, `All set — your profile is updated. 🎉 It'll show on all your quotes and invoices.`);
       }
 
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+
       const isSkip = /^skip$/i.test(trimmed);
 
       if (currentField === 'logo_path') {
@@ -624,7 +659,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
           : { kind: 'command', intent: 'resend_quote', jobId: resendJobId };
         return dispatch({ ...resendIntent, business }, res);
       }
-      return twimlReply(res, `No problem — just say *resend quote* or *resend invoice* any time.`);
+      if (/^(no|n|nope|skip|later)$/i.test(trimmed)) {
+        return twimlReply(res, `No problem — just say *resend quote* or *resend invoice* any time.`);
+      }
+      // Any other message — dispatch it normally rather than swallowing it
+      return dispatch({ ...intent, business }, res);
     }
     // --- End profile setup resend ---
 
@@ -975,6 +1014,8 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
     // --- End invoice flow ---
 
     // --- Resend invoice — remap early so the invoice-by-name block below can handle it ---
+    // handleSendInvoice already detects an existing invoice and resends rather than recreating.
+    // This means resend_invoice and send_invoice share the same routing path from here down.
     if (intent.intent === 'resend_invoice') {
       intent = { ...intent, intent: 'send_invoice' };
     }
@@ -1104,13 +1145,39 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         const list = nameMatches.slice(0, 5).map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
         return twimlReply(res, `Still a few matches — reply with a number:\n\n${list}`);
       }
-      // New command — abandon pick and handle it
-      if (intent.kind === 'command' && intent.intent !== 'paid') {
+      if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
       const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
       return twimlReply(res, `Didn't catch that — reply with a name or number:\n\n${list}`);
+    }
+
+    if (currentState?.workflow === 'chase_pick') {
+      const trimmed = body.trim();
+      const invoices = currentState.collected?.invoices || [];
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
+      const n = parseInt(trimmed, 10);
+      if (!isNaN(n) && n >= 1 && n <= invoices.length) {
+        const chosen = invoices[n - 1];
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'chase', jobId: chosen.job_id, business }, res);
+      }
+      const nameLower = trimmed.toLowerCase();
+      const nameMatches = invoices.filter(i => i.customer_name.toLowerCase().includes(nameLower));
+      if (nameMatches.length === 1) {
+        await clearConversationState(business.id);
+        return dispatch({ kind: 'command', intent: 'chase', jobId: nameMatches[0].job_id, business }, res);
+      }
+      const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+      return twimlReply(res, `Reply with a number:\n\n${list}`);
     }
 
     if (currentState?.workflow === 'cancel_pick') {
@@ -1119,6 +1186,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
+      }
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
       }
       const n = parseInt(trimmed, 10);
       if (!isNaN(n) && n >= 1 && n <= jobs.length) {
@@ -1137,8 +1208,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      // If the user has issued a new command, abandon the pick and handle it.
-      if (intent.kind === 'command' && intent.intent !== 'send_invoice') {
+      if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
@@ -1219,7 +1289,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      if (intent.kind === 'command') {
+      if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
@@ -1261,7 +1331,7 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
-      if (intent.kind === 'command') {
+      if (isWorkflowInterrupt(intent)) {
         await clearConversationState(business.id);
         return dispatch({ ...intent, business }, res);
       }
@@ -1563,6 +1633,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
       // Numbered selection (initial filtered list or disambiguation sub-list)
       if (currentState.pending?.type === 'selection') {
         const jobs = currentState.collected?.jobs || [];
@@ -1629,6 +1703,10 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
       }
+      if (intent?.kind === 'query') {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
       const { fromName } = currentState.collected || {};
       const jobId = currentState.focus?.jobId;
       await clearConversationState(business.id);
@@ -1638,6 +1716,14 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
 
     // --- Feedback pending ---
     if (currentState?.workflow === 'feedback_pending') {
+      if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
+        await clearConversationState(business.id);
+        return twimlReply(res, 'Cancelled.');
+      }
+      if (intent?.kind === 'query') {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
+      }
       await clearConversationState(business.id);
       const recentMessages = await db.getRecentMessages(business.id, 5);
       await db.saveFeedback(business.id, trimmed, recentMessages.reverse());
@@ -1675,6 +1761,11 @@ app.post('/webhook', validateTwilioSignature, async (req, res) => {
       if (/^(cancel|back|exit|quit)$/i.test(trimmed)) {
         await clearConversationState(business.id);
         return twimlReply(res, 'Cancelled.');
+      }
+
+      if (isWorkflowInterrupt(intent)) {
+        await clearConversationState(business.id);
+        return dispatch({ ...intent, business }, res);
       }
 
       const { jobId: amendJobId, customerId, hasInvoice } = currentState.collected || {};

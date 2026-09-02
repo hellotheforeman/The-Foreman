@@ -89,7 +89,7 @@ const commandHandlers = {
   chase: handleChase,
   review: handleReview,
   cancel_job: handleCancelJob,
-  mark_complete: handleMarkComplete,
+  mark_complete: handlePaid,
   add_note: handleAddNote,
   update_customer: handleUpdateCustomer,
   rename_customer: handleRenameCustomer,
@@ -158,7 +158,7 @@ async function handleCustomerRedirect(intent, res) {
   }
   messenger.twimlReply(
     res,
-    `I add customers as you go. Just say *quote for [name]* or *new job for [name]* when you're ready — I'll set them up then.`
+    `I add customers as you go — just say *quote* or *new job* when you're ready and I'll ask for the name.`
   );
 }
 
@@ -283,7 +283,7 @@ async function handleResendQuote(intent, res) {
   if (!job.quoted_amount || Number(job.quoted_amount) <= 0) {
     return messenger.twimlReply(
       res,
-      `No quote on file for ${job.customer.name}. To create one: *quote ${job.id} 450 description*`
+      `No quote on file for ${job.customer.name} yet — say *quote* to put one together.`
     );
   }
 
@@ -432,7 +432,7 @@ async function handleSendInvoice(intent, res) {
     } else {
       return messenger.twimlReply(
         res,
-        `❌ No amount set for ${job.customer?.name || 'that one'}.\n\nUse: *invoice ${job.id} 450 description*`
+        `❌ No amount on file for ${job.customer?.name || 'that one'} — tell me the price and I'll get the invoice sorted.`
       );
     }
 
@@ -508,7 +508,7 @@ async function handleAmend(intent, res) {
   if (intent.amount == null || Number(intent.amount) <= 0) {
     return messenger.twimlReply(
       res,
-      `❌ Couldn't parse an amount. Try:\n• *amend ${intent.jobId} 450 description*\n• *amend ${intent.jobId} service 250 | parts 45*`
+      `❌ Couldn't read an amount — try something like *amend invoice £450* or itemised: *labour 250, parts 45*.`
     );
   }
 
@@ -564,8 +564,16 @@ async function handleChase(intent, res) {
       }
 
       if (matched.length > 1) {
-        const list = matched.map(i => `• ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
-        return messenger.twimlReply(res, `Which invoice for ${ref}?\n\n${list}`);
+        const invoices = matched.slice(0, 5);
+        const list = invoices.map((i, idx) => `${idx + 1}. ${i.customer_name} — £${Number(i.amount).toFixed(2)}`).join('\n');
+        await setConversationState(business.id, {
+          workflow: 'chase_pick',
+          focus: {},
+          collected: { invoices: invoices.map(i => ({ id: i.id, job_id: i.job_id, customer_name: i.customer_name, amount: i.amount })) },
+          pending: { type: 'selection', field: 'invoice' },
+          options: [],
+        });
+        return messenger.twimlReply(res, `Which invoice did you want to chase?\n\n${list}\n\nReply with a number.`);
       }
 
       // No unpaid invoice — check if they have a quoted job instead
@@ -935,7 +943,7 @@ async function handleUnpaid(intent, res) {
 
   messenger.twimlReply(
     res,
-    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}\n\nSay *chase [name]* to send a reminder, or *[name] paid* to mark as paid.`
+    `💷 *${invoices.length} unpaid — £${total.toFixed(2)}${vatSuffix} outstanding*\n\n${lines.join('\n\n')}\n\nSay *chase* followed by their name to send a reminder, or their name followed by *paid* to mark it off.`
   );
 }
 
@@ -974,7 +982,7 @@ async function handleListCustomers(intent, res) {
     db.countCustomers(business.id),
   ]);
 
-  if (!customers.length) return messenger.twimlReply(res, `No customers yet. They get added automatically — say *quote for [name]* or *new job for [name]* to get started.`);
+  if (!customers.length) return messenger.twimlReply(res, `No customers yet — they get added automatically when you create a quote or job.`);
 
   const lines = customers.map((c) => `• ${c.name}${c.phone ? ` — ${c.phone}` : ''}`);
   const showing = offset + customers.length;
@@ -983,8 +991,8 @@ async function handleListCustomers(intent, res) {
     : `👥 *Customers ${offset + 1}–${showing} of ${total}:*`;
 
   const footer = hasMore
-    ? `\nReply *more customers* to see the next 10, or search by name with *find [name]*.`
-    : `\nSearch by name with *find [name]*.`;
+    ? `\nReply *more customers* to see the next 10, or type a name to search.`
+    : `\nType a name to search.`;
 
   messenger.twimlReply(res, `${header}\n\n${lines.join('\n')}${footer}`);
 }
